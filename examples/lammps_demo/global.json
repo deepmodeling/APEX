@@ -1,0 +1,12 @@
+{
+    "email": "****",
+    "password": "****",
+    "program_id": ****,
+    "dpgen_image_name":"registry.dp.tech/dptech/dpgen:0.11.0",
+    "dpmd_image_name": "deepmodeling/deepmd-kit:2.1.1_cuda11.6_gpu",
+    "lammps_run_command":"lmp -in in.lammps",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
+    "cpu_scass_type":"c16_m64_cpu",
+    "gpu_scass_type":"c8_m32_1 * NVIDIA V100"
+}
