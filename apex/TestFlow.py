@@ -1,13 +1,13 @@
 import time
 from abc import ABC, abstractmethod
-from monty.serialization import loadfn
-
 from dflow import download_artifact, Workflow
-
 from apex.lib.utils import identify_task
 
 
 class TestFlow(ABC):
+    """
+    Constructor
+    """
     def __init__(self, args):
         # identify type of flow and input parameter file
         num_args = len(args.files)

@@ -1,19 +1,15 @@
 from dflow.python import (
-    PythonOPTemplate,
     OP,
     OPIO,
     OPIOSign,
-    Artifact,
-    Slices,
-    upload_packages
+    Artifact
 )
 
-import subprocess, os, shutil, glob, dpdata, pathlib
+import subprocess, os, shutil, glob, pathlib
 from pathlib import Path
 from typing import List
 from monty.serialization import loadfn
 from dflow.python import upload_packages
-upload_packages.append(__file__)
 
 from apex.lib.utils import return_prop_list
 try:
@@ -22,11 +18,12 @@ try:
 except:
     pass
 
+upload_packages.append(__file__)
+
 class RelaxMakeLAMMPS(OP):
     """
     class for making calculation tasks
     """
-
     def __init__(self):
         pass
 
@@ -91,7 +88,6 @@ class RunLAMMPS(OP):
     """
     class for LAMMPS calculation
     """
-
     def __init__(self, infomode=1):
         self.infomode = infomode
 
@@ -251,7 +247,6 @@ class PropsPostLAMMPS(OP):
     """
     class for analyzing calculation results
     """
-
     def __init__(self):
         pass
 
@@ -303,7 +298,7 @@ class PropsPostLAMMPS(OP):
         return op_out
 
 
-# for later usage
+# for future usage of serial running MD
 """
 class PropsLAMMPS(OP):
     def __init__(self, infomode=1):

@@ -1,25 +1,24 @@
 from dflow.python import (
-    PythonOPTemplate,
     OP,
     OPIO,
     OPIOSign,
     Artifact,
-    Slices,
     upload_packages
 )
 
-import os, glob, dpdata, pathlib, shutil
+import os, glob, pathlib, shutil
 from pathlib import Path
 from typing import List
 from monty.serialization import loadfn
-
 from apex.lib.utils import return_prop_list
-upload_packages.append(__file__)
+
 try:
     from apex.property.common_equi import (make_equi, post_equi)
     from apex.property.common_prop import (make_property, post_property)
 except:
     pass
+
+upload_packages.append(__file__)
 
 
 class RelaxMakeVASP(OP):

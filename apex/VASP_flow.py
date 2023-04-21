@@ -1,29 +1,16 @@
 from dflow import (
-    Workflow,
     Step,
     argo_range,
     argo_len,
-    SlurmRemoteExecutor,
-    upload_artifact,
-    download_artifact,
-    InputArtifact,
-    OutputArtifact,
-    ShellOPTemplate
+    upload_artifact
 )
 from dflow.python import (
     PythonOPTemplate,
-    OP,
-    OPIO,
-    OPIOSign,
-    Artifact,
     Slices,
-    upload_packages
 )
 import os
 from monty.serialization import loadfn
 from dflow.python import upload_packages
-
-upload_packages.append(__file__)
 from apex.VASP_OPs import (
     RelaxMakeVASP,
     RelaxPostVASP,
@@ -31,11 +18,12 @@ from apex.VASP_OPs import (
     PropsPostVASP
 )
 from apex.TestFlow import TestFlow
-
 from fpop.vasp import PrepVasp, VaspInputs, RunVasp
 from fpop.utils.step_config import (
     init_executor
 )
+
+upload_packages.append(__file__)
 
 
 class VASPFlow(TestFlow):
