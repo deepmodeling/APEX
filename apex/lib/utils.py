@@ -24,7 +24,7 @@ def return_prop_list(parameters: list) -> list:
 
 
 def identify_json(file: str) -> str:
-
+    # indentify json file type input by user
     jdata = loadfn(file)
     if 'relaxation' in jdata and 'properties' not in jdata:
         flow_type = 'relax'
