@@ -32,8 +32,8 @@ class VASPFlow(TestFlow):
     """
     Generate autotest workflow and submit automatically for VASP Calculations.
     """
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, flow_info):
+        super().__init__(flow_info)
         # initiate params defined in global.json
         global_param = loadfn("global.json")
         self.args = args
@@ -143,7 +143,7 @@ class VASPFlow(TestFlow):
         )
         self.relaxpost = relaxpost
 
-        if self.do_relax:
+        if self.flow_type == 'joint':
             propsmake = Step(
                 name="Propsmake",
                 template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),

@@ -20,33 +20,26 @@ import argparse
 from apex.VASP_flow import VASPFlow
 from apex.LAMMPS_flow import LAMMPSFlow
 from apex.ABACUS_flow import ABACUSFlow
+from apex.lib.utils import judge_flow_type
 
-def parse_args():
+
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('files', type=str, nargs='+',
                         help='Input indicating json files')
-    parser.add_argument("--vasp", help="Using VASP to perform autotest",
-                        action="store_true")
-    parser.add_argument("--abacus", help="Using ABACUS to perform autotest",
-                        action="store_true")
-    parser.add_argument("--lammps", help="Using LAMMPS to perform autotest",
-                        action="store_true")
     args = parser.parse_args()
-    return args
 
-def main():
-    args = parse_args()
-    if args.abacus:
-        flow = ABACUSFlow(args)
-    elif args.lammps:
-        flow = LAMMPSFlow(args)
-    elif args.vasp:
-        flow = VASPFlow(args)
+    task, flow_info = judge_flow_type(args)
+    if task == 'abacus':
+        tf = ABACUSFlow(flow_info)
+    elif task == 'vasp':
+        tf = VASPFlow(flow_info)
+    elif task == 'lammps':
+        tf = LAMMPSFlow(flow_info)
     else:
         raise RuntimeError('Must indicate how to preform the calculation by indicating --lammps; --vasp; --abacus')
-    flow.init_steps()
-    flow.generate_flow()
-
+    tf.init_steps()
+    tf.generate_flow()
 
 if __name__ == '__main__':
     main()

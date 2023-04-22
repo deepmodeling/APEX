@@ -33,8 +33,8 @@ class ABACUSFlow(TestFlow):
     """
     Generate autotest workflow and automatically submit abacus jobs according to user input arguments.
     """
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, flow_info):
+        super().__init__(flow_info)
         # initiate params defined in global.json
         global_param = loadfn("global.json")
         self.args = args
@@ -146,7 +146,7 @@ class ABACUSFlow(TestFlow):
         )
         self.relaxpost = relaxpost
 
-        if self.do_relax:
+        if self.flow_type == 'joint':
             propsmake = Step(
                 name="Propsmake",
                 template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
