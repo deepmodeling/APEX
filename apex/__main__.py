@@ -20,7 +20,7 @@ import argparse
 from apex.VASP_flow import VASPFlow
 from apex.LAMMPS_flow import LAMMPSFlow
 from apex.ABACUS_flow import ABACUSFlow
-from apex.lib.utils import judge_flow_type
+from apex.lib.utils import judge_flow
 
 
 def main():
@@ -29,12 +29,12 @@ def main():
                         help='Input indicating json files')
     args = parser.parse_args()
 
-    task, flow_info = judge_flow_type(args)
-    if task == 'abacus':
+    task_type, flow_info = judge_flow(args)
+    if task_type == 'abacus':
         tf = ABACUSFlow(flow_info)
-    elif task == 'vasp':
+    elif task_type == 'vasp':
         tf = VASPFlow(flow_info)
-    elif task == 'lammps':
+    elif task_type == 'lammps':
         tf = LAMMPSFlow(flow_info)
     else:
         raise RuntimeError('Must indicate how to preform the calculation by indicating --lammps; --vasp; --abacus')
