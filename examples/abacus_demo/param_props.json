@@ -10,14 +10,14 @@
     "properties": [
         {
          "type":         "eos",
-         "skip":         false,
+         "skip":         true,
          "vol_start":    0.6,
          "vol_end":      1.4,
          "vol_step":     0.1
         },
         {
          "type":         "elastic",
-	 "skip":         false,
+          "skip":         true,
          "norm_deform":  1e-2,
          "shear_deform": 1e-2
         },

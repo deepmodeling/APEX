@@ -8,6 +8,5 @@
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
     "cpu_scass_type":"c32_m64_cpu",
-    "gpu_scass_type":"c8_m32_1 * NVIDIA V100",
-    "upload_python_packages":["/opt/mamba/lib/python3.10/site-packages/fpop"]
+    "gpu_scass_type":"c8_m32_1 * NVIDIA V100"
 }

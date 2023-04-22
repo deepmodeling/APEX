@@ -11,12 +11,13 @@ from dflow.python import (
 import os
 from monty.serialization import loadfn
 from dflow.python import upload_packages
-from apex.VASP_OPs import (
-    RelaxMakeVASP,
-    RelaxPostVASP,
-    PropsMakeVASP,
-    PropsPostVASP
+from apex.fp_OPs import (
+    RelaxMakeFp,
+    RelaxPostFp,
+    PropsMakeFp,
+    PropsPostFp
 )
+import fpop
 from apex.TestFlow import TestFlow
 from fpop.vasp import PrepVasp, VaspInputs, RunVasp
 from fpop.utils.step_config import (
@@ -24,6 +25,7 @@ from fpop.utils.step_config import (
 )
 
 upload_packages.append(__file__)
+upload_python_packages=list(fpop.__path__)
 
 
 class VASPFlow(TestFlow):
@@ -47,7 +49,8 @@ class VASPFlow(TestFlow):
         self.batch_type = global_param.get("batch_type", None)
         self.context_type = global_param.get("context_type", None)
         self.vasp_run_command = global_param.get("vasp_run_command", None)
-        self.upload_python_packages = global_param.get("upload_python_packages", None)
+        self.upload_python_packages = upload_python_packages
+        #self.upload_python_packages = global_param.get("upload_python_packages", None)
 
         self.run_step_config_relax = {
             "executor": {
@@ -97,7 +100,7 @@ class VASPFlow(TestFlow):
 
         relaxmake = Step(
             name="Relaxmake",
-            template=PythonOPTemplate(RelaxMakeVASP, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(RelaxMakeFp, image=self.dpgen_image_name, command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
         )
@@ -133,7 +136,7 @@ class VASPFlow(TestFlow):
 
         relaxpost = Step(
             name="Relaxpost",
-            template=PythonOPTemplate(RelaxPostVASP, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(RelaxPostFp, image=self.dpgen_image_name, command=["python3"]),
             artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"], "input_all": self.relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
             parameters={"path": work_dir}
@@ -143,14 +146,14 @@ class VASPFlow(TestFlow):
         if self.do_relax:
             propsmake = Step(
                 name="Propsmake",
-                template=PythonOPTemplate(PropsMakeVASP, image=self.dpgen_image_name, command=["python3"]),
+                template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
                 artifacts={"input": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
             )
         else:
             propsmake = Step(
                 name="Propsmake",
-                template=PythonOPTemplate(PropsMakeVASP, image=self.dpgen_image_name, command=["python3"]),
+                template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
                 artifacts={"input": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
             )
@@ -185,7 +188,7 @@ class VASPFlow(TestFlow):
 
         propspost = Step(
             name="Propspost",
-            template=PythonOPTemplate(PropsPostVASP, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(PropsPostFp, image=self.dpgen_image_name, command=["python3"]),
             artifacts={"input_post": propscal.outputs.artifacts["backward_dir"], "input_all": self.propsmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.props_param)},
             parameters={"path": work_dir, "task_names": propsmake.outputs.parameters["task_names"]}
