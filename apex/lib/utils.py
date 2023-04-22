@@ -47,6 +47,7 @@ def identify_json(file: str) -> str:
 
     return task_type, flow_type
 
+
 def judge_flow(args) -> (str, dict):
     # identify type of flow and input parameter file
     num_args = len(args.files)
