@@ -19,7 +19,7 @@ from apex.fp_OPs import (
 )
 import fpop
 from apex.TestFlow import TestFlow
-from fpop.vasp import PrepVasp, VaspInputs, RunVasp
+from fpop.vasp import RunVasp
 from fpop.utils.step_config import (
     init_executor
 )

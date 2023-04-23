@@ -10,7 +10,6 @@ from dflow.python import (
 )
 import os
 from monty.serialization import loadfn
-from dflow.plugins.dispatcher import DispatcherExecutor
 from dflow.python import upload_packages
 import fpop
 from apex.fp_OPs import (
@@ -20,7 +19,7 @@ from apex.fp_OPs import (
     PropsPostFp
 )
 from apex.TestFlow import TestFlow
-from fpop.abacus import PrepAbacus, AbacusInputs, RunAbacus
+from fpop.abacus import RunAbacus
 from fpop.utils.step_config import (
     init_executor
 )
@@ -115,7 +114,7 @@ class ABACUSFlow(TestFlow):
                                  python_packages=self.upload_python_packages,
                                  image=self.abacus_image_name
                                  )
-        print(type(relaxmake.outputs.artifacts["task_paths"]))
+
         relaxcal = Step(
             name="RelaxABACUS-Cal",
             template=relax,
