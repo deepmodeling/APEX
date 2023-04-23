@@ -30,11 +30,22 @@ def main():
     args = parser.parse_args()
 
     task_type, flow_info = judge_flow(args)
+    flow_type = flow_info['flow_type']
+    if flow_type == 'relax':
+        print('Submitting relaxation workflow...')
+    elif flow_type == 'props':
+        print('Submitting property test workflow...')
+    else:
+        print('Submitting relaxation & property test joint workflow...')
+
     if task_type == 'abacus':
+        print('Simulation via ABACUS')
         tf = ABACUSFlow(flow_info)
     elif task_type == 'vasp':
+        print('Simulation via VASP')
         tf = VASPFlow(flow_info)
     elif task_type == 'lammps':
+        print('Simulation via LAMMPS')
         tf = LAMMPSFlow(flow_info)
     else:
         raise RuntimeError('Must indicate how to preform the calculation by indicating --lammps; --vasp; --abacus')
