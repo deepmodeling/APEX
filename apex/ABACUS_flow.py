@@ -115,7 +115,7 @@ class ABACUSFlow(TestFlow):
                                  python_packages=self.upload_python_packages,
                                  image=self.abacus_image_name
                                  )
-
+        print(type(relaxmake.outputs.artifacts["task_paths"]))
         relaxcal = Step(
             name="RelaxABACUS-Cal",
             template=relax,
@@ -127,7 +127,8 @@ class ABACUSFlow(TestFlow):
                 "log_name": "log"
             },
             artifacts={
-                "task_path": relaxmake.outputs.artifacts["task_paths"]
+                "task_path": relaxmake.outputs.artifacts["task_paths"],
+                "optional_artifact": upload_artifact({"pp_orb": "./"})
             },
             with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
             key="RelaxABACUS-Cal-{{item}}",
@@ -177,10 +178,11 @@ class ABACUSFlow(TestFlow):
                 "run_image_config": {"command": self.abacus_run_command},
                 "task_name": propsmake.outputs.parameters["task_names"],
                 "backward_list": ["OUT.ABACUS","log"],
-                "log_name": ""
+                "log_name": "log"
             },
             artifacts={
-                "task_path": propsmake.outputs.artifacts["task_paths"]
+                "task_path": propsmake.outputs.artifacts["task_paths"],
+                "optional_artifact": upload_artifact({"pp_orb": "./"})
             },
             with_param=argo_range(argo_len(propsmake.outputs.parameters["task_names"])),
             key="PropsABACUS-Cal-{{item}}",

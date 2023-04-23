@@ -23,11 +23,22 @@ from apex.ABACUS_flow import ABACUSFlow
 from apex.lib.utils import judge_flow
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('files', type=str, nargs='+',
                         help='Input indicating json files')
+    parser.add_argument("--relax", help="Submit relaxation workflow",
+                        action="store_true")
+    parser.add_argument("--props", help="Submit property test workflow",
+                        action="store_true")
+    parser.add_argument("--joint", help="Submit relaxation followed by property test joint workflow",
+                        action="store_true")
     args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_args()
 
     task_type, flow_info = judge_flow(args)
     flow_type = flow_info['flow_type']

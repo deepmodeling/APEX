@@ -56,21 +56,36 @@ def judge_flow(args) -> (str, dict):
         task_type = task
         if flow == 'relax':
             flow_type = 'relax'
+            if args.props or args.joint:
+                raise RuntimeError('relaxation json file argument provided! Please check your jason file.')
             relax_param = args.files[0]
             props_param = None
         elif flow == 'props':
+            if args.relax or args.joint:
+                raise RuntimeError('property json file argument provided! Please check your jason file.')
             flow_type = 'props'
             relax_param = None
             props_param = args.files[0]
         else:
-            flow_type = 'joint'
+            if args.relax:
+                flow_type = 'relax'
+            elif args.props:
+                flow_type = 'props'
+            else:
+                flow_type = 'joint'
             relax_param = args.files[0]
             props_param = args.files[0]
+
     elif num_args == 2:
-        flow_type = 'joint'
         task1, flow1 = identify_json(args.files[0])
         task2, flow2 = identify_json(args.files[1])
         if not flow1 == flow2:
+            if args.relax:
+                flow_type = 'relax'
+            elif args.props:
+                flow_type = 'props'
+            else:
+                flow_type = 'joint'
             if flow1 == 'relax' and flow2 == 'props':
                 relax_param = args.files[0]
                 props_param = args.files[1]
