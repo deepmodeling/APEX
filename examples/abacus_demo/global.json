@@ -1,7 +1,7 @@
 {
-    "email": "****",
-    "password": "****",
-    "program_id": ****,
+    "email": "zhuoyli@connect.hku.hk",
+    "password": "enoughBor715!",
+    "program_id": 2315,
     "dpgen_image_name":"registry.dp.tech/dptech/dpgen:0.11.0",
     "abacus_image_name":"registry.dp.tech/dptech/prod-11461/abacus:phonopy",
     "abacus_run_command":"ulimit -s unlimited && ulimit -m unlimited && OMP_NUM_THREADS=1 mpirun -np 32 abacus > log",

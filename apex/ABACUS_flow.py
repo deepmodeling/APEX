@@ -37,7 +37,6 @@ class ABACUSFlow(TestFlow):
         super().__init__(flow_info)
         # initiate params defined in global.json
         global_param = loadfn("global.json")
-        self.args = args
         self.global_param = global_param
         self.work_dir = global_param.get("work_dir", None)
         self.email = global_param.get("email", None)
