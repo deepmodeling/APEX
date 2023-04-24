@@ -1,47 +1,16 @@
 import time
 from abc import ABC, abstractmethod
 from dflow import download_artifact, Workflow
-from apex.lib.utils import identify_task
 
 
 class TestFlow(ABC):
     """
     Constructor
     """
-    def __init__(self, args):
-        # identify type of flow and input parameter file
-        num_args = len(args.files)
-        if num_args == 1:
-            self.do_relax = False
-            task_type = identify_task(args.files[0])
-            if task_type == 'relax':
-                self.relax_param = args.files[0]
-                self.props_param = None
-            elif task_type == 'props':
-                self.relax_param = None
-                self.props_param = args.files[0]
-        elif num_args == 2:
-            self.do_relax = True
-            file1_type = identify_task(args.files[0])
-            file2_type = identify_task(args.files[1])
-            if not file1_type == file2_type:
-                if file1_type == 'relax':
-                    self.relax_param = args.files[0]
-                    self.props_param = args.files[1]
-                else:
-                    self.relax_param = args.files[1]
-                    self.props_param = args.files[0]
-            else:
-                raise RuntimeError('Same type of input json files')
-        else:
-            raise ValueError('A maximum of two input arguments is allowed')
-
-        if self.do_relax:
-            self.flow_type = 'joint'
-        elif not self.props_param:
-            self.flow_type = 'relax'
-        else:
-            self.flow_type = 'props'
+    def __init__(self, flow_info):
+        self.flow_type = flow_info['flow_type']
+        self.relax_param = flow_info['relax_param']
+        self.props_param = flow_info['props_param']
 
     @abstractmethod
     def init_steps(self):

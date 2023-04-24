@@ -13,20 +13,20 @@
          "skip":         false,
          "vol_start":    0.6,
          "vol_end":      1.4,
-         "vol_step":     0.1
+         "vol_step":     0.2
         },
         {
          "type":         "elastic",
-	 "skip":         false,
+          "skip":         true,
          "norm_deform":  1e-2,
          "shear_deform": 1e-2
         },
 	{
          "type":           "surface",
-         "skip":         true,
+         "skip":         false,
          "min_slab_size":  10,
          "min_vacuum_size":11,
-         "max_miller":     3,
+         "max_miller":     2,
          "cal_type":       "static"
         },
 	{

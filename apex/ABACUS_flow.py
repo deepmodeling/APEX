@@ -1,6 +1,7 @@
 from dflow import (
     Step,
     argo_range,
+    argo_len,
     upload_artifact
 )
 from dflow.python import (
@@ -9,29 +10,32 @@ from dflow.python import (
 )
 import os
 from monty.serialization import loadfn
-from dflow.plugins.dispatcher import DispatcherExecutor
 from dflow.python import upload_packages
-from apex.ABACUS_OPs import (
-    RelaxMakeABACUS,
-    RelaxPostABACUS,
-    PropsMakeABACUS,
-    PropsPostABACUS,
-    RunABACUS
+import fpop
+from apex.fp_OPs import (
+    RelaxMakeFp,
+    RelaxPostFp,
+    PropsMakeFp,
+    PropsPostFp
 )
 from apex.TestFlow import TestFlow
+from fpop.abacus import RunAbacus
+from fpop.utils.step_config import (
+    init_executor
+)
 
 upload_packages.append(__file__)
+upload_python_packages=list(fpop.__path__)
 
 
 class ABACUSFlow(TestFlow):
     """
     Generate autotest workflow and automatically submit abacus jobs according to user input arguments.
     """
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, flow_info):
+        super().__init__(flow_info)
         # initiate params defined in global.json
         global_param = loadfn("global.json")
-        self.args = args
         self.global_param = global_param
         self.work_dir = global_param.get("work_dir", None)
         self.email = global_param.get("email", None)
@@ -44,44 +48,51 @@ class ABACUSFlow(TestFlow):
         self.batch_type = global_param.get("batch_type", None)
         self.context_type = global_param.get("context_type", None)
         self.abacus_run_command = global_param.get("abacus_run_command", None)
-        self.upload_python_packages = global_param.get("upload_python_packages", None)
+        self.upload_python_packages = upload_python_packages
+        #self.upload_python_packages = global_param.get("upload_python_packages", None)
 
-        dispatcher_executor_cpu = DispatcherExecutor(
-            machine_dict={
-                "batch_type": self.batch_type,
-                "context_type": self.context_type,
-                "remote_profile": {
-                    "email": self.email,
-                    "password": self.password,
-                    "program_id": self.program_id,
-                    "input_data": {
-                        "job_type": "container",
-                        "platform": "ali",
-                        "scass_type": self.cpu_scass_type,
-                    },
-                },
-            },
-            image_pull_policy="IfNotPresent"
-        )
+        self.run_step_config_relax = {
+            "executor": {
+                "type": "dispatcher",
+                "image_pull_policy": "IfNotPresent",
+                "machine_dict": {
+                    "batch_type": self.batch_type,
+                    "context_type": self.context_type,
+                    "remote_profile": {
+                        "email": self.email,
+                        "password": self.password,
+                        "program_id": self.program_id,
+                        "input_data": {
+                            "job_type": "container",
+                            "platform": "ali",
+                            "scass_type": self.cpu_scass_type,
+                        }
+                    }
+                }
+            }
+        }
 
-        dispatcher_executor_gpu = DispatcherExecutor(
-            machine_dict={
-                "batch_type": self.batch_type,
-                "context_type": self.context_type,
-                "remote_profile": {
-                    "email": self.email,
-                    "password": self.password,
-                    "program_id": self.program_id,
-                    "input_data": {
-                        "job_type": "container",
-                        "platform": "ali",
-                        "scass_type": self.gpu_scass_type,
-                    },
-                },
-            },
-            image_pull_policy="IfNotPresent"
-        )
-        self.dispatcher_executor = dispatcher_executor_cpu
+        self.run_step_config_props = {
+            "executor": {
+                "type": "dispatcher",
+                "image_pull_policy": "IfNotPresent",
+                "machine_dict": {
+                    "batch_type": self.batch_type,
+                    "context_type": self.context_type,
+                    "remote_profile": {
+                        "email": self.email,
+                        "password": self.password,
+                        "program_id": self.program_id,
+                        "input_data": {
+                            "job_type": "container",
+                            "platform": "ali",
+                            "scass_type": self.cpu_scass_type,
+                        }
+                    }
+                }
+            }
+        }
+
 
     def init_steps(self):
         cwd = os.getcwd()
@@ -89,76 +100,101 @@ class ABACUSFlow(TestFlow):
 
         relaxmake = Step(
             name="Relaxmake",
-            template=PythonOPTemplate(RelaxMakeABACUS, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(RelaxMakeFp, image=self.dpgen_image_name, command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
         )
         self.relaxmake = relaxmake
 
-        relax = PythonOPTemplate(RunABACUS,
-                                       slices=Slices("{{item}}", input_artifact=["input_abacus"],
-                                                     output_artifact=["output_abacus"]),
-                                       image=self.abacus_image_name, command=["python3"])
+        relax = PythonOPTemplate(RunAbacus,
+                                 slices=Slices("{{item}}",
+                                               input_parameter=["task_name"],
+                                               input_artifact=["task_path"],
+                                               output_artifact=["backward_dir"]),
+                                 python_packages=self.upload_python_packages,
+                                 image=self.abacus_image_name
+                                 )
 
         relaxcal = Step(
             name="RelaxABACUS-Cal",
             template=relax,
-            artifacts={"input_abacus": relaxmake.outputs.artifacts["task_paths"]},
-            parameters={"run_command": self.abacus_run_command},
-            with_param=argo_range(relaxmake.outputs.parameters["njobs"]),
-            key="ABACUS-Cal-{{item}}",
-            executor=self.dispatcher_executor
+            parameters={
+                "run_image_config": {"command": self.abacus_run_command},
+                "task_name": relaxmake.outputs.parameters["task_names"],
+                "backward_list": ["OUT.ABACUS","log"],
+                "backward_dir_name": "relax_task",
+                "log_name": "log"
+            },
+            artifacts={
+                "task_path": relaxmake.outputs.artifacts["task_paths"],
+                "optional_artifact": upload_artifact({"pp_orb": "./"})
+            },
+            with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
+            key="RelaxABACUS-Cal-{{item}}",
+            executor=init_executor(self.run_step_config_relax.pop("executor")),
+            **self.run_step_config_relax
         )
         self.relaxcal = relaxcal
 
         relaxpost = Step(
             name="Relaxpost",
-            template=PythonOPTemplate(RelaxPostABACUS, image=self.dpgen_image_name, command=["python3"]),
-            artifacts={"input_post": relaxcal.outputs.artifacts["output_abacus"],
-                       "input_all": relaxmake.outputs.artifacts["output"],
+            template=PythonOPTemplate(RelaxPostFp, image=self.dpgen_image_name, command=["python3"]),
+            artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"], "input_all": self.relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
-            parameters={"path": cwd}
+            parameters={"path": work_dir}
         )
         self.relaxpost = relaxpost
 
-        if self.do_relax:
+        if self.flow_type == 'joint':
             propsmake = Step(
                 name="Propsmake",
-                template=PythonOPTemplate(PropsMakeABACUS, image=self.dpgen_image_name, command=["python3"]),
+                template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
                 artifacts={"input": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
             )
-            self.propsmake = propsmake
         else:
             propsmake = Step(
                 name="Propsmake",
-                template=PythonOPTemplate(PropsMakeABACUS, image=self.dpgen_image_name, command=["python3"]),
+                template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
                 artifacts={"input": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
             )
-            self.propsmake = propsmake
+        self.propsmake = propsmake
 
-        props = PythonOPTemplate(RunABACUS,
-                                 slices=Slices("{{item}}", input_artifact=["input_abacus"],
-                                               output_artifact=["output_abacus"]), image=self.abacus_image_name, command=["python3"])
+        props = PythonOPTemplate(RunAbacus,
+                                 slices=Slices("{{item}}",
+                                               input_parameter=["task_name"],
+                                               input_artifact=["task_path"],
+                                               output_artifact=["backward_dir"]),
+                                 python_packages=self.upload_python_packages,
+                                 image=self.abacus_image_name
+                                 )
 
         propscal = Step(
             name="PropsABACUS-Cal",
             template=props,
-            artifacts={"input_abacus": propsmake.outputs.artifacts["task_paths"]},
-            parameters={"run_command": self.abacus_run_command},
-            with_param=argo_range(propsmake.outputs.parameters["njobs"]),
-            key="ABACUS-Cal-{{item}}",
-            executor=self.dispatcher_executor
+            parameters={
+                "run_image_config": {"command": self.abacus_run_command},
+                "task_name": propsmake.outputs.parameters["task_names"],
+                "backward_list": ["OUT.ABACUS","log"],
+                "log_name": "log"
+            },
+            artifacts={
+                "task_path": propsmake.outputs.artifacts["task_paths"],
+                "optional_artifact": upload_artifact({"pp_orb": "./"})
+            },
+            with_param=argo_range(argo_len(propsmake.outputs.parameters["task_names"])),
+            key="PropsABACUS-Cal-{{item}}",
+            executor=init_executor(self.run_step_config_props.pop("executor")),
+            **self.run_step_config_props
         )
         self.propscal = propscal
 
         propspost = Step(
             name="Propspost",
-            template=PythonOPTemplate(PropsPostABACUS, image=self.dpgen_image_name, command=["python3"]),
-            artifacts={"input_post": propscal.outputs.artifacts["output_abacus"],
-                       "input_all": propsmake.outputs.artifacts["output"],
+            template=PythonOPTemplate(PropsPostFp, image=self.dpgen_image_name, command=["python3"]),
+            artifacts={"input_post": propscal.outputs.artifacts["backward_dir"], "input_all": self.propsmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.props_param)},
-            parameters={"path": cwd}
+            parameters={"path": work_dir, "task_names": propsmake.outputs.parameters["task_names"]}
         )
         self.propspost = propspost

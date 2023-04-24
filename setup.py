@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="APEX",
-    version="0.1.0",
+    version="0.0.1",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -21,12 +21,12 @@ setuptools.setup(
         "dpdata>=0.2.13",
         "matplotlib",
         "seekpath",
-        "fpop",
+        "fpop>=0.0.7",
         "ase"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.8',

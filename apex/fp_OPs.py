@@ -21,7 +21,7 @@ except:
 upload_packages.append(__file__)
 
 
-class RelaxMakeVASP(OP):
+class RelaxMakeFp(OP):
     """
     class for making calculation tasks
     """
@@ -87,7 +87,7 @@ class RelaxMakeVASP(OP):
         return op_out
 
 
-class RelaxPostVASP(OP):
+class RelaxPostFp(OP):
     """
     class for analyzing calculation results
     """
@@ -132,7 +132,7 @@ class RelaxPostVASP(OP):
         return op_out
 
 
-class PropsMakeVASP(OP):
+class PropsMakeFp(OP):
     """
     class for making calculation tasks
     """
@@ -203,7 +203,7 @@ class PropsMakeVASP(OP):
         return op_out
 
 
-class PropsPostVASP(OP):
+class PropsPostFp(OP):
     """
     class for analyzing calculation results
     """

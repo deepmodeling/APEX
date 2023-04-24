@@ -20,33 +20,48 @@ import argparse
 from apex.VASP_flow import VASPFlow
 from apex.LAMMPS_flow import LAMMPSFlow
 from apex.ABACUS_flow import ABACUSFlow
+from apex.lib.utils import judge_flow
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('files', type=str, nargs='+',
                         help='Input indicating json files')
-    parser.add_argument("--vasp", help="Using VASP to perform autotest",
+    parser.add_argument("--relax", help="Submit relaxation workflow",
                         action="store_true")
-    parser.add_argument("--abacus", help="Using ABACUS to perform autotest",
+    parser.add_argument("--props", help="Submit property test workflow",
                         action="store_true")
-    parser.add_argument("--lammps", help="Using LAMMPS to perform autotest",
+    parser.add_argument("--joint", help="Submit relaxation followed by property test joint workflow",
                         action="store_true")
     args = parser.parse_args()
     return args
 
+
 def main():
     args = parse_args()
-    if args.abacus:
-        flow = ABACUSFlow(args)
-    elif args.lammps:
-        flow = LAMMPSFlow(args)
-    elif args.vasp:
-        flow = VASPFlow(args)
+
+    task_type, flow_info = judge_flow(args)
+    flow_type = flow_info['flow_type']
+    if flow_type == 'relax':
+        print('Submitting relaxation workflow...')
+    elif flow_type == 'props':
+        print('Submitting property test workflow...')
+    else:
+        print('Submitting relaxation & property test joint workflow...')
+
+    if task_type == 'abacus':
+        print('Simulation via ABACUS')
+        tf = ABACUSFlow(flow_info)
+    elif task_type == 'vasp':
+        print('Simulation via VASP')
+        tf = VASPFlow(flow_info)
+    elif task_type == 'lammps':
+        print('Simulation via LAMMPS')
+        tf = LAMMPSFlow(flow_info)
     else:
         raise RuntimeError('Must indicate how to preform the calculation by indicating --lammps; --vasp; --abacus')
-    flow.init_steps()
-    flow.generate_flow()
-
+    tf.init_steps()
+    tf.generate_flow()
 
 if __name__ == '__main__':
     main()

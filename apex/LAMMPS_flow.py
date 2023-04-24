@@ -26,11 +26,10 @@ class LAMMPSFlow(TestFlow):
     """
     Generate autotest workflow and automatically submit lammps jobs according to user input arguments.
     """
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, flow_info):
+        super().__init__(flow_info)
         # initiate params defined in global.json
         global_param = loadfn("global.json")
-        self.args = args
         self.global_param = global_param
         self.work_dir = global_param.get("work_dir", None)
         self.email = global_param.get("email", None)
@@ -121,7 +120,7 @@ class LAMMPSFlow(TestFlow):
         )
         self.relaxpost = relaxpost
 
-        if self.do_relax:
+        if self.flow_type == 'joint':
             propsmake = Step(
                 name="Propsmake",
                 template=PythonOPTemplate(PropsMakeLAMMPS, image=self.dpgen_image_name, command=["python3"]),
