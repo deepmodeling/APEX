@@ -9,7 +9,6 @@ from monty.serialization import dumpfn, loadfn
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
 import apex.calculator.lib.abacus_scf as abacus_scf
-#from dpgen import dlog
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro

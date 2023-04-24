@@ -6,7 +6,6 @@ from multiprocessing import Pool
 from packaging.version import Version
 
 import apex.property.lib.util as util
-#from dpgen import dlog
 from apex.calculator.calculator import make_calculator
 from apex.property.Elastic import Elastic
 from apex.property.EOS import EOS
@@ -15,8 +14,6 @@ from apex.property.Interstitial import Interstitial
 from apex.property.lib.utils import create_path
 from apex.property.Surface import Surface
 from apex.property.Vacancy import Vacancy
-#from dpgen.dispatcher.Dispatcher import make_submission
-#from dpgen.remote.decide_machine import convert_mdata
 from apex.lib.util import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)

@@ -9,12 +9,9 @@ from packaging.version import Version
 import apex.calculator.lib.abacus as abacus
 import apex.property.lib.crys as crys
 import apex.property.lib.util as util
-#from dpgen import dlog
 from apex.calculator.calculator import make_calculator
 from apex.property.lib.utils import create_path
 from apex.property.mpdb import get_structure
-#from dpgen.dispatcher.Dispatcher import make_submission
-#from dpgen.remote.decide_machine import convert_mdata
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]

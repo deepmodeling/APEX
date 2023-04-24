@@ -9,7 +9,7 @@
     "properties": [
         {
          "type":         "eos",
-         "skip":         true,
+         "skip":         false,
          "vol_start":    0.6,
          "vol_end":      1.4,
          "vol_step":     0.1,
@@ -18,7 +18,7 @@
         },
         {
          "type":         "elastic",
-	 "skip":         true,
+	 "skip":         false,
          "norm_deform":  1e-2,
          "shear_deform": 1e-2,
 	 "cal_setting":  {"etol": 0,
@@ -26,7 +26,7 @@
         },
 	{
          "type":           "surface",
-         "skip":         false,
+         "skip":         true,
          "min_slab_size":  10,
          "min_vacuum_size":11,
          "max_miller":     2,
@@ -41,7 +41,7 @@
         },
 	{
          "type":             "vacancy",
-         "skip":         false,
+         "skip":         true,
          "supercell":        [2, 2, 2]
         },
 	{
