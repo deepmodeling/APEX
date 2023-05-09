@@ -1,0 +1,61 @@
+{
+    "structures":    ["confs/std-bcc"],
+    	"interaction": {
+        "type":          "vasp",
+        "incar":         "vasp_input/INCAR",
+        "potcar_prefix": "vasp_input",
+        "potcars":      {"Mo": "POTCAR.Mo"}
+    },
+    "relaxation": {
+        "cal_type":      "relaxation",
+        "cal_setting":   {"relax_pos":       true,
+                          "relax_shape":     true,
+                          "relax_vol":       true,
+                          "ediff":           1e-6,
+                          "ediffg":         -0.01,
+                          "encut":           400,
+                          "kspacing":        0.2,
+                          "kgamma":          false}
+	},
+    "properties": [
+        {
+         "type":         "eos",
+         "skip":         false,
+         "vol_start":    0.6,
+         "vol_end":      1.4,
+         "vol_step":     0.4
+        },
+        {
+         "type":         "elastic",
+	 "skip":         true,
+         "norm_deform":  1e-2,
+         "shear_deform": 1e-2
+        },
+	{
+         "type":           "surface",
+         "skip":           true,
+         "min_slab_size":  10,
+         "min_vacuum_size":11,
+         "max_miller":     2,
+         "cal_type":       "static"
+        },
+	{
+         "type":         "interstitial",
+         "skip":         true,
+         "supercell":   [1, 1, 1],
+         "insert_ele":  ["Mo"],
+         "bcc_self":    false
+        },
+	{
+	"type":            "gamma",
+	"skip":            true,
+        "lattice_type":    "bcc",
+        "miller_index":    [1,1,2],
+        "displace_direction":  [1,1,1],
+        "min_supercell_size":   [1,1,5], 
+        "min_vacuum_size": 10,
+	"add_fix": ["true","true","false"], 
+        "n_steps":         4
+	}
+        ]
+}
