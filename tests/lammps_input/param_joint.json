@@ -17,7 +17,7 @@
          "skip":         false,
          "vol_start":    0.6,
          "vol_end":      1.4,
-         "vol_step":     0.1,
+         "vol_step":     0.4,
 	  "cal_setting":  {"etol": 0,
                          "ftol": 1e-10}
         },

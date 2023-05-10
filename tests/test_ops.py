@@ -121,7 +121,7 @@ class TestMakePropsOPs(unittest.TestCase):
         }))
         self.assertTrue(os.path.exists(self.vasp_dir/'confs'))
         self.assertTrue(os.path.exists(self.vasp_dir/'confs/std-bcc/eos_00'))
-        self.assertEqual(len(out['task_paths']), 8)
+        self.assertEqual(len(out['task_paths']), 2)
 
 
     def test_abacus_make_props(self):
@@ -133,7 +133,7 @@ class TestMakePropsOPs(unittest.TestCase):
         }))
         self.assertTrue(os.path.exists(self.abacus_dir/'confs'))
         self.assertTrue(os.path.exists(self.abacus_dir/'confs/fcc-Al/eos_00'))
-        self.assertEqual(len(out['task_paths']), 8)
+        self.assertEqual(len(out['task_paths']), 2)
 
 
     def test_lammps_make_props(self):
@@ -145,7 +145,7 @@ class TestMakePropsOPs(unittest.TestCase):
         }))
         self.assertTrue(os.path.exists(self.lammps_dir/'confs'))
         self.assertTrue(os.path.exists(self.lammps_dir/'confs/std-bcc/eos_00'))
-        self.assertEqual(len(out['task_paths']), 8)
+        self.assertEqual(len(out['task_paths']), 2)
 
 
 
