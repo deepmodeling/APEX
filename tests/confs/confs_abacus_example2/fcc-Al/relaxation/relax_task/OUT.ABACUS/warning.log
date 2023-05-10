@@ -1,0 +1,150 @@
+ It's ok to use cg.
+ In SCAN_BEGIN, can't find: LATTICE_PARAMETERS block.
+ AUTO_SET NBANDS to 32
+ Generate k-points file according to KSPACING: KPT
+                            startmag_type = 2
+                       charge from rho_at = 10.9185
+                         charge should be = 11
+
+ SETUP ATOMIC RHO FOR SPIN 1
+                 Electron number from rho = 44
+           total electron number from rho = 44
+                                should be = 44
+                 charge before normalized = 44
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9004980131817
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9975806979826
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.6944894020266
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.3507593207103
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 45.0756254343265
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.0335068503801
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0854500098569
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9242734961993
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.99137906412
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.004882293062
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9966752085712
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0025107482043
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0015199089864
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.999039746675
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0030703313213
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9996208509826
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.005761494775
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0345750032794
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9596959270053
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9990143853461
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.8910777167424
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0781326770823
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9277177051981
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.5672571359079
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.510161570356
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0107918329292
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.4850202178836
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.5064095180887
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.01361706365
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9943844531378
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.001919103342
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9954184792773
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9912309350055
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0133537240927
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9995024699165
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0001687118498
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0001558240044
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0131793580727
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9971047884449
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9914546451973
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0066779122086
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.9982100207081
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0066234488831
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 43.998663201214
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.
+                 charge before normalized = 44.0158599816673
+                  charge after normalized = 44
+ scf  warning : Threshold on eigenvalues was too large.

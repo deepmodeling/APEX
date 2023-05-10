@@ -1,0 +1,35 @@
+:: initializing oneAPI environment ...
+   BASH version = 5.0.17(1)-release
+:: compiler -- latest
+:: mkl -- latest
+:: dev-utilities -- latest
+:: tbb -- latest
+:: mpi -- latest
+:: oneAPI environment initialized ::
+ running on   32 total cores
+ distrk:  each k-point on   32 cores,    1 groups
+ distr:  one band on    8 cores,    4 groups
+ using from now: INCAR     
+ vasp.5.4.4.18Apr17-6-g9f103f2a35 (build Nov 07 2022 11:18:25) complex          
+  
+ POSCAR found type information on POSCAR  Mo
+ POSCAR found :  1 types and       2 ions
+ scaLAPACK will be used
+ LDA part: xc-table for Pade appr. of Perdew
+ POSCAR, INCAR and KPOINTS ok, starting setup
+ FFT: planning ...
+ WAVECAR not read
+ entering main loop
+       N       E                     dE             d eps       ncg     rms          rms(c)
+DAV:   1     0.226798848348E+03    0.22680E+03   -0.14778E+04  1408   0.120E+03
+DAV:   2    -0.184592365621E+02   -0.24526E+03   -0.23847E+03  1592   0.397E+02
+DAV:   3    -0.231740153945E+02   -0.47148E+01   -0.45950E+01  1544   0.552E+01
+DAV:   4    -0.232054754628E+02   -0.31460E-01   -0.31436E-01  1496   0.424E+00
+DAV:   5    -0.232056500921E+02   -0.17463E-03   -0.17463E-03  1520   0.329E-01    0.202E+01
+DAV:   6    -0.220281375664E+02    0.11775E+01   -0.22880E+00  1432   0.135E+01    0.542E+00
+DAV:   7    -0.218643013265E+02    0.16384E+00   -0.49479E-01  1480   0.571E+00    0.137E+00
+DAV:   8    -0.218562604246E+02    0.80409E-02   -0.83312E-03  1436   0.953E-01    0.285E-01
+DAV:   9    -0.218562214210E+02    0.39004E-04   -0.58548E-04  1492   0.225E-01    0.917E-02
+DAV:  10    -0.218562412563E+02   -0.19835E-04   -0.24951E-05  1464   0.475E-02    0.144E-02
+DAV:  11    -0.218562408120E+02    0.44431E-06   -0.17907E-06  1076   0.109E-02
+   1 F= -.21856241E+02 E0= -.21856164E+02  d E =-.230848E-03
