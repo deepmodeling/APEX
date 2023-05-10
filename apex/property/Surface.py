@@ -11,7 +11,6 @@ from pymatgen.core.surface import generate_all_slabs
 
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
-#from dpgen import dlog
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro

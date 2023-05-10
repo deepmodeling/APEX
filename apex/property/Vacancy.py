@@ -9,7 +9,6 @@ from pymatgen.analysis.defects.generators import VacancyGenerator
 from pymatgen.core.structure import Structure
 
 import apex.calculator.lib.abacus as abacus
-#from dpgen import dlog
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro

@@ -1,0 +1,58 @@
+{
+    "structures": ["confs/fcc-Al"],
+        "interaction": {
+            "type": "abacus",
+            "incar": "abacus_input/INPUT",
+            "potcar_prefix": "abacus_input",
+            "potcars": {"Al": "Al_ONCV_PBE-1.0.upf"},
+            "orb_files": {"Al":"Al_gga_9au_100Ry_4s4p1d.orb"}
+            },
+    "relaxation": {
+        "cal_type":      "relaxation",
+        "cal_setting":  {"relax_pos":true,
+                         "relax_shape":true,
+                         "relax_vol":true}
+    },
+
+    "properties": [
+        {
+         "type":         "eos",
+         "skip":         false,
+         "vol_start":    0.6,
+         "vol_end":      1.4,
+         "vol_step":     0.05
+        },
+        {
+         "type":         "elastic",
+          "skip":         true,
+         "norm_deform":  1e-2,
+         "shear_deform": 1e-2
+        },
+	{
+         "type":           "surface",
+         "skip":         false,
+         "min_slab_size":  10,
+         "min_vacuum_size":11,
+         "max_miller":     2,
+         "cal_type":       "static"
+        },
+	{
+         "type":         "interstitial",
+         "skip":         true,
+         "supercell":   [1, 1, 1],
+         "insert_ele":  ["Mo"],
+         "bcc_self":    true
+        },
+	{
+	"type":            "gamma",
+	"skip":            true,
+        "lattice_type":    "bcc",
+        "miller_index":    [1,1,2],
+        "displace_direction":  [1,1,1],
+        "min_supercell_size":   [1,1,5], 
+        "min_vacuum_size": 0,
+	"add_fix": ["true","true","false"], 
+        "n_steps":         10
+	}
+        ]
+}
