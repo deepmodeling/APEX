@@ -18,8 +18,6 @@ upload_packages.append(__file__)
 
 supported_inter = ["deepmd", "meam", "eam_fs", "eam_alloy"]
 
-logging.basicConfig(level=logging.INFO, filename='info.log', filemode='w',
-                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Lammps(Task):
     def __init__(self, inter_parameter, path_to_poscar):
@@ -156,6 +154,8 @@ class Lammps(Task):
             """
             flowing dlog.info are replaced as print
             """
+            logging.basicConfig(level=logging.INFO, filename='info.log', filemode='w',
+                                format='%(asctime)s - %(levelname)s - %(message)s')
             if "etol" in cal_setting:
                 logging.info(
                     "%s setting etol to %s"
