@@ -2,9 +2,9 @@
     "structures":    ["confs/std-bcc"],
     	"interaction": {
         "type":          "vasp",
-        "incar":         "vasp_input/INCAR",
-        "potcar_prefix": "vasp_input",
-        "potcars":      {"Mo": "POTCAR.Mo"}
+        "incar":         "./INCAR",
+        "potcar_prefix": "./",
+        "potcars":      {"Mo": "POTCAR_Mo"}
     },
     "relaxation": {
         "cal_type":      "relaxation",
