@@ -1,6 +1,6 @@
 # APEX: Alloy Properties EXplorer using simulations
 ## General alloy properties test with VASP, ABACUS, and LAMMPS.
-This workflow is a part of [AI Square](https://aissquare.com/). We want to refract the autotest code based on dflow. 
+This workflow is a part of [AI Square](https://aissquare.com/). We want to refractor the autotest code based on dflow. 
 This is "general properties test" (elastic parameters, EOS, surface energy, interstitial energy, vacancy energy and stacking fault energy supported so far) using VASP, LAMMPS, or ABACUS.
 
 ## Easy Install：

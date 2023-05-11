@@ -1,5 +1,6 @@
 import os
 import warnings
+import logging
 
 from monty.serialization import dumpfn, loadfn
 
@@ -17,6 +18,8 @@ upload_packages.append(__file__)
 
 supported_inter = ["deepmd", "meam", "eam_fs", "eam_alloy"]
 
+logging.basicConfig(level=logging.INFO, filename='info.log', filemode='w',
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 class Lammps(Task):
     def __init__(self, inter_parameter, path_to_poscar):
@@ -154,25 +157,25 @@ class Lammps(Task):
             flowing dlog.info are replaced as print
             """
             if "etol" in cal_setting:
-                print(
+                logging.info(
                     "%s setting etol to %s"
                     % (self.make_input_file.__name__, cal_setting["etol"])
                 )
                 etol = cal_setting["etol"]
             if "ftol" in cal_setting:
-                print(
+                logging.info(
                     "%s setting ftol to %s"
                     % (self.make_input_file.__name__, cal_setting["ftol"])
                 )
                 ftol = cal_setting["ftol"]
             if "maxiter" in cal_setting:
-                print(
+                logging.info(
                     "%s setting maxiter to %s"
                     % (self.make_input_file.__name__, cal_setting["maxiter"])
                 )
                 maxiter = cal_setting["maxiter"]
             if "maxeval" in cal_setting:
-                print(
+                logging.info(
                     "%s setting maxeval to %s"
                     % (self.make_input_file.__name__, cal_setting["maxeval"])
                 )
