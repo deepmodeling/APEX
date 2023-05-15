@@ -1,24 +1,25 @@
-# APEX: Alloy Properties EXplorer using simulations
-## General alloy properties test with VASP, ABACUS, and LAMMPS.
-This workflow is a part of [AI Square](https://aissquare.com/). We want to refractor the autotest code based on dflow. 
-This is "general properties test" (elastic parameters, EOS, surface energy, interstitial energy, vacancy energy and stacking fault energy supported so far) using VASP, LAMMPS, or ABACUS.
+# APEX: Alloy Property EXplorer using simulations
+## General alloy property test with VASP, ABACUS, and LAMMPS.
+This workflow is a part of [AI Square](https://aissquare.com/). We want to refactor the autotest code based on dflow. 
+This is "general property test" (elastic parameters, EOS, surface energy, interstitial energy, vacancy energy and stacking fault energy supported so far) using VASP, LAMMPS, or ABACUS.
 
-## Easy Install：
+## Easy Install:
 ```
 pip install "git+https://github.com/deepmodeling/APEX.git"
 ```
 
-## Quick Start
+## Quick Start:
 You can go to the `example` folder and there are some examples for reference. You can go to one of them and fill in the `global.json` file. Then you can submit the workflow.
 
 If you want to use VASP code to do the DFT autotest, like the folder `vasp_demo`. You need to prepare `INCAR`, `POTCAR`, `POSCAR`, `global.json`(notice that json files for relaxation and properties task are needed as input arguments), then ：
 ``` 
 apex param_relax.json para_props.json
 ```
-If you want to run only relaxation or only properties test (notice that properties test requires relaxation results under corresponding path in ./confs), for example for relaxation, just give one argument like:
+If you want to run only relaxation or only property tests (notice that property tests require relaxation results under corresponding path in ./confs), for example for relaxation, just give one argument like:
 ``` 
 apex param_relax.json
 ```
+For property tests,
 ``` 
 apex param_props.json
 ```
