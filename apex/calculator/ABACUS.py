@@ -106,11 +106,7 @@ class ABACUS(Task):
         if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
             incar_prop = os.path.abspath(cal_setting["input_prop"])
             incar = abacus_scf.get_abacus_input_parameters(incar_prop)
-            """dlog.info(
-                "Detected 'input_prop' in 'relaxation', use %s as INPUT, and ignore 'cal_setting'"
-                % incar_prop
-            )"""
-            print(
+            dlog.info(
                 "Detected 'input_prop' in 'relaxation', use %s as INPUT, and ignore 'cal_setting'"
                 % incar_prop
             )
