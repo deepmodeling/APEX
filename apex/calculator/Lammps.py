@@ -151,9 +151,6 @@ class Lammps(Task):
                 fc = fin.read()
 
         else:
-            """
-            flowing dlog.info are replaced as print
-            """
             logging.basicConfig(level=logging.INFO, filename='info.log', filemode='w',
                                 format='%(asctime)s - %(levelname)s - %(message)s')
             if "etol" in cal_setting:

@@ -1,4 +1,5 @@
 import os
+import logging
 
 from dpdata import LabeledSystem
 from monty.serialization import dumpfn
@@ -85,8 +86,7 @@ class ABACUS(Task):
 
     def modify_input(self, incar, x, y):
         if x in incar and incar[x] != y:
-            print("setting %s to %s" % (x, y))
-            #dlog.info("setting %s to %s" % (x, y))
+            logging.info("setting %s to %s" % (x, y))
         incar[x] = y
 
     def make_input_file(self, output_dir, task_type, task_param):
@@ -106,11 +106,7 @@ class ABACUS(Task):
         if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
             incar_prop = os.path.abspath(cal_setting["input_prop"])
             incar = abacus_scf.get_abacus_input_parameters(incar_prop)
-            """dlog.info(
-                "Detected 'input_prop' in 'relaxation', use %s as INPUT, and ignore 'cal_setting'"
-                % incar_prop
-            )"""
-            print(
+            logging.info(
                 "Detected 'input_prop' in 'relaxation', use %s as INPUT, and ignore 'cal_setting'"
                 % incar_prop
             )
@@ -165,8 +161,7 @@ class ABACUS(Task):
             abacus.stru_fix_atom(os.path.join(output_dir, "STRU"), fix_atom)
 
         if "basis_type" not in incar:
-            # dlog.info("'basis_type' is not defined, set to be 'pw'!")
-            print("'basis_type' is not defined, set to be 'pw'!")
+            logging.info("'basis_type' is not defined, set to be 'pw'!")
             self.modify_input(incar, "basis_type", "pw")
         if "lcao" in incar["basis_type"].lower() and not self.if_define_orb_file:
             mess = (
@@ -204,8 +199,7 @@ class ABACUS(Task):
 
     def compute(self, output_dir):
         if not os.path.isfile(os.path.join(output_dir, "INPUT")):
-            print("cannot find INPUT in " + output_dir + " skip")
-            #dlog.warning("cannot find INPUT in " + output_dir + " skip")
+            logging.warning("cannot find INPUT in " + output_dir + " skip")
             return None
         ls = LabeledSystem(output_dir, fmt="abacus/relax")
         outcar_dict = ls.as_dict()
