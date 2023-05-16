@@ -1,0 +1,1163 @@
+ *********************************************************
+ *                                                       *
+ *                  WELCOME TO ABACUS v3.0               *
+ *                                                       *
+ *            'Atomic-orbital Based Ab-initio            *
+ *                  Computation at UStc'                 *
+ *                                                       *
+ *          Website: http://abacus.ustc.edu.cn/          *
+ *                                                       *
+ *********************************************************
+ Wed May 10 15:23:34 2023
+ MAKE THE DIR         : OUT.ABACUS/
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ Warning: number valence electrons > 3 for Al: [Ne] 3s2 3p1
+ Please make sure the pseudopotential file is what you need
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ UNIFORM GRID DIM     : 40 * 40 * 40
+ UNIFORM GRID DIM(BIG): 40 * 40 * 40
+ DONE(0.097207   SEC) : SETUP UNITCELL
+ DONE(0.153666   SEC) : SYMMETRY
+ DONE(0.164451   SEC) : INIT K-POINTS
+ ---------------------------------------------------------
+ Cell relaxation calculations
+ ---------------------------------------------------------
+ SPIN    KPOINTS         PROCESSORS  
+ 1       10              32          
+ ---------------------------------------------------------
+ Use plane wave basis
+ ---------------------------------------------------------
+ ELEMENT NATOM       XC          
+ Al      4           
+ ---------------------------------------------------------
+ Initial plane wave basis and FFT box
+ ---------------------------------------------------------
+ DONE(0.166246   SEC) : INIT PLANEWAVE
+ DONE(0.167127   SEC) : INIT CHARGE
+ MEMORY FOR PSI (MB)  : 0.610352
+ DONE(0.172573   SEC) : LOCAL POTENTIAL
+ DONE(0.187996   SEC) : NON-LOCAL POTENTIAL
+ START POTENTIAL      : atomic
+ DONE(0.211661   SEC) : INIT POTENTIAL
+ DONE(0.211955   SEC) : INIT BASIS
+ -------------------------------------------
+ RELAX CELL : 1
+ RELAX IONS : 1 (in total: 1)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ CG1    -7.532852e+03  0.000000e+00   6.840e-02  2.010e+00  
+ CG2    -7.532627e+03  2.257133e-01   2.870e-02  3.437e-01  
+ CG3    -7.532705e+03  -7.849864e-02  5.318e-04  4.169e-01  
+ CG4    -7.532705e+03  7.069774e-04   9.212e-04  5.313e-01  
+ CG5    -7.532704e+03  2.620974e-04   9.211e-05  3.891e-01  
+ CG6    -7.532705e+03  -6.025581e-04  2.837e-05  5.114e-01  
+ CG7    -7.532705e+03  6.475086e-05   1.640e-05  3.419e-01  
+ CG8    -7.532705e+03  2.838411e-05   6.850e-06  3.426e-01  
+ CG9    -7.532705e+03  1.117794e-05   2.077e-06  3.591e-01  
+ CG10   -7.532705e+03  -6.486470e-06  5.291e-08  4.526e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.925e+01     5.527e-29      1.186e-28      
+ 5.527e-29      -1.925e+01     -1.474e-28     
+ 1.186e-28      -1.474e-28     -1.925e+01     
+ TOTAL-PRESSURE: -1.925e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(5.984e+00  SEC) : SETUP UNITCELL
+ DONE(6.040e+00  SEC) : SYMMETRY
+ DONE(6.042e+00  SEC) : INIT K-POINTS
+ DONE(6.045e+00  SEC) : LOCAL POTENTIAL
+ DONE(6.061e+00  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 2
+ RELAX IONS : 1 (in total: 2)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532707e+03  0.000000e+00   2.311e-04  7.748e-01  
+ CG2    -7.532706e+03  1.048386e-03   1.026e-04  3.350e-01  
+ CG3    -7.532707e+03  -3.415064e-04  6.521e-06  5.273e-01  
+ CG4    -7.532707e+03  9.931102e-06   1.473e-06  3.763e-01  
+ CG5    -7.532707e+03  -1.029181e-05  1.416e-07  4.869e-01  
+ CG6    -7.532707e+03  2.332363e-06   2.838e-07  3.852e-01  
+ CG7    -7.532707e+03  2.489464e-07   3.842e-08  3.604e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.885e+01     8.172e-32      3.708e-29      
+ 8.172e-32      -1.885e+01     -1.109e-28     
+ 3.708e-29      -1.109e-28     -1.885e+01     
+ TOTAL-PRESSURE: -1.885e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(9.381e+00  SEC) : SETUP UNITCELL
+ DONE(9.437e+00  SEC) : SYMMETRY
+ DONE(9.438e+00  SEC) : INIT K-POINTS
+ DONE(9.441e+00  SEC) : LOCAL POTENTIAL
+ DONE(9.459e+00  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 3
+ RELAX IONS : 1 (in total: 3)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532707e+03  0.000000e+00   7.793e-08  8.981e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.872e+01     -2.223e-30     -3.858e-30     
+ -2.223e-30     -1.872e+01     -2.217e-31     
+ -3.858e-30     -2.217e-31     -1.872e+01     
+ TOTAL-PRESSURE: -1.872e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(1.042e+01  SEC) : SETUP UNITCELL
+ DONE(1.048e+01  SEC) : SYMMETRY
+ DONE(1.048e+01  SEC) : INIT K-POINTS
+ DONE(1.048e+01  SEC) : LOCAL POTENTIAL
+ DONE(1.050e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 4
+ RELAX IONS : 1 (in total: 4)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532717e+03  0.000000e+00   2.328e-03  8.687e-01  
+ CG2    -7.532707e+03  9.461379e-03   9.679e-04  3.334e-01  
+ CG3    -7.532711e+03  -3.447530e-03  4.534e-05  5.008e-01  
+ CG4    -7.532711e+03  -1.144559e-04  1.347e-05  4.848e-01  
+ CG5    -7.532711e+03  -1.778594e-05  2.092e-07  3.461e-01  
+ CG6    -7.532711e+03  -6.016725e-06  4.491e-09  5.415e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.186e+01     -4.423e-30     -2.040e-29     
+ -4.423e-30     -1.186e+01     -5.198e-30     
+ -2.040e-29     -5.198e-30     -1.186e+01     
+ TOTAL-PRESSURE: -1.186e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(1.365e+01  SEC) : SETUP UNITCELL
+ DONE(1.370e+01  SEC) : SYMMETRY
+ DONE(1.371e+01  SEC) : INIT K-POINTS
+ DONE(1.371e+01  SEC) : LOCAL POTENTIAL
+ DONE(1.372e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 5
+ RELAX IONS : 1 (in total: 5)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532741e+03  0.000000e+00   1.063e-02  8.668e-01  
+ CG2    -7.532698e+03  4.318280e-02   4.420e-03  3.368e-01  
+ CG3    -7.532714e+03  -1.570180e-02  2.042e-04  5.057e-01  
+ CG4    -7.532714e+03  -5.145889e-04  5.878e-05  4.897e-01  
+ CG5    -7.532714e+03  -8.654475e-05  5.534e-07  3.555e-01  
+ CG6    -7.532714e+03  -2.402098e-05  9.195e-09  5.456e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.779e+00      2.667e-28      -3.934e-28     
+ 2.667e-28      1.779e+00      1.500e-28      
+ -3.934e-28     1.500e-28      1.779e+00      
+ TOTAL-PRESSURE: 1.779e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(1.690e+01  SEC) : SETUP UNITCELL
+ DONE(1.695e+01  SEC) : SYMMETRY
+ DONE(1.696e+01  SEC) : INIT K-POINTS
+ DONE(1.696e+01  SEC) : LOCAL POTENTIAL
+ DONE(1.698e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 6
+ RELAX IONS : 1 (in total: 6)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532775e+03  0.000000e+00   2.790e-02  9.015e-01  
+ CG2    -7.532662e+03  1.135282e-01   1.161e-02  3.339e-01  
+ CG3    -7.532703e+03  -4.133975e-02  5.506e-04  4.788e-01  
+ CG4    -7.532705e+03  -1.459177e-03  1.419e-04  4.769e-01  
+ CG5    -7.532705e+03  -2.002894e-04  1.589e-06  3.583e-01  
+ CG6    -7.532705e+03  -5.979533e-05  3.840e-08  5.397e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -2.027e+01     3.092e-28      -3.924e-28     
+ 3.092e-28      -2.027e+01     1.748e-28      
+ -3.924e-28     1.748e-28      -2.027e+01     
+ TOTAL-PRESSURE: -2.027e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(2.014e+01  SEC) : SETUP UNITCELL
+ DONE(2.019e+01  SEC) : SYMMETRY
+ DONE(2.019e+01  SEC) : INIT K-POINTS
+ DONE(2.020e+01  SEC) : LOCAL POTENTIAL
+ DONE(2.021e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 7
+ RELAX IONS : 1 (in total: 7)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532774e+03  0.000000e+00   2.377e-02  8.915e-01  
+ CG2    -7.532678e+03  9.650738e-02   9.878e-03  3.420e-01  
+ CG3    -7.532713e+03  -3.512462e-02  4.560e-04  4.748e-01  
+ CG4    -7.532714e+03  -1.152340e-03  1.388e-04  4.837e-01  
+ CG5    -7.532714e+03  -1.649795e-04  3.062e-06  3.582e-01  
+ CG6    -7.532714e+03  -6.497724e-05  3.738e-08  5.225e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.459e-01      -2.688e-28     -4.207e-28     
+ -2.688e-28     1.459e-01      4.488e-28      
+ -4.207e-28     4.488e-28      1.459e-01      
+ TOTAL-PRESSURE: 1.459e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(2.336e+01  SEC) : SETUP UNITCELL
+ DONE(2.341e+01  SEC) : SYMMETRY
+ DONE(2.342e+01  SEC) : INIT K-POINTS
+ DONE(2.342e+01  SEC) : LOCAL POTENTIAL
+ DONE(2.343e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 8
+ RELAX IONS : 1 (in total: 8)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532715e+03  0.000000e+00   1.792e-04  8.727e-01  
+ CG2    -7.532714e+03  7.280853e-04   7.452e-05  4.172e-01  
+ CG3    -7.532714e+03  -2.644240e-04  3.458e-06  4.765e-01  
+ CG4    -7.532714e+03  -9.137013e-06  8.570e-07  4.946e-01  
+ CG5    -7.532714e+03  -1.346713e-06  3.075e-09  3.697e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.155e+00     -1.937e-28     4.708e-29      
+ -1.937e-28     -1.155e+00     1.537e-28      
+ 4.708e-29      1.537e-28      -1.155e+00     
+ TOTAL-PRESSURE: -1.155e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(2.613e+01  SEC) : SETUP UNITCELL
+ DONE(2.619e+01  SEC) : SYMMETRY
+ DONE(2.620e+01  SEC) : INIT K-POINTS
+ DONE(2.620e+01  SEC) : LOCAL POTENTIAL
+ DONE(2.621e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 9
+ RELAX IONS : 1 (in total: 9)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532715e+03  0.000000e+00   1.448e-04  9.165e-01  
+ CG2    -7.532714e+03  5.880287e-04   6.019e-05  3.554e-01  
+ CG3    -7.532714e+03  -2.136778e-04  2.784e-06  6.462e-01  
+ CG4    -7.532714e+03  -7.096291e-06  7.596e-07  4.881e-01  
+ CG5    -7.532714e+03  -1.182540e-06  3.194e-09  3.580e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.185e+00     -2.160e-29     8.429e-29      
+ -2.160e-29     -1.185e+00     -1.117e-28     
+ 8.429e-29      -1.117e-28     -1.185e+00     
+ TOTAL-PRESSURE: -1.185e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(2.907e+01  SEC) : SETUP UNITCELL
+ DONE(2.913e+01  SEC) : SYMMETRY
+ DONE(2.913e+01  SEC) : INIT K-POINTS
+ DONE(2.913e+01  SEC) : LOCAL POTENTIAL
+ DONE(2.915e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 10
+ RELAX IONS : 1 (in total: 10)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.587e-06  8.764e-01  
+ CG2    -7.532714e+03  6.444488e-06   6.595e-07  3.960e-01  
+ CG3    -7.532714e+03  -2.336005e-06  3.039e-08  5.158e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 2.639e-01      5.589e-29      2.858e-28      
+ 5.589e-29      2.639e-01      -2.992e-28     
+ 2.858e-28      -2.992e-28     2.639e-01      
+ TOTAL-PRESSURE: 2.639e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(3.102e+01  SEC) : SETUP UNITCELL
+ DONE(3.107e+01  SEC) : SYMMETRY
+ DONE(3.107e+01  SEC) : INIT K-POINTS
+ DONE(3.108e+01  SEC) : LOCAL POTENTIAL
+ DONE(3.109e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 11
+ RELAX IONS : 1 (in total: 11)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   5.020e-07  8.946e-01  
+ CG2    -7.532714e+03  2.028592e-06   2.087e-07  3.333e-01  
+ CG3    -7.532714e+03  -7.319899e-07  9.605e-09  4.839e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -5.601e-01     -1.098e-28     -9.603e-30     
+ -1.098e-28     -5.601e-01     -7.465e-29     
+ -9.603e-30     -7.465e-29     -5.601e-01     
+ TOTAL-PRESSURE: -5.601e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(3.299e+01  SEC) : SETUP UNITCELL
+ DONE(3.304e+01  SEC) : SYMMETRY
+ DONE(3.304e+01  SEC) : INIT K-POINTS
+ DONE(3.305e+01  SEC) : LOCAL POTENTIAL
+ DONE(3.306e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 12
+ RELAX IONS : 1 (in total: 12)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   2.397e-07  8.590e-01  
+ CG2    -7.532714e+03  9.902433e-07   9.964e-08  3.373e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -1.254e+00     -2.678e-28     1.231e-29      
+ -2.678e-28     -1.254e+00     1.497e-28      
+ 1.231e-29      1.497e-28      -1.254e+00     
+ TOTAL-PRESSURE: -1.254e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(3.434e+01  SEC) : SETUP UNITCELL
+ DONE(3.439e+01  SEC) : SYMMETRY
+ DONE(3.439e+01  SEC) : INIT K-POINTS
+ DONE(3.440e+01  SEC) : LOCAL POTENTIAL
+ DONE(3.441e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 13
+ RELAX IONS : 1 (in total: 13)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   2.729e-07  8.648e-01  
+ CG2    -7.532714e+03  1.115623e-06   1.133e-07  3.311e-01  
+ CG3    -7.532714e+03  -4.047652e-07  5.186e-09  4.910e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -4.730e-01     7.910e-30      5.201e-30      
+ 7.910e-30      -4.730e-01     1.068e-31      
+ 5.201e-30      1.068e-31      -4.730e-01     
+ TOTAL-PRESSURE: -4.730e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(3.618e+01  SEC) : SETUP UNITCELL
+ DONE(3.623e+01  SEC) : SYMMETRY
+ DONE(3.623e+01  SEC) : INIT K-POINTS
+ DONE(3.624e+01  SEC) : LOCAL POTENTIAL
+ DONE(3.625e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 14
+ RELAX IONS : 1 (in total: 14)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   6.973e-08  8.760e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 3.923e-01      1.016e-28      -9.153e-30     
+ 1.016e-28      3.923e-01      2.990e-28      
+ -9.153e-30     2.990e-28      3.923e-01      
+ TOTAL-PRESSURE: 3.923e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(3.720e+01  SEC) : SETUP UNITCELL
+ DONE(3.726e+01  SEC) : SYMMETRY
+ DONE(3.726e+01  SEC) : INIT K-POINTS
+ DONE(3.727e+01  SEC) : LOCAL POTENTIAL
+ DONE(3.729e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 15
+ RELAX IONS : 1 (in total: 15)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   5.802e-08  9.121e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -9.449e-01     -5.599e-29     -1.851e-29     
+ -5.599e-29     -9.449e-01     5.633e-29      
+ -1.851e-29     5.633e-29      -9.449e-01     
+ TOTAL-PRESSURE: -9.449e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(3.827e+01  SEC) : SETUP UNITCELL
+ DONE(3.832e+01  SEC) : SYMMETRY
+ DONE(3.833e+01  SEC) : INIT K-POINTS
+ DONE(3.833e+01  SEC) : LOCAL POTENTIAL
+ DONE(3.834e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 16
+ RELAX IONS : 1 (in total: 16)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   3.193e-07  9.645e-01  
+ CG2    -7.532714e+03  1.306651e-06   1.327e-07  3.363e-01  
+ CG3    -7.532714e+03  -4.741588e-07  6.130e-09  4.710e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -5.673e-01     -1.401e-29     -1.202e-29     
+ -1.401e-29     -5.673e-01     2.276e-31      
+ -1.202e-29     2.276e-31      -5.673e-01     
+ TOTAL-PRESSURE: -5.673e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(4.019e+01  SEC) : SETUP UNITCELL
+ DONE(4.024e+01  SEC) : SYMMETRY
+ DONE(4.024e+01  SEC) : INIT K-POINTS
+ DONE(4.025e+01  SEC) : LOCAL POTENTIAL
+ DONE(4.026e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 17
+ RELAX IONS : 1 (in total: 17)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.106e-09  8.696e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -4.395e-01     -1.776e-28     -1.452e-28     
+ -1.776e-28     -4.395e-01     -1.494e-28     
+ -1.452e-28     -1.494e-28     -4.395e-01     
+ TOTAL-PRESSURE: -4.395e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(4.121e+01  SEC) : SETUP UNITCELL
+ DONE(4.127e+01  SEC) : SYMMETRY
+ DONE(4.127e+01  SEC) : INIT K-POINTS
+ DONE(4.127e+01  SEC) : LOCAL POTENTIAL
+ DONE(4.129e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 18
+ RELAX IONS : 1 (in total: 18)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   8.416e-07  8.673e-01  
+ CG2    -7.532714e+03  3.421238e-06   3.499e-07  3.413e-01  
+ CG3    -7.532714e+03  -1.241098e-06  1.622e-08  4.813e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -8.128e-01     -3.846e-28     2.236e-28      
+ -3.846e-28     -8.128e-01     -2.985e-28     
+ 2.236e-28      -2.985e-28     -8.128e-01     
+ TOTAL-PRESSURE: -8.128e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(4.305e+01  SEC) : SETUP UNITCELL
+ DONE(4.311e+01  SEC) : SYMMETRY
+ DONE(4.311e+01  SEC) : INIT K-POINTS
+ DONE(4.311e+01  SEC) : LOCAL POTENTIAL
+ DONE(4.313e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 19
+ RELAX IONS : 1 (in total: 19)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   3.006e-05  8.724e-01  
+ CG2    -7.532714e+03  1.221992e-04   1.250e-05  3.403e-01  
+ CG3    -7.532714e+03  -4.439615e-05  5.797e-07  4.701e-01  
+ CG4    -7.532714e+03  -1.527794e-06  1.467e-07  4.790e-01  
+ CG5    -7.532714e+03  -2.188892e-07  8.765e-10  3.508e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -8.461e-01     -5.235e-28     9.063e-29      
+ -5.235e-28     -8.461e-01     -2.963e-28     
+ 9.063e-29      -2.963e-28     -8.461e-01     
+ TOTAL-PRESSURE: -8.461e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(4.574e+01  SEC) : SETUP UNITCELL
+ DONE(4.580e+01  SEC) : SYMMETRY
+ DONE(4.580e+01  SEC) : INIT K-POINTS
+ DONE(4.580e+01  SEC) : LOCAL POTENTIAL
+ DONE(4.582e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 20
+ RELAX IONS : 1 (in total: 20)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   4.085e-05  9.224e-01  
+ CG2    -7.532714e+03  1.659261e-04   1.698e-05  3.346e-01  
+ CG3    -7.532714e+03  -6.028536e-05  7.858e-07  4.978e-01  
+ CG4    -7.532714e+03  -2.017296e-06  2.099e-07  4.956e-01  
+ CG5    -7.532714e+03  -3.282301e-07  8.278e-10  3.526e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -7.734e-01     -1.115e-28     4.891e-29      
+ -1.115e-28     -7.734e-01     2.232e-30      
+ 4.891e-29      2.232e-30      -7.734e-01     
+ TOTAL-PRESSURE: -7.734e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(4.854e+01  SEC) : SETUP UNITCELL
+ DONE(4.859e+01  SEC) : SYMMETRY
+ DONE(4.859e+01  SEC) : INIT K-POINTS
+ DONE(4.860e+01  SEC) : LOCAL POTENTIAL
+ DONE(4.861e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 21
+ RELAX IONS : 1 (in total: 21)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.091e-08  8.703e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -6.138e-01     1.504e-29      -1.601e-29     
+ 1.504e-29      -6.138e-01     -1.693e-29     
+ -1.601e-29     -1.693e-29     -6.138e-01     
+ TOTAL-PRESSURE: -6.138e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(4.960e+01  SEC) : SETUP UNITCELL
+ DONE(4.966e+01  SEC) : SYMMETRY
+ DONE(4.966e+01  SEC) : INIT K-POINTS
+ DONE(4.966e+01  SEC) : LOCAL POTENTIAL
+ DONE(4.968e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 22
+ RELAX IONS : 1 (in total: 22)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532715e+03  0.000000e+00   2.934e-04  8.710e-01  
+ CG2    -7.532714e+03  1.191763e-03   1.220e-04  3.498e-01  
+ CG3    -7.532714e+03  -4.327551e-04  5.632e-06  4.773e-01  
+ CG4    -7.532714e+03  -1.473211e-05  1.433e-06  4.960e-01  
+ CG5    -7.532714e+03  -2.246811e-06  5.433e-09  3.659e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 9.141e-01      6.411e-30      7.914e-30      
+ 6.411e-30      9.141e-01      -3.956e-29     
+ 7.914e-30      -3.956e-29     9.141e-01      
+ TOTAL-PRESSURE: 9.141e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(5.233e+01  SEC) : SETUP UNITCELL
+ DONE(5.239e+01  SEC) : SYMMETRY
+ DONE(5.239e+01  SEC) : INIT K-POINTS
+ DONE(5.239e+01  SEC) : LOCAL POTENTIAL
+ DONE(5.241e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 23
+ RELAX IONS : 1 (in total: 23)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532715e+03  0.000000e+00   1.541e-04  8.702e-01  
+ CG2    -7.532714e+03  6.260657e-04   6.408e-05  3.388e-01  
+ CG3    -7.532714e+03  -2.273980e-04  2.965e-06  4.736e-01  
+ CG4    -7.532714e+03  -7.587850e-06  7.929e-07  4.822e-01  
+ CG5    -7.532714e+03  -1.276361e-06  2.298e-09  3.519e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.126e+00      -2.765e-29     -3.383e-29     
+ -2.765e-29     1.126e+00      -1.527e-28     
+ -3.383e-29     -1.527e-28     1.126e+00      
+ TOTAL-PRESSURE: 1.126e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(5.500e+01  SEC) : SETUP UNITCELL
+ DONE(5.506e+01  SEC) : SYMMETRY
+ DONE(5.506e+01  SEC) : INIT K-POINTS
+ DONE(5.506e+01  SEC) : LOCAL POTENTIAL
+ DONE(5.508e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 24
+ RELAX IONS : 1 (in total: 24)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.318e-04  8.632e-01  
+ CG2    -7.532714e+03  5.353935e-04   5.480e-05  3.346e-01  
+ CG3    -7.532714e+03  -1.944583e-04  2.530e-06  4.987e-01  
+ CG4    -7.532714e+03  -6.473091e-06  6.789e-07  5.075e-01  
+ CG5    -7.532714e+03  -1.084248e-06  2.127e-09  3.670e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.144e+00      -1.363e-28     -3.383e-28     
+ -1.363e-28     1.144e+00      4.472e-28      
+ -3.383e-28     4.472e-28      1.144e+00      
+ TOTAL-PRESSURE: 1.144e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(5.774e+01  SEC) : SETUP UNITCELL
+ DONE(5.780e+01  SEC) : SYMMETRY
+ DONE(5.780e+01  SEC) : INIT K-POINTS
+ DONE(5.780e+01  SEC) : LOCAL POTENTIAL
+ DONE(5.782e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 25
+ RELAX IONS : 1 (in total: 25)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532723e+03  0.000000e+00   4.676e-03  8.723e-01  
+ CG2    -7.532704e+03  1.898341e-02   1.943e-03  3.350e-01  
+ CG3    -7.532711e+03  -6.886709e-03  8.864e-05  4.824e-01  
+ CG4    -7.532711e+03  -2.423212e-04  2.233e-05  4.766e-01  
+ CG5    -7.532711e+03  -2.520294e-05  5.387e-07  3.400e-01  
+ CG6    -7.532711e+03  -1.013313e-05  5.623e-09  5.246e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.156e+01      -1.082e-28     -4.757e-28     
+ -1.082e-28     1.156e+01      9.371e-28      
+ -4.757e-28     9.371e-28      1.156e+01      
+ TOTAL-PRESSURE: 1.156e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(6.092e+01  SEC) : SETUP UNITCELL
+ DONE(6.097e+01  SEC) : SYMMETRY
+ DONE(6.098e+01  SEC) : INIT K-POINTS
+ DONE(6.098e+01  SEC) : LOCAL POTENTIAL
+ DONE(6.099e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 26
+ RELAX IONS : 1 (in total: 26)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532730e+03  0.000000e+00   6.351e-03  9.035e-01  
+ CG2    -7.532704e+03  2.581382e-02   2.641e-03  3.726e-01  
+ CG3    -7.532714e+03  -9.365706e-03  1.222e-04  4.892e-01  
+ CG4    -7.532714e+03  -3.287989e-04  2.798e-05  4.692e-01  
+ CG5    -7.532714e+03  -4.674823e-05  4.446e-08  3.645e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 4.816e+00      -3.655e-28     3.381e-28      
+ -3.655e-28     4.816e+00      1.047e-29      
+ 3.381e-28      1.047e-29      4.816e+00      
+ TOTAL-PRESSURE: 4.816e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(6.367e+01  SEC) : SETUP UNITCELL
+ DONE(6.372e+01  SEC) : SYMMETRY
+ DONE(6.372e+01  SEC) : INIT K-POINTS
+ DONE(6.373e+01  SEC) : LOCAL POTENTIAL
+ DONE(6.374e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 27
+ RELAX IONS : 1 (in total: 27)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.347e-06  8.745e-01  
+ CG2    -7.532714e+03  5.466737e-06   5.580e-07  3.334e-01  
+ CG3    -7.532714e+03  -1.997197e-06  2.573e-08  4.775e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -3.262e-01     3.423e-30      5.538e-29      
+ 3.423e-30      -3.262e-01     -2.251e-28     
+ 5.538e-29      -2.251e-28     -3.262e-01     
+ TOTAL-PRESSURE: -3.262e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(6.550e+01  SEC) : SETUP UNITCELL
+ DONE(6.556e+01  SEC) : SYMMETRY
+ DONE(6.556e+01  SEC) : INIT K-POINTS
+ DONE(6.556e+01  SEC) : LOCAL POTENTIAL
+ DONE(6.558e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 28
+ RELAX IONS : 1 (in total: 28)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532728e+03  0.000000e+00   6.646e-03  8.753e-01  
+ CG2    -7.532701e+03  2.697640e-02   2.762e-03  3.304e-01  
+ CG3    -7.532711e+03  -9.788363e-03  1.263e-04  5.042e-01  
+ CG4    -7.532711e+03  -3.280675e-04  3.312e-05  5.062e-01  
+ CG5    -7.532711e+03  -5.315865e-05  1.649e-07  3.555e-01  
+ CG6    -7.532711e+03  -1.179739e-05  1.863e-09  5.911e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.135e+01      2.477e-28      -4.449e-29     
+ 2.477e-28      1.135e+01      8.772e-29      
+ -4.449e-29     8.772e-29      1.135e+01      
+ TOTAL-PRESSURE: 1.135e+01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(6.881e+01  SEC) : SETUP UNITCELL
+ DONE(6.887e+01  SEC) : SYMMETRY
+ DONE(6.887e+01  SEC) : INIT K-POINTS
+ DONE(6.887e+01  SEC) : LOCAL POTENTIAL
+ DONE(6.889e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 29
+ RELAX IONS : 1 (in total: 29)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532730e+03  0.000000e+00   6.263e-03  8.699e-01  
+ CG2    -7.532705e+03  2.545609e-02   2.605e-03  3.340e-01  
+ CG3    -7.532714e+03  -9.235987e-03  1.205e-04  4.764e-01  
+ CG4    -7.532714e+03  -3.247552e-04  2.748e-05  4.699e-01  
+ CG5    -7.532714e+03  -4.569804e-05  4.744e-08  3.613e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 4.888e+00      -2.712e-28     2.820e-28      
+ -2.712e-28     4.888e+00      -2.880e-28     
+ 2.820e-28      -2.880e-28     4.888e+00      
+ TOTAL-PRESSURE: 4.888e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(7.147e+01  SEC) : SETUP UNITCELL
+ DONE(7.153e+01  SEC) : SYMMETRY
+ DONE(7.153e+01  SEC) : INIT K-POINTS
+ DONE(7.153e+01  SEC) : LOCAL POTENTIAL
+ DONE(7.155e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 30
+ RELAX IONS : 1 (in total: 30)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   2.575e-06  8.728e-01  
+ CG2    -7.532714e+03  1.046615e-05   1.069e-06  3.700e-01  
+ CG3    -7.532714e+03  -3.811079e-06  4.980e-08  4.768e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -4.740e-01     -1.455e-28     -4.548e-29     
+ -1.455e-28     -4.740e-01     1.486e-28      
+ -4.548e-29     1.486e-28      -4.740e-01     
+ TOTAL-PRESSURE: -4.740e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(7.334e+01  SEC) : SETUP UNITCELL
+ DONE(7.339e+01  SEC) : SYMMETRY
+ DONE(7.340e+01  SEC) : INIT K-POINTS
+ DONE(7.340e+01  SEC) : LOCAL POTENTIAL
+ DONE(7.341e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 31
+ RELAX IONS : 1 (in total: 31)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   6.512e-07  9.758e-01  
+ CG2    -7.532714e+03  2.628522e-06   2.710e-07  3.365e-01  
+ CG3    -7.532714e+03  -9.484847e-07  1.254e-08  4.923e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 5.347e-01      -9.898e-30     1.989e-29      
+ -9.898e-30     5.347e-01      -3.622e-29     
+ 1.989e-29      -3.622e-29     5.347e-01      
+ TOTAL-PRESSURE: 5.347e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(7.529e+01  SEC) : SETUP UNITCELL
+ DONE(7.535e+01  SEC) : SYMMETRY
+ DONE(7.535e+01  SEC) : INIT K-POINTS
+ DONE(7.535e+01  SEC) : LOCAL POTENTIAL
+ DONE(7.537e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 32
+ RELAX IONS : 1 (in total: 32)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   6.949e-08  8.544e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 8.994e-01      -8.517e-28     6.005e-28      
+ -8.517e-28     8.994e-01      -2.973e-28     
+ 6.005e-28      -2.973e-28     8.994e-01      
+ TOTAL-PRESSURE: 8.994e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(7.629e+01  SEC) : SETUP UNITCELL
+ DONE(7.635e+01  SEC) : SYMMETRY
+ DONE(7.635e+01  SEC) : INIT K-POINTS
+ DONE(7.635e+01  SEC) : LOCAL POTENTIAL
+ DONE(7.637e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 33
+ RELAX IONS : 1 (in total: 33)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   6.547e-07  8.758e-01  
+ CG2    -7.532714e+03  2.672986e-06   2.721e-07  3.682e-01  
+ CG3    -7.532714e+03  -9.704367e-07  1.257e-08  4.962e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 5.908e-01      -5.428e-29     3.169e-29      
+ -5.428e-29     5.908e-01      1.351e-30      
+ 3.169e-29      1.351e-30      5.908e-01      
+ TOTAL-PRESSURE: 5.908e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(7.818e+01  SEC) : SETUP UNITCELL
+ DONE(7.824e+01  SEC) : SYMMETRY
+ DONE(7.824e+01  SEC) : INIT K-POINTS
+ DONE(7.824e+01  SEC) : LOCAL POTENTIAL
+ DONE(7.826e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 34
+ RELAX IONS : 1 (in total: 34)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   2.011e-06  8.609e-01  
+ CG2    -7.532714e+03  8.189744e-06   8.365e-07  3.398e-01  
+ CG3    -7.532714e+03  -2.968990e-06  3.883e-08  4.740e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 1.005e+00      1.327e-28      1.616e-29      
+ 1.327e-28      1.005e+00      1.521e-28      
+ 1.616e-29      1.521e-28      1.005e+00      
+ TOTAL-PRESSURE: 1.005e+00 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.000e+01  SEC) : SETUP UNITCELL
+ DONE(8.006e+01  SEC) : SYMMETRY
+ DONE(8.006e+01  SEC) : INIT K-POINTS
+ DONE(8.006e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.008e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 35
+ RELAX IONS : 1 (in total: 35)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   4.135e-06  8.631e-01  
+ CG2    -7.532714e+03  1.675958e-05   1.719e-06  3.348e-01  
+ CG3    -7.532714e+03  -6.064122e-06  7.933e-08  4.770e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -5.476e-01     9.916e-29      -1.486e-28     
+ 9.916e-29      -5.476e-01     7.350e-29      
+ -1.486e-28     7.350e-29      -5.476e-01     
+ TOTAL-PRESSURE: -5.476e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.183e+01  SEC) : SETUP UNITCELL
+ DONE(8.188e+01  SEC) : SYMMETRY
+ DONE(8.189e+01  SEC) : INIT K-POINTS
+ DONE(8.189e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.190e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 36
+ RELAX IONS : 1 (in total: 36)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   6.371e-10  8.725e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 2.710e-01      -2.740e-29     2.863e-29      
+ -2.740e-29     2.710e-01      -4.845e-29     
+ 2.863e-29      -4.845e-29     2.710e-01      
+ TOTAL-PRESSURE: 2.710e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.284e+01  SEC) : SETUP UNITCELL
+ DONE(8.290e+01  SEC) : SYMMETRY
+ DONE(8.290e+01  SEC) : INIT K-POINTS
+ DONE(8.290e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.292e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 37
+ RELAX IONS : 1 (in total: 37)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   3.466e-10  8.459e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 2.532e-01      -2.029e-28     1.829e-28      
+ -2.029e-28     2.532e-01      -2.987e-28     
+ 1.829e-28      -2.987e-28     2.532e-01      
+ TOTAL-PRESSURE: 2.532e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.383e+01  SEC) : SETUP UNITCELL
+ DONE(8.389e+01  SEC) : SYMMETRY
+ DONE(8.389e+01  SEC) : INIT K-POINTS
+ DONE(8.390e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.391e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 38
+ RELAX IONS : 1 (in total: 38)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   3.415e-10  8.580e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 2.504e-01      7.758e-29      -1.327e-28     
+ 7.758e-29      2.504e-01      1.502e-28      
+ -1.327e-28     1.502e-28      2.504e-01      
+ TOTAL-PRESSURE: 2.504e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.484e+01  SEC) : SETUP UNITCELL
+ DONE(8.489e+01  SEC) : SYMMETRY
+ DONE(8.490e+01  SEC) : INIT K-POINTS
+ DONE(8.490e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.492e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 39
+ RELAX IONS : 1 (in total: 39)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   4.274e-06  8.710e-01  
+ CG2    -7.532714e+03  1.736278e-05   1.777e-06  3.330e-01  
+ CG3    -7.532714e+03  -6.290775e-06  8.230e-08  4.843e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -8.394e-01     -2.091e-29     2.562e-29      
+ -2.091e-29     -8.394e-01     -3.933e-29     
+ 2.562e-29      -3.933e-29     -8.394e-01     
+ TOTAL-PRESSURE: -8.394e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.668e+01  SEC) : SETUP UNITCELL
+ DONE(8.673e+01  SEC) : SYMMETRY
+ DONE(8.673e+01  SEC) : INIT K-POINTS
+ DONE(8.674e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.675e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 40
+ RELAX IONS : 1 (in total: 40)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.278e-07  1.050e+00  
+ CG2    -7.532714e+03  5.199917e-07   5.321e-08  3.539e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -7.601e-01     -1.510e-28     5.561e-29      
+ -1.510e-28     -7.601e-01     -7.657e-29     
+ 5.561e-29      -7.657e-29     -7.601e-01     
+ TOTAL-PRESSURE: -7.601e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(8.823e+01  SEC) : SETUP UNITCELL
+ DONE(8.829e+01  SEC) : SYMMETRY
+ DONE(8.829e+01  SEC) : INIT K-POINTS
+ DONE(8.829e+01  SEC) : LOCAL POTENTIAL
+ DONE(8.831e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 41
+ RELAX IONS : 1 (in total: 41)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.570e-06  8.659e-01  
+ CG2    -7.532714e+03  6.361755e-06   6.529e-07  3.667e-01  
+ CG3    -7.532714e+03  -2.303902e-06  3.017e-08  4.922e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 6.237e-01      -4.607e-28     3.286e-28      
+ -4.607e-28     6.237e-01      1.490e-30      
+ 3.286e-28      1.490e-30      6.237e-01      
+ TOTAL-PRESSURE: 6.237e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(9.010e+01  SEC) : SETUP UNITCELL
+ DONE(9.016e+01  SEC) : SYMMETRY
+ DONE(9.016e+01  SEC) : INIT K-POINTS
+ DONE(9.017e+01  SEC) : LOCAL POTENTIAL
+ DONE(9.018e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 42
+ RELAX IONS : 1 (in total: 42)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   9.827e-07  8.734e-01  
+ CG2    -7.532714e+03  3.972579e-06   4.084e-07  3.478e-01  
+ CG3    -7.532714e+03  -1.435149e-06  1.871e-08  4.860e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -3.405e-01     -1.534e-28     8.342e-29      
+ -1.534e-28     -3.405e-01     3.661e-29      
+ 8.342e-29      3.661e-29      -3.405e-01     
+ TOTAL-PRESSURE: -3.405e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(9.196e+01  SEC) : SETUP UNITCELL
+ DONE(9.202e+01  SEC) : SYMMETRY
+ DONE(9.202e+01  SEC) : INIT K-POINTS
+ DONE(9.202e+01  SEC) : LOCAL POTENTIAL
+ DONE(9.204e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 43
+ RELAX IONS : 1 (in total: 43)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   5.515e-08  9.757e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -5.644e-01     -4.270e-28     2.933e-28      
+ -4.270e-28     -5.644e-01     -1.509e-28     
+ 2.933e-28      -1.509e-28     -5.644e-01     
+ TOTAL-PRESSURE: -5.644e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(9.309e+01  SEC) : SETUP UNITCELL
+ DONE(9.314e+01  SEC) : SYMMETRY
+ DONE(9.314e+01  SEC) : INIT K-POINTS
+ DONE(9.315e+01  SEC) : LOCAL POTENTIAL
+ DONE(9.316e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 44
+ RELAX IONS : 1 (in total: 44)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   1.255e-06  8.651e-01  
+ CG2    -7.532714e+03  5.119265e-06   5.220e-07  3.375e-01  
+ CG3    -7.532714e+03  -1.856352e-06  2.424e-08  4.714e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -4.936e-01     -7.587e-31     -1.437e-28     
+ -7.587e-31     -4.936e-01     -1.131e-30     
+ -1.437e-28     -1.131e-30     -4.936e-01     
+ TOTAL-PRESSURE: -4.936e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(9.491e+01  SEC) : SETUP UNITCELL
+ DONE(9.496e+01  SEC) : SYMMETRY
+ DONE(9.497e+01  SEC) : INIT K-POINTS
+ DONE(9.497e+01  SEC) : LOCAL POTENTIAL
+ DONE(9.498e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 45
+ RELAX IONS : 1 (in total: 45)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   2.473e-08  8.584e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ -4.697e-01     4.133e-28      -3.166e-28     
+ 4.133e-28      -4.697e-01     1.485e-28      
+ -3.166e-28     1.485e-28      -4.697e-01     
+ TOTAL-PRESSURE: -4.697e-01 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+ DONE(9.591e+01  SEC) : SETUP UNITCELL
+ DONE(9.597e+01  SEC) : SYMMETRY
+ DONE(9.597e+01  SEC) : INIT K-POINTS
+ DONE(9.597e+01  SEC) : LOCAL POTENTIAL
+ DONE(9.599e+01  SEC) : NON-LOCAL POTENTIAL
+ -------------------------------------------
+ RELAX CELL : 46
+ RELAX IONS : 1 (in total: 46)
+ -------------------------------------------
+ ITER   ETOT(eV)       EDIFF(eV)      DRHO       TIME(s)    
+ MEMORY FOR PSI (MB)  : 6.104e-01
+ CG1    -7.532714e+03  0.000000e+00   6.490e-06  8.672e-01  
+ CG2    -7.532714e+03  2.639874e-05   2.699e-06  3.340e-01  
+ CG3    -7.532714e+03  -9.589829e-06  1.252e-07  5.123e-01  
+ CG4    -7.532714e+03  -3.119687e-07  3.142e-08  4.942e-01  
+ ><><><><><><><><><><><><><><><><><><><><><><
+ TOTAL-STRESS (KBAR):
+ ><><><><><><><><><><><><><><><><><><><><><><
+ 3.935e-02      -5.651e-28     -3.263e-29     
+ -5.651e-28     3.935e-02      2.992e-28      
+ -3.263e-29     2.992e-28      3.935e-02      
+ TOTAL-PRESSURE: 3.935e-02 KBAR
+ ETOT DIFF (eV)       : 0.000e+00
+ LARGEST GRAD (eV/A)  : 0.000e+00
+
+  |CLASS_NAME---------|NAME---------------|TIME(Sec)-----|CALLS----|AVG------|PER%-------
+                       total               98.281         469       0.21      1e+02     %
+   Driver              driver_line         98.235         1         98        1e+02     %
+   Symmetry            analy_sys           48.839         23        2.1       50        %
+   ppcell_vnl          init_vnl            0.742          46        0.016     0.75      %
+   Sphbes              Spherical_Bessel    0.50105        171856    2.9e-06   0.51      %
+   Potential           init_pot            0.21077        46        0.0046    0.21      %
+   PW_Basis            recip2real          0.28147        1409      0.0002    0.29      %
+   PW_Basis            gathers_scatterp    0.22666        1409      0.00016   0.23      %
+   Potential           v_of_rho            0.7875         208       0.0038    0.8       %
+   XC_Functional       v_xc                0.85639        254       0.0034    0.87      %
+   PW_Basis            real2recip          0.47557        2216      0.00021   0.48      %
+   PW_Basis            gatherp_scatters    0.37218        2216      0.00017   0.38      %
+   ESolver_KS_PW       Run                 91.5           46        2         93        %
+   Symmetry            rho_symmetry        1.135          254       0.0045    1.2       %
+   HSolverPW           solve               89.084         208       0.43      91        %
+   pp_cell_vnl         getvnl              0.34237        3000      0.00011   0.35      %
+   WF_igk              get_sk              0.11844        19400     6.1e-06   0.12      %
+   DiagoIterAssist     diagH_subspace      19.139         2050      0.0093    19        %
+   OperatorPW          hPsi                73.677         193479    0.00038   75        %
+   Operator            EkineticPW          0.1362         193479    7e-07     0.14      %
+   Operator            VeffPW              65.545         193479    0.00034   67        %
+   PW_Basis_K          recip2real          36.504         303413    0.00012   37        %
+   PW_Basis_K          gathers_scatterp    30.268         303413    0.0001    31        %
+   PW_Basis_K          real2recip          32.443         257029    0.00013   33        %
+   PW_Basis_K          gatherp_scatters    27.151         257029    0.00011   28        %
+   Operator            NonlocalPW          7.6992         193479    4e-05     7.8       %
+   Nonlocal            add_nonlocal_pp     1.8573         193479    9.6e-06   1.9       %
+   DiagoIterAssist     diagH_LAPACK        0.94297        2050      0.00046   0.96      %
+   DiagoCG             diag_once           62.453         2080      0.03      64        %
+   ElecStatePW         psiToRho            7.03           208       0.034     7.2       %
+   Charge              rho_mpi             0.79037        208       0.0038    0.8       %
+   Forces              cal_force_nl        0.19296        46        0.0042    0.2       %
+   Stress_PW           cal_stress          1.4856         46        0.032     1.5       %
+   Stress_Func         stress_loc          0.16627        46        0.0036    0.17      %
+   Stress_Func         stres_nl            1.0657         46        0.023     1.1       %
+ ----------------------------------------------------------------------------------------
+
+ START  Time  : Wed May 10 15:23:34 2023
+ FINISH Time  : Wed May 10 15:25:12 2023
+ TOTAL  Time  : 98
+ SEE INFORMATION IN : OUT.ABACUS/

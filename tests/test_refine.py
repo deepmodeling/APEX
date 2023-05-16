@@ -57,6 +57,8 @@ class TestMakeProperty(unittest.TestCase):
             shutil.rmtree("confs/std-fcc/eos_02")
         if os.path.exists("confs/std-fcc/relaxation"):
             shutil.rmtree("confs/std-fcc/relaxation")
+        if os.path.isfile("info.log"):
+            os.remove("info.log")
 
     def test_make_eos(self):
 

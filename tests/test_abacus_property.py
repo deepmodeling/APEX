@@ -7,8 +7,8 @@ import unittest
 import numpy as np
 from monty.serialization import loadfn
 
-from dpgen.auto_test.ABACUS import ABACUS
-from dpgen.generator.lib import abacus_scf
+from apex.calculator.ABACUS import ABACUS
+from apex.calculator.lib import abacus_scf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"

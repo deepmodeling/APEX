@@ -1,0 +1,8 @@
+{
+    "type": "vasp",
+    "incar": "vasp_input/INCAR",
+    "potcar_prefix": "vasp_input",
+    "potcars": {
+        "Mo": "POTCAR.Mo"
+    }
+}

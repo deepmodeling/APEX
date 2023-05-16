@@ -2,8 +2,8 @@
     "structures": ["confs/fcc-Al"],
         "interaction": {
             "type": "abacus",
-            "incar": "abacus_input/INPUT",
-            "potcar_prefix": "abacus_input",
+            "incar": "./INPUT",
+            "potcar_prefix": "./",
             "potcars": {"Al": "Al_ONCV_PBE-1.0.upf"},
             "orb_files": {"Al":"Al_gga_9au_100Ry_4s4p1d.orb"}
             },
@@ -20,7 +20,7 @@
          "skip":         false,
          "vol_start":    0.6,
          "vol_end":      1.4,
-         "vol_step":     0.05
+         "vol_step":     0.4
         },
         {
          "type":         "elastic",
@@ -30,7 +30,7 @@
         },
 	{
          "type":           "surface",
-         "skip":         false,
+         "skip":         true,
          "min_slab_size":  10,
          "min_vacuum_size":11,
          "max_miller":     2,

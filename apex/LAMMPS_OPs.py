@@ -109,7 +109,12 @@ class RunLAMMPS(OP):
         cwd = os.getcwd()
         os.chdir(op_in["input_lammps"])
         cmd = op_in["run_command"]
-        subprocess.call(cmd, shell=True)
+        exit_code = subprocess.call(cmd, shell=True)
+        if exit_code == 0:
+            print("Call Lammps command successfully!")
+        else:
+            print("Call Lammps command failed with exit code:", exit_code)
+
         os.chdir(cwd)
         op_out = OPIO({
             "output_lammps": op_in["input_lammps"]
