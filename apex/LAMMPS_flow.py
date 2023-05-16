@@ -91,6 +91,7 @@ class LAMMPSFlow(TestFlow):
             template=PythonOPTemplate(RelaxMakeLAMMPS, image=self.dpgen_image_name, command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
+            key="LAMMPS-relaxmake"
         )
         self.relaxmake = relaxmake
 
@@ -105,7 +106,7 @@ class LAMMPSFlow(TestFlow):
             artifacts={"input_lammps": relaxmake.outputs.artifacts["task_paths"]},
             parameters={"run_command": self.lammps_run_command},
             with_param=argo_range(relaxmake.outputs.parameters["njobs"]),
-            key="LAMMPS-Cal-{{item}}",
+            key="LAMMPS-relaxcal-{{item}}",
             executor=self.dispatcher_executor
         )
         self.relaxcal = relaxcal
@@ -116,7 +117,8 @@ class LAMMPSFlow(TestFlow):
             artifacts={"input_post": relaxcal.outputs.artifacts["output_lammps"],
                        "input_all": relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
-            parameters={"path": cwd}
+            parameters={"path": cwd},
+            key="LAMMPS-relaxpost"
         )
         self.relaxpost = relaxpost
 
@@ -126,6 +128,7 @@ class LAMMPSFlow(TestFlow):
                 template=PythonOPTemplate(PropsMakeLAMMPS, image=self.dpgen_image_name, command=["python3"]),
                 artifacts={"input": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
+                key="LAMMPS-propsmake"
             )
         else:
             propsmake = Step(
@@ -133,6 +136,7 @@ class LAMMPSFlow(TestFlow):
                 template=PythonOPTemplate(PropsMakeLAMMPS, image=self.dpgen_image_name, command=["python3"]),
                 artifacts={"input": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
+                key="LAMMPS-propsmake"
             )
         self.propsmake = propsmake
 
@@ -146,7 +150,7 @@ class LAMMPSFlow(TestFlow):
             artifacts={"input_lammps": propsmake.outputs.artifacts["task_paths"]},
             parameters={"run_command": self.lammps_run_command},
             with_param=argo_range(propsmake.outputs.parameters["njobs"]),
-            key="LAMMPS-Cal-{{item}}",
+            key="LAMMPS-propscal-{{item}}",
             executor=self.dispatcher_executor
         )
         self.propscal = propscal
@@ -157,6 +161,7 @@ class LAMMPSFlow(TestFlow):
             artifacts={"input_post": propscal.outputs.artifacts["output_lammps"],
                        "input_all": propsmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.props_param)},
-            parameters={"path": cwd}
+            parameters={"path": cwd},
+            key="LAMMPS-propspost"
         )
         self.propspost = propspost
