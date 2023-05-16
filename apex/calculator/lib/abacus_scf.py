@@ -5,6 +5,7 @@ from dpdata.abacus.scf import get_cell, get_coords, get_nele_from_stru
 
 from apex.calculator.lib import vasp
 from dflow.python import upload_packages
+from dargs.dargs import Argument
 upload_packages.append(__file__)
 
 bohr2ang = 0.52917721067
@@ -30,23 +31,27 @@ def make_abacus_scf_input(fp_params):
     # Make INPUT file for abacus pw scf calculation.
     ret = "INPUT_PARAMETERS\n"
     ret += "calculation scf\n"
+    exam_float = Argument("base", float)
+    exam_int = Argument("base", int)
     for key in fp_params:
         if key == "ecutwfc":
-            fp_params["ecutwfc"] = float(fp_params["ecutwfc"])
+            exam_float.check({"ecutwfc": fp_params["ecutwfc"]})
+            #fp_params["ecutwfc"] = float(fp_params["ecutwfc"])
             assert fp_params["ecutwfc"] >= 0, "'ecutwfc' should be non-negative."
             ret += "ecutwfc %f\n" % fp_params["ecutwfc"]
         elif key == "kspacing":
-            fp_params["kspacing"] = float(fp_params["kspacing"])
+            exam_float.check({"kspacing": fp_params["kspacing"]})
+            #fp_params["kspacing"] = float(fp_params["kspacing"])
             assert fp_params["kspacing"] >= 0, "'kspacing' should be non-negative."
             ret += "kspacing %f\n" % fp_params["kspacing"]
         elif key == "scf_thr":
-            fp_params["scf_thr"] = float(fp_params["scf_thr"])
+            exam_float.check({"scf_thr": fp_params["scf_thr"]})
+            #fp_params["scf_thr"] = float(fp_params["scf_thr"])
             ret += "scf_thr %e\n" % fp_params["scf_thr"]
         elif key == "scf_nmax":
-            fp_params["scf_nmax"] = int(fp_params["scf_nmax"])
-            assert (
-                fp_params["scf_nmax"] >= 0 and type(fp_params["scf_nmax"]) == int
-            ), "'scf_nmax' should be a positive integer."
+            exam_int.check({"scf_nmax": fp_params["scf_nmax"]})
+            #fp_params["scf_nmax"] = int(fp_params["scf_nmax"])
+            assert fp_params["scf_nmax"] >= 0, "'scf_nmax' should be a positive integer."
             ret += "scf_nmax %d\n" % fp_params["scf_nmax"]
         elif key == "basis_type":
             assert fp_params["basis_type"] in [
@@ -74,7 +79,8 @@ def make_abacus_scf_input(fp_params):
             ]
             ret += "mixing_type %s\n" % fp_params["mixing_type"]
         elif key == "mixing_beta":
-            fp_params["mixing_beta"] = float(fp_params["mixing_beta"])
+            exam_float.check({"mixing_beta": fp_params["mixing_beta"]})
+            #fp_params["mixing_beta"] = float(fp_params["mixing_beta"])
             assert (
                 fp_params["mixing_beta"] >= 0 and fp_params["mixing_beta"] < 1
             ), "'mixing_beta' should between 0 and 1."
@@ -87,13 +93,15 @@ def make_abacus_scf_input(fp_params):
             ), "'symmetry' should be either 0 or 1."
             ret += "symmetry %d\n" % fp_params["symmetry"]
         elif key == "nbands":
-            fp_params["nbands"] = int(fp_params["nbands"])
+            exam_int.check({"nbands": fp_params["nbands"]})
+            #fp_params["nbands"] = int(fp_params["nbands"])
             assert (
                 fp_params["nbands"] > 0 and type(fp_params["nbands"]) == int
             ), "'nbands' should be a positive integer."
             ret += "nbands %d\n" % fp_params["nbands"]
         elif key == "nspin":
-            fp_params["nspin"] = int(fp_params["nspin"])
+            exam_int.check({"nspin": fp_params["nspin"]})
+            #fp_params["nspin"] = int(fp_params["nspin"])
             assert (
                 fp_params["nspin"] == 1
                 or fp_params["nspin"] == 2
@@ -122,7 +130,8 @@ def make_abacus_scf_input(fp_params):
             ], "'smearing_method' should in 'gauss', 'gaussian', 'fd', 'fixed', 'mp', 'mp2', 'mv'. "
             ret += "smearing_method %s\n" % fp_params["smearing_method"]
         elif key == "smearing_sigma":
-            fp_params["smearing_sigma"] = float(fp_params["smearing_sigma"])
+            exam_float.check({"smearing_sigma": fp_params["smearing_sigma"]})
+            #fp_params["smearing_sigma"] = float(fp_params["smearing_sigma"])
             assert (
                 fp_params["smearing_sigma"] >= 0
             ), "'smearing_sigma' should be non-negative."
@@ -153,9 +162,10 @@ def make_abacus_scf_input(fp_params):
             ), "'deepks_out_labels' should be either 0 or 1."
             ret += "deepks_out_labels %d\n" % fp_params["deepks_out_labels"]
         elif key == "deepks_descriptor_lmax":
-            fp_params["deepks_descriptor_lmax"] = int(
-                fp_params["deepks_descriptor_lmax"]
-            )
+            exam_int.check({"deepks_descriptor_lmax": fp_params["deepks_descriptor_lmax"]})
+            #fp_params["deepks_descriptor_lmax"] = int(
+            #    fp_params["deepks_descriptor_lmax"]
+            #)
             assert (
                 fp_params["deepks_descriptor_lmax"] >= 0
             ), "'deepks_descriptor_lmax' should be  a positive integer."
