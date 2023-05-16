@@ -1,4 +1,5 @@
 import os
+import logging
 
 from dpdata import LabeledSystem
 from monty.serialization import dumpfn
@@ -111,11 +112,8 @@ class VASP(Task):
                 elif [relax_pos, relax_shape, relax_vol] == [False, False, False]:
                     nsw = 0
                     isif = 2
-                    """
-                    following dlog.info are replaced by print
-                    """
                     if not ("NSW" in incar and incar.get("NSW") == nsw):
-                        print(
+                        logging.info(
                             "%s setting NSW to %d"
                             % (self.make_input_file.__name__, nsw)
                         )
@@ -124,7 +122,7 @@ class VASP(Task):
                     raise RuntimeError("not supported calculation setting for VASP")
 
                 if not ("ISIF" in incar and incar.get("ISIF") == isif):
-                    print(
+                    logging.info(
                         "%s setting ISIF to %d" % (self.make_input_file.__name__, isif)
                     )
                     incar["ISIF"] = isif
@@ -132,7 +130,7 @@ class VASP(Task):
             elif cal_type == "static":
                 nsw = 0
                 if not ("NSW" in incar and incar.get("NSW") == nsw):
-                    print(
+                    logging.info(
                         "%s setting NSW to %d" % (self.make_input_file.__name__, nsw)
                     )
                     incar["NSW"] = nsw
@@ -141,35 +139,35 @@ class VASP(Task):
                 raise RuntimeError("not supported calculation type for VASP")
 
             if "ediff" in cal_setting:
-                print(
+                logging.info(
                     "%s setting EDIFF to %s"
                     % (self.make_input_file.__name__, cal_setting["ediff"])
                 )
                 incar["EDIFF"] = cal_setting["ediff"]
 
             if "ediffg" in cal_setting:
-                print(
+                logging.info(
                     "%s setting EDIFFG to %s"
                     % (self.make_input_file.__name__, cal_setting["ediffg"])
                 )
                 incar["EDIFFG"] = cal_setting["ediffg"]
 
             if "encut" in cal_setting:
-                print(
+                logging.info(
                     "%s setting ENCUT to %s"
                     % (self.make_input_file.__name__, cal_setting["encut"])
                 )
                 incar["ENCUT"] = cal_setting["encut"]
 
             if "kspacing" in cal_setting:
-                print(
+                logging.info(
                     "%s setting KSPACING to %s"
                     % (self.make_input_file.__name__, cal_setting["kspacing"])
                 )
                 incar["KSPACING"] = cal_setting["kspacing"]
 
             if "kgamma" in cal_setting:
-                print(
+                logging.info(
                     "%s setting KGAMMA to %s"
                     % (self.make_input_file.__name__, cal_setting["kgamma"])
                 )
@@ -201,8 +199,7 @@ class VASP(Task):
     def compute(self, output_dir):
         outcar = os.path.join(output_dir, "OUTCAR")
         if not os.path.isfile(outcar):
-            #dlog.warning("cannot find OUTCAR in " + output_dir + " skip")
-            print("cannot find OUTCAR in " + output_dir + " skip")
+            logging.warning("cannot find OUTCAR in " + output_dir + " skip")
             return None
         else:
             ls = LabeledSystem(outcar)
