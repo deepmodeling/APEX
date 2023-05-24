@@ -3,7 +3,7 @@
     "password": "",
     "program_id": 1234,
     "dpgen_image_name":"registry.dp.tech/dptech/dpgen:0.11.0",
-    "dpmd_image_name": "deepmodeling/deepmd-kit:2.1.1_cuda11.6_gpu",
+    "dpmd_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
     "lammps_run_command":"lmp -in in.lammps",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
