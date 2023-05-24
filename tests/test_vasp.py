@@ -136,7 +136,7 @@ class TestVASP(unittest.TestCase):
         self.assertEqual(incar["ISIF"], 6)
         self.assertEqual(incar["KSPACING"], 0.01)
 
-    def test_compuate(self):
+    def test_compute(self):
         ret = self.VASP.compute(os.path.join(self.conf_path, "relaxation"))
         self.assertIsNone(ret)
         shutil.copy(

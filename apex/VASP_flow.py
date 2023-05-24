@@ -11,6 +11,7 @@ from dflow.python import (
 import os
 from monty.serialization import loadfn
 from dflow.python import upload_packages
+from dflow.plugins.dispatcher import DispatcherExecutor, update_dict
 from apex.fp_OPs import (
     RelaxMakeFp,
     RelaxPostFp,
@@ -20,9 +21,6 @@ from apex.fp_OPs import (
 import fpop
 from apex.TestFlow import TestFlow
 from fpop.vasp import RunVasp
-from fpop.utils.step_config import (
-    init_executor
-)
 
 upload_packages.append(__file__)
 upload_python_packages=list(fpop.__path__)
@@ -50,12 +48,23 @@ class VASPFlow(TestFlow):
         self.vasp_run_command = global_param.get("vasp_run_command", None)
         self.upload_python_packages = upload_python_packages
         #self.upload_python_packages = global_param.get("upload_python_packages", None)
+        self.host = global_param.get("host", None)
+        self.port = global_param.get("port", 22)
+        self.username = global_param.get("username", "root")
+        self.queue_name = global_param.get("queue_name", None)
+        self.private_key_file = global_param.get("private_key_file", None)
+        self.dispatcher_image = global_param.get("dispatcher_image", None)
+        self.dispatcher_image_pull_policy = global_param.get("dispatcher_image_pull_policy", "IfNotPresent")
+        self.remote_root = global_param.get("remote_root", None)
+        self.machine = global_param.get("machine", None)
+        self.resources = global_param.get("resources", None)
+        self.task = global_param.get("task", None)
 
-        self.run_step_config_relax = {
-            "executor": {
-                "type": "dispatcher",
-                "image_pull_policy": "IfNotPresent",
-                "machine_dict": {
+        if self.context_type is None:
+            self.executor = None
+        else:
+            if self.context_type == "Bohrium":
+                machine_dict = {
                     "batch_type": self.batch_type,
                     "context_type": self.context_type,
                     "remote_profile": {
@@ -66,32 +75,21 @@ class VASPFlow(TestFlow):
                             "job_type": "container",
                             "platform": "ali",
                             "scass_type": self.cpu_scass_type,
-                        }
-                    }
+                        },
+                    },
                 }
-            }
-        }
+                if self.machine is not None:
+                    update_dict(machine_dict, self.machine)
+                self.machine = machine_dict
 
-        self.run_step_config_props = {
-            "executor": {
-                "type": "dispatcher",
-                "image_pull_policy": "IfNotPresent",
-                "machine_dict": {
-                    "batch_type": self.batch_type,
-                    "context_type": self.context_type,
-                    "remote_profile": {
-                        "email": self.email,
-                        "password": self.password,
-                        "program_id": self.program_id,
-                        "input_data": {
-                            "job_type": "container",
-                            "platform": "ali",
-                            "scass_type": self.cpu_scass_type,
-                        }
-                    }
-                }
-            }
-        }
+            self.executor = DispatcherExecutor(
+                host=self.host, port=self.port, username=self.username,
+                password=self.password, queue_name=self.queue_name,
+                private_key_file=self.private_key_file,
+                remote_root=self.remote_root, image=self.dispatcher_image,
+                image_pull_policy=self.dispatcher_image_pull_policy,
+                machine_dict=self.machine, resources_dict=self.resources,
+                task_dict=self.task)
 
     def init_steps(self):
         cwd = os.getcwd()
@@ -129,8 +127,7 @@ class VASPFlow(TestFlow):
             },
             with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
             key="VASP-relaxcal-{{item}}",
-            executor=init_executor(self.run_step_config_relax.pop("executor")),
-            **self.run_step_config_relax
+            executor=self.executor,
         )
         self.relaxcal = relaxcal
 
@@ -184,8 +181,7 @@ class VASPFlow(TestFlow):
             },
             with_param=argo_range(argo_len(propsmake.outputs.parameters["task_names"])),
             key="VASP-propscal-{{item}}",
-            executor=init_executor(self.run_step_config_props.pop("executor")),
-            **self.run_step_config_props
+            executor=self.executor,
         )
         self.propscal = propscal
 
