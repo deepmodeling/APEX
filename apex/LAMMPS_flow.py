@@ -9,7 +9,7 @@ from dflow.python import (
 )
 import os
 from monty.serialization import loadfn
-from dflow.plugins.dispatcher import DispatcherExecutor
+from dflow.plugins.dispatcher import DispatcherExecutor, update_dict
 from dflow.python import upload_packages
 from apex.LAMMPS_OPs import (
     RelaxMakeLAMMPS,
@@ -43,44 +43,48 @@ class LAMMPSFlow(TestFlow):
         self.context_type = global_param.get("context_type", None)
         self.lammps_run_command = global_param.get("lammps_run_command", None)
         self.upload_python_packages = global_param.get("upload_python_packages", None)
+        self.host = global_param.get("host", None)
+        self.port = global_param.get("port", 22)
+        self.username = global_param.get("username", "root")
+        self.queue_name = global_param.get("queue_name", None)
+        self.private_key_file = global_param.get("private_key_file", None)
+        self.dispatcher_image = global_param.get("dispatcher_image", None)
+        self.dispatcher_image_pull_policy = global_param.get("dispatcher_image_pull_policy", "IfNotPresent")
+        self.remote_root = global_param.get("remote_root", None)
+        self.machine = global_param.get("machine", None)
+        self.resources = global_param.get("resources", None)
+        self.task = global_param.get("task", None)
 
-        # define dispatcher_executors
-        dispatcher_executor_cpu = DispatcherExecutor(
-            machine_dict={
-                "batch_type": self.batch_type,
-                "context_type": self.context_type,
-                "remote_profile": {
-                    "email": self.email,
-                    "password": self.password,
-                    "program_id": self.program_id,
-                    "input_data": {
-                        "job_type": "container",
-                        "platform": "ali",
-                        "scass_type": self.cpu_scass_type,
+        if self.context_type is None:
+            self.executor = None
+        else:
+            if self.context_type == "Bohrium":
+                machine_dict = {
+                    "batch_type": self.batch_type,
+                    "context_type": self.context_type,
+                    "remote_profile": {
+                        "email": self.email,
+                        "password": self.password,
+                        "program_id": self.program_id,
+                        "input_data": {
+                            "job_type": "container",
+                            "platform": "ali",
+                            "scass_type": self.gpu_scass_type,
+                        },
                     },
-                },
-            },
-            image_pull_policy="IfNotPresent"
-        )
+                }
+                if self.machine is not None:
+                    update_dict(machine_dict, self.machine)
+                self.machine = machine_dict
 
-        dispatcher_executor_gpu = DispatcherExecutor(
-            machine_dict={
-                "batch_type": self.batch_type,
-                "context_type": self.context_type,
-                "remote_profile": {
-                    "email": self.email,
-                    "password": self.password,
-                    "program_id": self.program_id,
-                    "input_data": {
-                        "job_type": "container",
-                        "platform": "ali",
-                        "scass_type": self.gpu_scass_type,
-                    },
-                },
-            },
-            image_pull_policy="IfNotPresent"
-        )
-        self.dispatcher_executor = dispatcher_executor_gpu
+            self.executor = DispatcherExecutor(
+                host=self.host, port=self.port, username=self.username,
+                password=self.password, queue_name=self.queue_name,
+                private_key_file=self.private_key_file,
+                remote_root=self.remote_root, image=self.dispatcher_image,
+                image_pull_policy=self.dispatcher_image_pull_policy,
+                machine_dict=self.machine, resources_dict=self.resources,
+                task_dict=self.task)
 
     def init_steps(self):
         cwd = os.getcwd()
@@ -107,7 +111,7 @@ class LAMMPSFlow(TestFlow):
             parameters={"run_command": self.lammps_run_command},
             with_param=argo_range(relaxmake.outputs.parameters["njobs"]),
             key="LAMMPS-relaxcal-{{item}}",
-            executor=self.dispatcher_executor
+            executor=self.executor,
         )
         self.relaxcal = relaxcal
 
@@ -151,7 +155,7 @@ class LAMMPSFlow(TestFlow):
             parameters={"run_command": self.lammps_run_command},
             with_param=argo_range(propsmake.outputs.parameters["njobs"]),
             key="LAMMPS-propscal-{{item}}",
-            executor=self.dispatcher_executor
+            executor=self.executor,
         )
         self.propscal = propscal
 
