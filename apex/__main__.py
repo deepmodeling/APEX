@@ -58,8 +58,6 @@ def main():
     elif task_type == 'lammps':
         print('Simulation via LAMMPS')
         tf = LAMMPSFlow(flow_info)
-    else:
-        raise RuntimeError('Must indicate how to preform the calculation by indicating --lammps; --vasp; --abacus')
     tf.init_steps()
     tf.generate_flow()
 
