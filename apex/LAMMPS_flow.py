@@ -46,6 +46,7 @@ class LAMMPSFlow(TestFlow):
         self.host = global_param.get("host", None)
         self.port = global_param.get("port", 22)
         self.username = global_param.get("username", "root")
+        self.host_password = global_param.get("host_password", None)
         self.queue_name = global_param.get("queue_name", None)
         self.private_key_file = global_param.get("private_key_file", None)
         self.dispatcher_image = global_param.get("dispatcher_image", None)
@@ -79,7 +80,7 @@ class LAMMPSFlow(TestFlow):
 
             self.executor = DispatcherExecutor(
                 host=self.host, port=self.port, username=self.username,
-                password=self.password, queue_name=self.queue_name,
+                password=self.host_password, queue_name=self.queue_name,
                 private_key_file=self.private_key_file,
                 remote_root=self.remote_root, image=self.dispatcher_image,
                 image_pull_policy=self.dispatcher_image_pull_policy,

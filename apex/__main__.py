@@ -5,16 +5,20 @@ from dflow.plugins import bohrium
 from dflow.plugins.bohrium import TiefblueClient
 from monty.serialization import loadfn
 
-config["host"] = "https://workflows.deepmodeling.com"
-config["k8s_api_server"] = "https://workflows.deepmodeling.com"
+dflow_host = loadfn("global.json").get("dflow_host", "https://workflows.deepmodeling.com")
+config["host"] = dflow_host
+k8s_api_server = loadfn("global.json").get("k8s_api_server", "https://workflows.deepmodeling.com")
+config["k8s_api_server"] = k8s_api_server
 username = loadfn("global.json").get("email", None)
 bohrium.config["username"] = username
 password = loadfn("global.json").get("password", None)
 bohrium.config["password"] = password
 program_id = loadfn("global.json").get("program_id", None)
 bohrium.config["program_id"] = program_id
-s3_config["repo_key"] = "oss-bohrium"
-s3_config["storage_client"] = TiefblueClient()
+s3_repo_key = loadfn("global.json").get("s3_repo_key", "oss-bohrium")
+s3_config["repo_key"] = s3_repo_key
+s3_storage_client = loadfn("global.json").get("s3_storage_client", TiefblueClient())
+s3_config["storage_client"] = s3_storage_client
 
 import argparse
 from apex.VASP_flow import VASPFlow
