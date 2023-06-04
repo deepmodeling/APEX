@@ -39,7 +39,7 @@ class VASPFlow(TestFlow):
         self.email = global_param.get("email", None)
         self.password = global_param.get("password", None)
         self.program_id = global_param.get("program_id", None)
-        self.dpgen_image_name = global_param.get("dpgen_image_name", None)
+        self.apex_image_name = global_param.get("apex_image_name", None)
         self.vasp_image_name = global_param.get("vasp_image_name", None)
         self.cpu_scass_type = global_param.get("cpu_scass_type", None)
         self.gpu_scass_type = global_param.get("gpu_scass_type", None)
@@ -98,7 +98,7 @@ class VASPFlow(TestFlow):
 
         relaxmake = Step(
             name="Relaxmake",
-            template=PythonOPTemplate(RelaxMakeFp, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(RelaxMakeFp, image=self.apex_image_name, command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
             key="VASP-relaxmake"
@@ -134,7 +134,7 @@ class VASPFlow(TestFlow):
 
         relaxpost = Step(
             name="Relaxpost",
-            template=PythonOPTemplate(RelaxPostFp, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(RelaxPostFp, image=self.apex_image_name, command=["python3"]),
             artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"], "input_all": self.relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
             parameters={"path": work_dir},
@@ -145,7 +145,7 @@ class VASPFlow(TestFlow):
         if self.flow_type == 'joint':
             propsmake = Step(
                 name="Propsmake",
-                template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
+                template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
                 artifacts={"input": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
                 key="VASP-propsmake"
@@ -153,7 +153,7 @@ class VASPFlow(TestFlow):
         else:
             propsmake = Step(
                 name="Propsmake",
-                template=PythonOPTemplate(PropsMakeFp, image=self.dpgen_image_name, command=["python3"]),
+                template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
                 artifacts={"input": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
                 key="VASP-propsmake"
@@ -188,7 +188,7 @@ class VASPFlow(TestFlow):
 
         propspost = Step(
             name="Propspost",
-            template=PythonOPTemplate(PropsPostFp, image=self.dpgen_image_name, command=["python3"]),
+            template=PythonOPTemplate(PropsPostFp, image=self.apex_image_name, command=["python3"]),
             artifacts={"input_post": propscal.outputs.artifacts["backward_dir"], "input_all": self.propsmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.props_param)},
             parameters={"path": work_dir, "task_names": propsmake.outputs.parameters["task_names"]},
