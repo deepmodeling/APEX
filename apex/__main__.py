@@ -18,7 +18,10 @@ bohrium.config["program_id"] = program_id
 s3_repo_key = loadfn("global.json").get("s3_repo_key", None)
 s3_config["repo_key"] = s3_repo_key
 s3_storage_client = loadfn("global.json").get("s3_storage_client", None)
-s3_config["storage_client"] = s3_storage_client
+if s3_storage_client == "TiefblueClient":
+    s3_config["storage_client"] = TiefblueClient()
+else:
+    s3_config["storage_client"] = s3_storage_client
 
 import argparse
 from apex.VASP_flow import VASPFlow
