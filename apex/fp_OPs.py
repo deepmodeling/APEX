@@ -7,18 +7,18 @@ from dflow.python import (
 )
 
 import os, glob, pathlib, shutil
-from pathlib import Path
-from typing import List
-from monty.serialization import loadfn
-from apex.lib.utils import return_prop_list
 
 try:
+    from pathlib import Path
+    from typing import List
+    from monty.serialization import loadfn
+    from apex.lib.utils import return_prop_list
     from apex.property.common_equi import (make_equi, post_equi)
     from apex.property.common_prop import (make_property, post_property)
+    upload_packages.append(__file__)
 except:
     pass
 
-upload_packages.append(__file__)
 
 
 class RelaxMakeFp(OP):
