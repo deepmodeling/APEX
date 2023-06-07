@@ -1,0 +1,8 @@
+{
+    "cal_type": "relaxation",
+    "cal_setting": {
+        "relax_pos": true,
+        "relax_shape": true,
+        "relax_vol": true
+    }
+}

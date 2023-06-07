@@ -1,0 +1,14 @@
+{
+    "structures":            ["confs/std-*"],
+    "interaction": {
+            "type":           "deepmd",
+            "model":          "frozen_model.pb",
+            "type_map":       {"Mo": 0}
+	},
+    "relaxation": {
+            "cal_setting":   {"etol":       0,
+                              "ftol":     1e-10,
+                              "maxiter":   5000,
+                              "maximal":  500000}
+	}
+}

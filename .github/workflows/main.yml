@@ -1,0 +1,32 @@
+name: Python unit-tests
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+
+    steps:
+    - uses: actions/checkout@master
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@master
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -e .[test]
+        pip install mock coverage pytest
+    - name: Test
+      run: |
+        cd tests 
+        export SKIP_UT_WITH_DFLOW=0
+        export DFLOW_DEBUG=1
+        coverage run -m unittest -v -f 
+        coverage report
+    - uses: codecov/codecov-action@v3
