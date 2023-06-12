@@ -140,7 +140,7 @@ class RelaxPostLAMMPS(OP):
     def get_output_sign(cls):
         return OPIOSign({
             'output_all': Artifact(Path, sub_path=False),
-            'output_post': Artifact(Path, sub_path=False)
+            'output_post': Artifact(List[Path], sub_path=False)
         })
 
     @OP.exec_sign_check
@@ -152,10 +152,12 @@ class RelaxPostLAMMPS(OP):
         shutil.copytree(str(op_in['input_post']) + op_in['path'], './', dirs_exist_ok=True)
 
         param_argv = op_in['param']
-        post_equi(loadfn(param_argv)["structures"], loadfn(param_argv)["interaction"])
+        conf_list = loadfn(param_argv)["structures"]
+        copy_dir_list = [conf.split('/')[0] for conf in conf_list]
+        post_equi(conf_list, loadfn(param_argv)["interaction"])
 
         conf_dirs = []
-        for conf in loadfn(param_argv)["structures"]:
+        for conf in conf_list:
             conf_dirs.extend(glob.glob(conf))
         conf_dirs.sort()
 
@@ -166,11 +168,14 @@ class RelaxPostLAMMPS(OP):
             os.chdir("../../../../")
 
         os.chdir(cwd)
-        shutil.copytree(str(op_in['input_all']) + op_in['path'] + '/confs', './confs', dirs_exist_ok = True)
+        for ii in copy_dir_list:
+            shutil.copytree(str(op_in['input_all']) + op_in['path'] + f'/{ii}', f'./{ii}', dirs_exist_ok = True)
+
+        post_path = [Path(ii) for ii in copy_dir_list]
 
         op_out = OPIO({
             'output_all': Path(str(op_in["input_all"])+op_in['path']),
-            'output_post': Path('./confs')
+            'output_post': post_path
         })
         return op_out
 
@@ -265,7 +270,7 @@ class PropsPostLAMMPS(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_post': Artifact(Path, sub_path=False)
+            'output_post': Artifact(List[Path], sub_path=False)
         })
 
     @OP.exec_sign_check
@@ -277,10 +282,12 @@ class PropsPostLAMMPS(OP):
         shutil.copytree(str(op_in['input_post']) + op_in['path'], './', dirs_exist_ok=True)
 
         param_argv = op_in["param"]
-        post_property(loadfn(param_argv)["structures"], loadfn(param_argv)["interaction"], loadfn(param_argv)["properties"])
+        conf_list = loadfn(param_argv)["structures"]
+        copy_dir_list = [conf.split('/')[0] for conf in conf_list]
+        post_property(conf_list, loadfn(param_argv)["interaction"], loadfn(param_argv)["properties"])
 
         conf_dirs = []
-        for conf in loadfn(param_argv)["structures"]:
+        for conf in conf_list:
             conf_dirs.extend(glob.glob(conf))
         conf_dirs.sort()
 
@@ -293,10 +300,13 @@ class PropsPostLAMMPS(OP):
                 os.chdir('../../../')
 
         os.chdir(cwd)
-        shutil.copytree(str(op_in['input_all']) + op_in['path'] + '/confs', './confs', dirs_exist_ok=True)
+        for ii in copy_dir_list:
+            shutil.copytree(str(op_in['input_all']) + op_in['path'] + f'/{ii}', f'./{ii}', dirs_exist_ok = True)
+
+        post_path = [Path(ii) for ii in copy_dir_list]
 
         op_out = OPIO({
-            'output_post': Path('./confs')
+            'output_post': post_path
         })
         return op_out
 
