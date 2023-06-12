@@ -366,6 +366,10 @@ class Gamma(Property):
             contents.insert(insert_pos - 1, "Selective dynamics\n")
             for ii in range(insert_pos, 0, 1):
                 contents[ii] = contents[ii].replace("\n", "")
+                content_split = contents[ii].split(' ')
+                if len(content_split[-1]) < 3:
+                    content_split.pop()
+                contents[ii] = ' '.join(content_split)
                 contents[ii] += add_fix_str
         with open(poscar, "w") as fin2:
             for ii in range(len(contents)):
