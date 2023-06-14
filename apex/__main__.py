@@ -28,33 +28,45 @@ from apex.VASP_flow import VASPFlow
 from apex.LAMMPS_flow import LAMMPSFlow
 from apex.ABACUS_flow import ABACUSFlow
 from apex.lib.utils import judge_flow
+from apex.lib.utils import check_args_ss
+from apex.property.common_equi import (make_equi, post_equi)
+from apex.property.common_prop import (make_property, post_property)
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('files', type=str, nargs='+',
                         help='Input indicating json files')
-    parser.add_argument("--relax", help="Submit relaxation workflow",
+    parser.add_argument('-r', "--relax", help="Submit relaxation workflow",
                         action="store_true")
-    parser.add_argument("--props", help="Submit property test workflow",
+    parser.add_argument('-p', "--props", help="Submit property test workflow",
                         action="store_true")
-    parser.add_argument("--joint", help="Submit relaxation followed by property test joint workflow",
+    parser.add_argument('-j', "--joint", help="Submit relaxation followed by property test joint workflow",
+                        action="store_true")
+    parser.add_argument('-mr', "--make_relax", help="Run make relaxation step locally",
+                        action="store_true")
+    parser.add_argument('-pr', "--post_relax", help="Run post relaxation step locally",
+                        action="store_true")
+    parser.add_argument('-mp', "--make_props", help="Run make properties step locally",
+                        action="store_true")
+    parser.add_argument('-pp', "--post_props", help="Run post properties step locally",
                         action="store_true")
     args = parser.parse_args()
+
+    # check args
+    provided_args = sum([args.relax, args.props, args.joint,
+                         args.make_relax, args.post_relax,
+                         args.make_props, args.post_props])
+    if provided_args > 1:
+        parser.error("Only one optional argument is allowed.")
+
     return args
 
-
-def main():
+def run_flow(args):
     args = parse_args()
 
     task_type, flow_info = judge_flow(args)
     flow_type = flow_info['flow_type']
-    if flow_type == 'relax':
-        print('Submitting relaxation workflow...')
-    elif flow_type == 'props':
-        print('Submitting property test workflow...')
-    else:
-        print('Submitting relaxation & property test joint workflow...')
 
     if task_type == 'abacus':
         print('Simulation via ABACUS')
@@ -65,8 +77,49 @@ def main():
     elif task_type == 'lammps':
         print('Simulation via LAMMPS')
         tf = LAMMPSFlow(flow_info)
+
+    if flow_type == 'relax':
+        print('Submitting relaxation workflow...')
+    elif flow_type == 'props':
+        print('Submitting property test workflow...')
+    else:
+        print('Submitting relaxation & property test joint workflow...')
+
     tf.init_steps()
     tf.generate_flow()
+
+
+def run_step(args):
+    print('-------Singel step locally debug mode--------')
+    param_argv = args.files[0]
+    structures = loadfn(param_argv)["structures"]
+    inter_parameter = loadfn(param_argv)["interaction"]
+    if args.make_relax or args.post_relax:
+        parameter = loadfn(param_argv)["relaxation"]
+        if args.make_relax:
+            print('Making relaxation tasks locally...')
+            make_equi(structures, inter_parameter, parameter)
+        else:
+            print('Posting relaxation results locally...')
+            post_equi(structures, inter_parameter)
+    else:
+        parameter = loadfn(param_argv)["properties"]
+        if args.make_props:
+            print('Making properties tasks locally...')
+            make_property(structures, inter_parameter, parameter)
+        else:
+            print('Posting properties results locally...')
+            post_property(structures, inter_parameter, parameter)
+
+
+def main():
+    args = parse_args()
+    if (args.make_relax or args.post_relax
+        or args.make_props or args.post_props):
+        check_args_ss(args)
+        run_step(args)
+    else:
+        run_flow(args)
 
 if __name__ == '__main__':
     main()
