@@ -101,7 +101,7 @@ class ABACUSFlow(TestFlow):
             template=PythonOPTemplate(RelaxMakeFp, image=self.apex_image_name, command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
-            key="ABACUS-relaxmake"
+            key="abacus-relaxmake"
         )
         self.relaxmake = relaxmake
 
@@ -129,7 +129,7 @@ class ABACUSFlow(TestFlow):
                 "optional_artifact": upload_artifact({"pp_orb": "./"})
             },
             with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
-            key="ABACUS-relaxcal-{{item}}",
+            key="abacus-relaxcal-{{item}}",
             executor=self.executor,
         )
         self.relaxcal = relaxcal
@@ -140,7 +140,7 @@ class ABACUSFlow(TestFlow):
             artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"], "input_all": self.relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
             parameters={"path": work_dir},
-            key="ABACUS-relaxpost"
+            key="abacus-relaxpost"
         )
         self.relaxpost = relaxpost
 
@@ -150,7 +150,7 @@ class ABACUSFlow(TestFlow):
                 template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
                 artifacts={"input": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
-                key="ABACUS-propsmake"
+                key="abacus-propsmake"
             )
         else:
             propsmake = Step(
@@ -158,7 +158,7 @@ class ABACUSFlow(TestFlow):
                 template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
                 artifacts={"input": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
-                key="ABACUS-propsmake"
+                key="abacus-propsmake"
             )
         self.propsmake = propsmake
 
@@ -185,7 +185,7 @@ class ABACUSFlow(TestFlow):
                 "optional_artifact": upload_artifact({"pp_orb": "./"})
             },
             with_param=argo_range(argo_len(propsmake.outputs.parameters["task_names"])),
-            key="ABACUS-propscal-{{item}}",
+            key="abacus-propscal-{{item}}",
             executor=self.executor,
         )
         self.propscal = propscal
@@ -196,6 +196,6 @@ class ABACUSFlow(TestFlow):
             artifacts={"input_post": propscal.outputs.artifacts["backward_dir"], "input_all": self.propsmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.props_param)},
             parameters={"path": work_dir, "task_names": propsmake.outputs.parameters["task_names"]},
-            key="ABACUS-propspost"
+            key="abacus-propspost"
         )
         self.propspost = propspost
