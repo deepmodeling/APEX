@@ -101,7 +101,7 @@ class VASPFlow(TestFlow):
             template=PythonOPTemplate(RelaxMakeFp, image=self.apex_image_name, command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
-            key="VASP-relaxmake"
+            key="vasp-relaxmake"
         )
         self.relaxmake = relaxmake
 
@@ -127,7 +127,7 @@ class VASPFlow(TestFlow):
                 "task_path": relaxmake.outputs.artifacts["task_paths"]
             },
             with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
-            key="VASP-relaxcal-{{item}}",
+            key="vasp-relaxcal-{{item}}",
             executor=self.executor,
         )
         self.relaxcal = relaxcal
@@ -138,7 +138,7 @@ class VASPFlow(TestFlow):
             artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"], "input_all": self.relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
             parameters={"path": work_dir},
-            key="VASP-relaxpost"
+            key="vasp-relaxpost"
         )
         self.relaxpost = relaxpost
 
@@ -148,7 +148,7 @@ class VASPFlow(TestFlow):
                 template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
                 artifacts={"input": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
-                key="VASP-propsmake"
+                key="vasp-propsmake"
             )
         else:
             propsmake = Step(
@@ -156,7 +156,7 @@ class VASPFlow(TestFlow):
                 template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
                 artifacts={"input": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
-                key="VASP-propsmake"
+                key="vasp-propsmake"
             )
         self.propsmake = propsmake
 
@@ -181,7 +181,7 @@ class VASPFlow(TestFlow):
                 "task_path": propsmake.outputs.artifacts["task_paths"]
             },
             with_param=argo_range(argo_len(propsmake.outputs.parameters["task_names"])),
-            key="VASP-propscal-{{item}}",
+            key="vasp-propscal-{{item}}",
             executor=self.executor,
         )
         self.propscal = propscal
@@ -192,6 +192,6 @@ class VASPFlow(TestFlow):
             artifacts={"input_post": propscal.outputs.artifacts["backward_dir"], "input_all": self.propsmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.props_param)},
             parameters={"path": work_dir, "task_names": propsmake.outputs.parameters["task_names"]},
-            key="VASP-propspost"
+            key="vasp-propspost"
         )
         self.propspost = propspost
