@@ -9,6 +9,7 @@ debug_mode = loadfn("global.json").get("debug_mode", False)
 if debug_mode:
     config["mode"] = "debug"
     config["debug_copy_method"] = "copy"
+    s3_storage_client = None
 else:
     dflow_host = loadfn("global.json").get("dflow_host", "https://127.0.0.1:2746")
     config["host"] = dflow_host
