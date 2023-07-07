@@ -19,7 +19,7 @@ setuptools.setup(
         'pymatgen-analysis-defects',
         "lbg>=1.2.13",
         "dpdata>=0.2.13",
-        "dpdispatcher"
+        "dpdispatcher",
         "matplotlib",
         "seekpath",
         "fpop>=0.0.7",
