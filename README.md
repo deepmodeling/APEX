@@ -12,9 +12,9 @@
     - [3.1. Input files preperation](#31-input-files-preperation)
       - [3.1.1. Global setting](#311-global-setting)
       - [3.1.2. Calculation parameters](#312-calculation-parameters)
-    - [3.2. Workflow submittion](#32-workflow-submittion)
+    - [3.2. Submittion command](#32-submittion-command)
     - [3.3. Output result](#33-output-result)
-  - [4. User scenario examples](#4-user-scenario-examples)
+  - [4. Quick Start](#4-quick-start)
   - [5. Extensibility](#5-extensibility)
 
 ## 1. Overview
@@ -104,19 +104,165 @@ The indications with respect to global configuration, [dflow](https://github.com
 Examples of `global.json` under different using scenario are provided at [User scenario examples](#4-Userscenarioexamples)
 
 #### 3.1.2. Calculation parameters
-The way of parameters indication of alloy property calculation is similar to that of previous `dpgen.autotest`. There are **tree** categories of `json` file that define those parameters can be passed to APEX according to what they contain. Here shows three examples (for specific meaning of each paramter, one can refer to [Hands-on_auto-test](./docs/Hands_on_auto-test.pdf) for furthe introduction):
+The way of parameters indication of alloy property calculation is similar to that of previous `dpgen.autotest`. There are **tree** categories of `json` file that define those parameters can be passed to APEX according to what they contain. Users can name these files arbitrarily.
 
-* **Relaxation parameters**
+Categories calculation parameter files:
+| Type | File format | Dict contained | Usage |
+| :------------ | ---- | ----- | ------------------- |
+| Relaxation | json | `structures`; `interaction`; `Relaxation` | For `relaxation` worflow |
+| Property | json |  `structures`; `interaction`; `Properties`  | For `property` worflow |
+| Joint | json |  `structures`; `interaction`; `Relaxation`; `Properties` | For `relaxation`, `property` and `joint` worflow |
+
+Notice that files like POSCAR under `structure` path or any other file indicated to be used within the `json` file should be prepared under current working direction in advance. 
+
+Here shows three examples (for specific meaning of each paramter, one can refer to [Hands-on_auto-test](./docs/Hands_on_auto-test.pdf) for further introduction):
+* **Relaxation parameter file**
   ```json
-  
+  {
+    "structures":            ["confs/std-*"],
+    "interaction": {
+            "type":           "deepmd",
+            "model":          "frozen_model.pb",
+            "type_map":       {"Mo": 0}
+	  },
+    "relaxation": {
+            "cal_setting":   {"etol":       0,
+                              "ftol":     1e-10,
+                              "maxiter":   5000,
+                              "maximal":  500000}
+	  }
+  }
+  ```
+* **Property parameter file**
+  ```json
+  {
+    "structures":    ["confs/std-*"],
+    "interaction": {
+        "type":          "deepmd",
+        "model":         "frozen_model.pb",
+        "type_map":      {"Mo": 0}
+    },
+    "properties": [
+        {
+          "type":         "eos",
+          "skip":         false,
+          "vol_start":    0.6,
+          "vol_end":      1.4,
+          "vol_step":     0.1,
+          "cal_setting":  {"etol": 0,
+                          "ftol": 1e-10}
+        },
+        {
+          "type":         "elastic",
+          "skip":         false,
+          "norm_deform":  1e-2,
+          "shear_deform": 1e-2,
+          "cal_setting":  {"etol": 0,
+                          "ftol": 1e-10}
+        },
+	      {
+	        "type":               "gamma",
+	        "skip":               true,
+            "lattice_type":       "bcc",
+            "miller_index":         [1,1,2],
+            "supercell_size":       [1,1,5],
+            "displace_direction":   [1,1,1],
+            "min_vacuum_size":      0,
+	        "add_fix":              ["true","true","false"], 
+            "n_steps":             10
+	      }
+        ]
+  }
+  ```
+* **Joint parameter file**
+  ```json
+  {
+    "structures":            ["confs/std-*"],
+    "interaction": {
+          "type":           "deepmd",
+          "model":          "frozen_model.pb",
+          "type_map":       {"Mo": 0}
+      },
+    "relaxation": {
+            "cal_setting":   {"etol":       0,
+                            "ftol":     1e-10,
+                            "maxiter":   5000,
+                            "maximal":  500000}
+      },
+    "properties": [
+      {
+        "type":         "eos",
+        "skip":         false,
+        "vol_start":    0.6,
+        "vol_end":      1.4,
+        "vol_step":     0.1,
+        "cal_setting":  {"etol": 0,
+                        "ftol": 1e-10}
+      },
+      {
+        "type":         "elastic",
+        "skip":         false,
+        "norm_deform":  1e-2,
+        "shear_deform": 1e-2,
+        "cal_setting":  {"etol": 0,
+                        "ftol": 1e-10}
+      },
+      {
+        "type":               "gamma",
+        "skip":               true,
+          "lattice_type":       "bcc",
+          "miller_index":         [1,1,2],
+          "supercell_size":       [1,1,5],
+          "displace_direction":   [1,1,1],
+          "min_vacuum_size":      0,
+        "add_fix":              ["true","true","false"], 
+          "n_steps":             10
+      }
+      ]
+  }
   ```
 
+### 3.2. Submittion command
+APEX will submit a type of workflow on each invocation of command with format of `apex [file_names] [--optional_argument]`. By the type of parameter file user indicate, APEX will automatically determine the type of workflow and calculation method to adopt. User can also further specify the type via optional argument. Here is a list of command examples for tree type of workflow submittion:
+* `relaxtion` workflow:
+  ```shell
+  apex relaxation.json
+  ```
+   ```shell
+  apex joint.json --relax
+  ```
+   ```shell
+  apex relaxation.json property.json --relax
+  ```
+* `property` workflow:
+  ```shell
+  apex property.json
+  ```
+  ```shell
+  apex joint.json --props
+  ```
+  ```shell
+  apex relaxation.json property.json --props
+  ```
+* `joint` workflow:
+  ```shell
+  apex joint.json
+  ```
+  ```shell
+  apex property.json relaxation.json
+  ```
+APEX also provides a single-step local debug mode, which can run `Make` and `Post` step individually under local enviornment. User can invoke them by following optional arguments like:
 
+  | Type of step | Optional argument | Shorten way |
+  | :------------ | ----- | ----- |
+  | `Make` of `relaxation` | `--make_relax` | `-mr` | 
+  | `Post` of `relaxation` | `--post_relax` | `-pr` | 
+  | `Make` of `property` | `--make_props` | `-mp` | 
+  | `Post` of `proterty` | `--post_props` | `-pp` | 
 
-### 3.2. Workflow submittion
 
 ### 3.3. Output result
 
-## 4. User scenario examples
+## 4. Quick Start
 
 ## 5. Extensibility
