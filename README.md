@@ -13,13 +13,14 @@
       - [3.1.1. Global setting](#311-global-setting)
       - [3.1.2. Calculation parameters](#312-calculation-parameters)
     - [3.2. Submittion command](#32-submittion-command)
-    - [3.3. Output result](#33-output-result)
   - [4. Quick Start](#4-quick-start)
-  - [5. Extensibility](#5-extensibility)
+    - [4.1. On the Bohrium](#41-on-the-bohrium)
+    - [4.2. On local Argo service](#42-on-local-argo-service)
+    - [4.3. On local enviornment](#43-on-local-enviornment)
 
 ## 1. Overview
 
-APEX inherits the functionality of the second version of alloy properties calculations and is developed based on the [dflow](https://github.com/deepmodeling/dflow) framework. By incorporating the advantages of cloud-native workflows, APEX simplifies the complex process to automatically test multiple configurations and properties. Thanks to its cloud-native feature, APEX offers users an more intuitive and easy-to-use interaction, making the overall user experience more straightforward.
+APEX inherits the functionality of the second version of alloy properties calculations and is developed based on the [dflow](https://github.com/deepmodeling/dflow) framework. By incorporating the advantages of cloud-native workflows, APEX simplifies the complex process to automatically test multiple configurations and properties. Thanks to its cloud-native feature, APEX offers users an more intuitive and easy-to-use interaction, making the overall user experience more straightforward without concerning about process control, task scheduling, observability and disaster tolerance.
 
 The overall architechture of APEX is demonstrated as followed:
 
@@ -32,7 +33,7 @@ There are generally three types of pre-defined **workflow** in the APEX that use
 
 The `relaxation` workflow starts from initial `POSCAR` provided by user at the beginning, and outputs key information like final relaxed structure and corresponding energy. Such equilibrium state information is necessary for the `property` workflow as inputs to conduct further alloy property calculation. The final results when finished will be automatically retrieved and downloaded back to origial working direction.
 
-Within both `relaxation` and `property` workflow, respective computational tasks are prepared during the `Make` step, which will be passed to the `Run` step for tasks dispatch, calculation monitoring and finished tasks retriving (This is realized via the [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) package). As all tasks are completed, the `Post` step will be invoked to collect data and calculate desired property results.
+Within both `relaxation` and `property` workflow, respective computational tasks are prepared during the `Make` step, which will be passed to the `Run` step for tasks dispatch, calculation monitoring and finished tasks retriving (this is realized via the [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) plugin). As all tasks are completed, the `Post` step will be invoked to collect data and calculate desired property results.
 
 So far, APEX provides calculation methods of following alloy properties:
 * Equation of State (EOS)
@@ -73,7 +74,7 @@ The indications with respect to global configuration, [dflow](https://github.com
   | dflow_host | String | https://127.0.0.1:2746 | Url of dflow server |
   | k8s_api_server | String | https://127.0.0.1:2746 | Url of kubernetes API server |
   | debug_mode | Boolean | False | Whether to run workflow with local debug mode of the dflow. Following `image_name` must be indicated when `debug_mode` is False |
-  | apex_image_name | String | None | Image address to run `Make` and `Post` steps |
+  | apex_image_name | String | None | Image address to run `Make` and `Post` steps. One can build this Docker image via prepared [Dockerfile](./docs/Dockerfile)|
   | dpmd_image_name | String | None | Image address for `Run` step using LAMMPS |
   | vasp_image_name | String | None | Image address for `Run` step using VASP |
   | abacus_image_name | String | None | Image address for `Run` step using ABACUS |
@@ -84,6 +85,8 @@ The indications with respect to global configuration, [dflow](https://github.com
 * **DPDispatcher** (One may refer to [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) for details of following parameters)
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
+  | context_type | String | None | Must be specified at the outermost level if adopt the DPDispather; Set to `"Bohrium"` to run tasks on the Bohrium |
+  | batch_type | String | None | Set to `"Bohrium"` to run tasks on the Bohrium platform |
   | machine | Dict | None | Indication of machine and batch type |
   | resources | Dict | None | Indication of computing recources |
   | task | Dict | None | Indication of run command and essential files |
@@ -91,8 +94,6 @@ The indications with respect to global configuration, [dflow](https://github.com
 * **Bohrium** (to be specified when quickly adopt pre-built dflow servise or scientific computing on [Bohrium platform](https://bohrium.dp.tech) without indicate **DPDispatcher** related key words)
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
-  | batch_type | String | None | Set to `"Bohrium"` to run tasks on the Bohrium platform |
-  | context_type | String | None | Set to `"Bohrium"` to run tasks on the Bohrium |
   | s3_repo_key | String | None | Key of artifact repository. Set to `"oss-bohrium"` when adopt dflow servise on Bohrium |
   | s3_storage_client | String | None | client for plugin storage backend. Set to `"TiefblueClient"` when adopt dflow servise on Bohrium |
   | email | String | None | Email of your Bohrium account |
@@ -251,7 +252,7 @@ APEX will submit a type of workflow on each invocation of command with format of
   ```shell
   apex property.json relaxation.json
   ```
-APEX also provides a single-step local debug mode, which can run `Make` and `Post` step individually under local enviornment. User can invoke them by following optional arguments like:
+APEX also provides a **single-step local debug mode**, which can run `Make` and `Post` step individually under local enviornment. User can invoke them by following optional arguments like:
 
   | Type of step | Optional argument | Shorten way |
   | :------------ | ----- | ----- |
@@ -260,9 +261,98 @@ APEX also provides a single-step local debug mode, which can run `Make` and `Pos
   | `Make` of `property` | `--make_props` | `-mp` | 
   | `Post` of `proterty` | `--post_props` | `-pp` | 
 
-
-### 3.3. Output result
-
 ## 4. Quick Start
+We provide some cases as quick start examples of APEX based on different user scenario. A [lammps_example](./examples/lammps_demo/) to calculate EOS and elastic constants of molybdenum for both BCC and FCC phase will be adopted for demonstration here. First, let's check which files are prepared under the working directory of this case.
+```
+lammps_demo
+├── confs
+│   ├── std-bcc
+│   │   └── POSCAR
+│   └── std-fcc
+│       └── POSCAR
+├── frozen_model.pb
+├── global.json
+├── param_joint.json
+├── param_props.json
+└── param_relax.json
+```
+There are three type of parameters files and the `global.json`, as well as a force-field potential file of molybdenum `frozen_model.pb`. Under the direction of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
 
-## 5. Extensibility
+### 4.1. On the Bohrium
+The most convenient way to submit a APEX workflow is via the prebuilt running enviornment of dflow on the [Bohrium platform](https://bohrium.dp.tech). However, one may need to register an account of the Bohrium as needed. Here is an example of `global.json` to this way.
+```json
+{
+    "dflow_host": "https://workflows.deepmodeling.com",
+    "k8s_api_server": "https://workflows.deepmodeling.com",
+    "s3_repo_key": "oss-bohrium",
+    "s3_storage_client": "TiefblueClient",
+    "email": "YOUR_EMAIL",
+    "password": "YOUR_PASSWD",
+    "program_id": 1234,
+    "apex_image_name":"registry.dp.tech/dptech/dpgen:0.11.0",
+    "dpmd_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
+    "lammps_run_command":"lmp -in in.lammps",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
+    "cpu_scass_type":"c4_m8_cpu",
+    "gpu_scass_type":"c8_m31_1 * NVIDIA T4"
+}
+```
+Just replace values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
+
+### 4.2. On local Argo service
+One can also build dflow enviornment on local computer by running [install scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) at the dflow repository. For example to install on a linux system (not with a root account):
+```shell
+bash install-linux-cn.sh
+```
+This will automatcally setup local necessary tools of Docker, Minikube, and Argo service with port default to be `127.0.0.1:2746`. Thus one can rewrite `global.json` to submit workflow to this container without a Bohrium account, for example:
+```json
+{
+    "apex_image_name": "zhuoyli/apex:amd64",
+    "dpmd_image_name": "deepmodeling/deepmd-kit:2.2.1_cuda10.1_gpu",
+    "lammps_run_command": "lmp -in in.lammps",
+    "context_type": "SSHContext",
+    "machine": {
+        "batch_type": "Slurm",
+        "context_type": "SSHContext",
+        "local_root" : "/home/user123/workplace/22_new_project/",
+        "remote_root": "/home/user123/dpdispatcher_work_dir/",
+        "remote_profile": {
+            "hostname": "39.106.xx.xxx",
+            "username": "user123",
+            "port": 22,
+            "timeout": 10
+            }
+    }
+}
+```
+In this example, we try to dispatch the tasks to a remote node managed by the [Slurm](https://slurm.schedmd.com). User needs to replace corresponding parameters within the `machine` dictionary or specify `resources` and `tasks` following the rule of [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html).
+
+For the APEX image, above is public on the [Docker Hub](https://hub.docker.com) that can be pulled automatically. User can also pull the image in advance or build your own Docker image in the Minikube environment locally via [Dockerfile](./docs/Dockerfile) (please refer to [Docker's instruction](https://docs.docker.com/engine/reference/commandline/build/) for `build` instruction) so that the pods could be initialized much faster. 
+
+Once the workflow is submitted, One can monitor the process on https://127.0.0.1:2746.
+
+### 4.3. On local enviornment
+If your local computer has trouble accessing to the internet. APEX also provides a **workflow local debug mode** so that the flow could run on the local basic `Python3` enviornment independent of the Docker container. However, user will **not** be able to monitor the workflow on the Argo UI.
+
+To activate this function, user can set `debug_mode` to be `true` within `global.json`, for example:
+```json
+{
+    "debug_mode": true,
+    "lammps_run_command": "lmp -in in.lammps",
+    "context_type": "SSHContext",
+    "machine": {
+        "batch_type": "Slurm",
+        "context_type": "SSHContext",
+        "local_root" : "/home/user123/workplace/22_new_project/",
+        "remote_root": "/home/user123/dpdispatcher_work_dir/",
+        "remote_profile": {
+            "hostname": "39.106.xx.xxx",
+            "username": "user123",
+            "port": 22,
+            "timeout": 10
+            }
+    }
+}
+```
+In this way, user do not need to indicate an image to run APEX. Instead, the APEX should be pre-installed within the default `Python3` environment to run normally.
