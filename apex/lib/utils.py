@@ -111,3 +111,13 @@ def judge_flow(args) -> (str, dict):
     }
     return task_type, flow_info
 
+def check_args_ss(args):
+    num_args = len(args.files)
+    if num_args == 1:
+        json_type = identify_json(args.files[0])[1]
+        mismatch1 = (args.make_relax or args.post_relax) and json_type == 'props'
+        mismatch2 = (args.make_props or args.post_props) and json_type == 'relax'
+        if mismatch1 or mismatch2:
+            raise RuntimeError(f'mismatched indication step with type of json provided: {json_type}')
+    else:
+        raise ValueError('A maximum of one input arguments is allowed in single step mode')

@@ -55,7 +55,7 @@
         "lattice_type":    "bcc",
         "miller_index":    [1,1,2],
         "displace_direction":  [1,1,1],
-        "min_supercell_size":   [1,1,5],
+        "supercell_size":   [1,1,5],
         "min_vacuum_size": 0,
 	"add_fix": ["true","true","false"],
         "n_steps":         10
