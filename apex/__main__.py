@@ -5,19 +5,25 @@ from dflow.plugins import bohrium
 from dflow.plugins.bohrium import TiefblueClient
 from monty.serialization import loadfn
 
-dflow_host = loadfn("global.json").get("dflow_host", "https://127.0.0.1:2746")
-config["host"] = dflow_host
-k8s_api_server = loadfn("global.json").get("k8s_api_server", "https://127.0.0.1:2746")
-config["k8s_api_server"] = k8s_api_server
-username = loadfn("global.json").get("email", None)
-bohrium.config["username"] = username
-password = loadfn("global.json").get("password", None)
-bohrium.config["password"] = password
-program_id = loadfn("global.json").get("program_id", None)
-bohrium.config["program_id"] = program_id
-s3_repo_key = loadfn("global.json").get("s3_repo_key", None)
-s3_config["repo_key"] = s3_repo_key
-s3_storage_client = loadfn("global.json").get("s3_storage_client", None)
+debug_mode = loadfn("global.json").get("debug_mode", False)
+if debug_mode:
+    config["mode"] = "debug"
+    config["debug_copy_method"] = "copy"
+    s3_storage_client = None
+else:
+    dflow_host = loadfn("global.json").get("dflow_host", "https://127.0.0.1:2746")
+    config["host"] = dflow_host
+    k8s_api_server = loadfn("global.json").get("k8s_api_server", "https://127.0.0.1:2746")
+    config["k8s_api_server"] = k8s_api_server
+    username = loadfn("global.json").get("email", None)
+    bohrium.config["username"] = username
+    password = loadfn("global.json").get("password", None)
+    bohrium.config["password"] = password
+    program_id = loadfn("global.json").get("program_id", None)
+    bohrium.config["program_id"] = program_id
+    s3_repo_key = loadfn("global.json").get("s3_repo_key", None)
+    s3_config["repo_key"] = s3_repo_key
+    s3_storage_client = loadfn("global.json").get("s3_storage_client", None)
 
 import argparse
 from apex.VASP_flow import VASPFlow
@@ -86,7 +92,7 @@ def run_flow(args):
 
 
 def run_step(args):
-    print('-------Singel step locally debug mode--------')
+    print('-------Singel step local debug mode--------')
     param_argv = args.files[0]
     structures = loadfn(param_argv)["structures"]
     inter_parameter = loadfn(param_argv)["interaction"]
