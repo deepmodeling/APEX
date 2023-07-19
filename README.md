@@ -333,7 +333,7 @@ This process will automatically configure the required local tools, including Do
 ```
 In this example, we attempt to distribute tasks to a remote node managed by [Slurm](https://slurm.schedmd.com). Users must replace the relevant parameters within the `machine` dictionary or specify `resources` and `tasks` according to [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) rules.
 
-For the APEX image, it is publicly available on [Docker Hub](https://hub.docker.com) and can be pulled automatically. Users may also choose to pull the image beforehand or create their own Docker image in the Minikube environment locally using a [Dockerfile](./docs/Dockerfile) (please refer to [Docker's documentation] (https://docs.docker.com/engine/reference/commandline/build/) for building instructions) to expedite pod initialization.
+For the APEX image, it is publicly available on [Docker Hub](https://hub.docker.com) and can be pulled automatically. Users may also choose to pull the image beforehand or create their own Docker image in the Minikube environment locally using a [Dockerfile](./docs/Dockerfile) (please refer to [Docker's documentation](https://docs.docker.com/engine/reference/commandline/build/) for building instructions) to expedite pod initialization.
 
 Upon submission of the workflow, progress can be monitored at https://127.0.0.1:2746.
 
