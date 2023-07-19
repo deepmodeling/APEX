@@ -16,7 +16,7 @@
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
-    - [4.3. In a Local Enviornment](#43-in-a-local-enviornment)
+    - [4.3. In a Local Environment](#43-in-a-local-environment)
 
 ## 1. Overview
 
