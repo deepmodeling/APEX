@@ -220,10 +220,10 @@ class Gamma(Property):
                     symbol=ptypes[0], lat_param=[relax_a, relax_b, relax_c]
                 )
                 # define displace vectors
-                disp_vector = (1 / self.supercell_size[0], 0, 0)
+                disp_vector = (1/self.supercell_size[0], 0, 0)
                 # displace structure
-                all_slabs = self.__displace_slab(slab, disp_vector=disp_vector)
-                self.atom_num = len(all_slabs[0].sites)
+                #all_slabs = self.__displace_slab(slab, disp_vector=disp_vector)
+                #self.atom_num = len(all_slabs[0].sites)
 
                 os.chdir(path_to_work)
                 if os.path.isfile(POSCAR):
@@ -232,8 +232,9 @@ class Gamma(Property):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
-                for ii in range(len(all_slabs)):
-                    output_task = os.path.join(path_to_work, "task.%06d" % ii)
+                count = 0
+                for obtained_slab in self.__displace_slab_generator(slab, disp_vector=disp_vector):
+                    output_task = os.path.join(path_to_work, "task.%06d" % count)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
                     for jj in ["INCAR", "POTCAR", POSCAR, "conf.lmp", "in.lammps"]:
@@ -242,12 +243,12 @@ class Gamma(Property):
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
                     print(
-                        "# %03d generate " % ii,
+                        "# %03d generate " % count,
                         output_task,
-                        " \t %d atoms" % self.atom_num,
+                        " \t %d atoms" % len(obtained_slab.sites)
                     )
                     # make confs
-                    all_slabs[ii].to("POSCAR.tmp", "POSCAR")
+                    obtained_slab.to("POSCAR.tmp", "POSCAR")
                     vasp.regulate_poscar("POSCAR.tmp", "POSCAR")
                     vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
                     if self.inter_param["type"] == "abacus":
@@ -256,6 +257,7 @@ class Gamma(Property):
                     # vasp.perturb_xz('POSCAR', 'POSCAR', self.pert_xz)
                     # record miller
                     dumpfn(self.miller_index, "miller.json")
+                    count += 1
                 os.chdir(cwd)
 
         return task_list
@@ -335,9 +337,9 @@ class Gamma(Property):
     #    slab_pmg.make_supercell(scaling_matrix=[self.supercell_size[0],self.supercell_size[1],1])
     #    return slab_pmg
 
-    def __displace_slab(self, slab, disp_vector):
+    def __displace_slab_generator(self, slab, disp_vector):
         # return a list of displaced slab objects
-        all_slabs = [slab.copy()]
+        yield slab.copy()
         for ii in list(range(self.n_steps)):
             frac_disp = 1 / self.n_steps
             unit_vector = frac_disp * np.array(disp_vector)
@@ -349,8 +351,7 @@ class Gamma(Property):
                 frac_coords=True,
                 to_unit_cell=True,
             )
-            all_slabs.append(slab.copy())
-        return all_slabs
+            yield slab.copy()
 
     def __poscar_fix(self, poscar) -> None:
         # add position fix condition of x and y in POSCAR
