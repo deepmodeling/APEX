@@ -181,7 +181,7 @@ class Interstitial(Property):
                     ss = Structure.from_file(equi_contcar)
 
                 # get structure type
-                st = StructureType(equi_contcar)
+                st = StructureType(ss)
                 self.structure_type = st.get_structure_type()
 
                 # gen defects

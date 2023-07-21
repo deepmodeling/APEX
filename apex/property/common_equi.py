@@ -1,11 +1,11 @@
 import glob
 import os
 import shutil
-import warnings
+import logging
 from multiprocessing import Pool
 from monty.serialization import dumpfn
 from packaging.version import Version
-
+import dpdata
 import apex.calculator.lib.abacus as abacus
 import apex.property.lib.crys as crys
 import apex.property.lib.util as util
@@ -16,20 +16,21 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
 
+logging.basicConfig(filename='apex_gen.log', filemode='w', level=logging.DEBUG)
 
 
 def make_equi(confs, inter_param, relax_param):
     # find all POSCARs and their name like mp-xxx
     # ...
     #dlog.debug("debug info make equi")
-    print("debug info make equi")
+    logging.debug("debug info make equi")
     if "type_map" in inter_param:
         ele_list = [key for key in inter_param["type_map"].keys()]
     else:
         ele_list = [key for key in inter_param["potcars"].keys()]
     # ele_list = inter_param['type_map']
     #dlog.debug("ele_list %s" % ":".join(ele_list))
-    print("ele_list %s" % ":".join(ele_list))
+    logging.debug("ele_list %s" % ":".join(ele_list))
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
@@ -48,9 +49,9 @@ def make_equi(confs, inter_param, relax_param):
             os.chdir(ii)
             crys_type = ii.split("/")[-1]
             #dlog.debug("crys_type: %s" % crys_type)
-            print("crys_type: %s" % crys_type)
+            logging.debug("crys_type: %s" % crys_type)
             #dlog.debug("pwd: %s" % os.getcwd())
-            print("pwd: %s" % os.getcwd())
+            logging.debug("pwd: %s" % os.getcwd())
             if crys_type == "std-fcc":
                 if not os.path.exists("POSCAR"):
                     crys.fcc1(ele_list[element_label]).to("POSCAR", "POSCAR")
@@ -82,7 +83,7 @@ def make_equi(confs, inter_param, relax_param):
     for ii in conf_dirs:
         crys_type = ii.split("/")[-1]
         #dlog.debug("crys_type: %s" % crys_type)
-        print("crys_type: %s" % crys_type)
+        logging.debug("crys_type: %s" % crys_type)
 
         if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
             get_structure(crys_type).to("POSCAR", os.path.join(ii, "POSCAR"))
@@ -135,7 +136,7 @@ def make_equi(confs, inter_param, relax_param):
 
     for ii in task_dirs:
         poscar = os.path.join(ii, "POSCAR")
-        #dlog.debug("task_dir %s" % ii)
+        logging.debug("task_dir %s" % ii)
         inter = make_calculator(inter_param, poscar)
         inter.make_potential_files(ii)
         inter.make_input_file(ii, "relaxation", relax_param)

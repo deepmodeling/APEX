@@ -204,7 +204,7 @@ class Gamma(Property):
                     ss = Structure.from_file(equi_contcar)
 
                 # get structure type
-                st = StructureType(equi_contcar)
+                st = StructureType(ss)
                 self.structure_type = st.get_structure_type()
 
                 # rewrite new CONTCAR with direct coords
@@ -297,7 +297,7 @@ class Gamma(Property):
         return directions
 
     def __gen_slab_ase(self, symbol, lat_param):
-        if not self.lattice_type:
+        if not self.structure_type:
             raise RuntimeError("Error! Please provide the input lattice type!")
         elif self.structure_type == "bcc":
             slab_ase = bcc(
