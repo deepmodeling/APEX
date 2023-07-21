@@ -13,6 +13,7 @@ import apex.calculator.lib.lammps as lammps
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro
+from apex.property.Structure import StructureType
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -179,6 +180,10 @@ class Interstitial(Property):
                 else:
                     ss = Structure.from_file(equi_contcar)
 
+                # get structure type
+                st = StructureType(equi_contcar)
+                self.structure_type = st.get_structure_type()
+
                 # gen defects
                 dss = []
                 insert_element_task = os.path.join(path_to_work, "element.out")
@@ -242,7 +247,7 @@ class Interstitial(Property):
                     dumpfn(self.supercell, "supercell.json")
                 os.chdir(cwd)
 
-                if "bcc_self" in self.parameter and self.parameter["bcc_self"]:
+                if self.structure_type == 'bcc':
                     super_size = (
                         self.supercell[0] * self.supercell[1] * self.supercell[2]
                     )

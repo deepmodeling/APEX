@@ -18,6 +18,7 @@ import apex.calculator.lib.vasp as vasp
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro
+from apex.property.Structure import StructureType
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -34,7 +35,6 @@ class Gamma(Property):
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
                 self.miller_index = parameter["miller_index"]
                 self.displace_direction = parameter["displace_direction"]
-                self.lattice_type = parameter["lattice_type"]
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
                 parameter["min_vacuum_size"] = parameter.get("min_vacuum_size", 20)
@@ -203,6 +203,10 @@ class Gamma(Property):
                     # read structure from relaxed CONTCAR
                     ss = Structure.from_file(equi_contcar)
 
+                # get structure type
+                st = StructureType(equi_contcar)
+                self.structure_type = st.get_structure_type()
+
                 # rewrite new CONTCAR with direct coords
                 os.chdir(path_to_equi)
                 ss.to("CONTCAR.direct", "POSCAR")
@@ -295,24 +299,24 @@ class Gamma(Property):
     def __gen_slab_ase(self, symbol, lat_param):
         if not self.lattice_type:
             raise RuntimeError("Error! Please provide the input lattice type!")
-        elif self.lattice_type == "bcc":
+        elif self.structure_type == "bcc":
             slab_ase = bcc(
                 symbol=symbol,
                 size=self.supercell_size,
                 latticeconstant=lat_param[0],
                 directions=self.return_direction(),
             )
-        elif self.lattice_type == "fcc":
+        elif self.structure_type == "fcc":
             slab_ase = fcc(
                 symbol=symbol,
                 size=self.supercell_size,
                 latticeconstant=lat_param[0],
                 directions=self.return_direction(),
             )
-        elif self.lattice_type == "hcp":
+        elif self.structure_type == "hcp":
             pass
         else:
-            raise RuntimeError(f"unsupported lattice type: {self.lattice_type}")
+            raise RuntimeError(f"unsupported lattice type")
         self.centralize_slab(slab_ase)
         if self.min_vacuum_size > 0:
             slab_ase.center(vacuum=self.min_vacuum_size / 2, axis=2)
