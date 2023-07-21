@@ -1,6 +1,8 @@
 import pymatgen.core
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from dflow.python import upload_packages
 
+upload_packages.append(__file__)
 
 class StructureType(object):
     """Analyze structure type
