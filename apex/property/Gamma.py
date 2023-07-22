@@ -338,7 +338,7 @@ class Gamma(Property):
     #    return slab_pmg
 
     def __displace_slab_generator(self, slab, disp_vector):
-        # return a list of displaced slab objects
+        # generator of displaced slab structures
         yield slab.copy()
         for ii in list(range(self.n_steps)):
             frac_disp = 1 / self.n_steps
