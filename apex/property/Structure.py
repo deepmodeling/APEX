@@ -20,18 +20,18 @@ class StructureType(object):
 
     def get_structure_type(self) -> str:
         if self.lattice_type == 'cubic':
-            if self.num_atoms == 1 and self.space_group_symbol is 'Pm-3m':
+            if self.num_atoms == 1 and self.space_group_symbol == 'Pm-3m':
                 structure_type = 'sc'
-            elif self.num_atoms == 2 and self.space_group_symbol is 'Im-3m':
+            elif self.num_atoms == 2 and self.space_group_symbol == 'Im-3m':
                 structure_type = 'bcc'
-            elif self.num_atoms == 4 and self.space_group_symbol is 'Fm-3m':
+            elif self.num_atoms == 4 and self.space_group_symbol == 'Fm-3m':
                 structure_type = 'fcc'
-            elif self.num_atoms == 8 and self.space_group_symbol is 'Fd-3m':
+            elif self.num_atoms == 8 and self.space_group_symbol == 'Fd-3m':
                 structure_type = 'diamond'
             else:
                 structure_type = 'other'
         elif self.lattice_type == 'hexagonal':
-            if self.num_atoms == 2 and self.space_group_symbol is 'P6_3/mmc':
+            if self.num_atoms == 2 and self.space_group_symbol == 'P6_3/mmc':
                 structure_type = 'hcp'
             else:
                 structure_type = 'other'

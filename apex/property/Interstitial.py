@@ -273,7 +273,7 @@ class Interstitial(Property):
                     os.makedirs(output_task1, exist_ok=True)
                     os.chdir(output_task1)
                     task_list.append(output_task1)
-                    self.insert_function(insert_pos=[0.25, 0.5, 0])
+                    self.__insert_function(insert_pos=[0.25, 0.5, 0])
                     print("gen bcc tetrahedral")
                     os.chdir(cwd)
 
@@ -283,7 +283,7 @@ class Interstitial(Property):
                     os.makedirs(output_task2, exist_ok=True)
                     os.chdir(output_task2)
                     task_list.append(output_task2)
-                    self.insert_function(insert_pos=[0.5, 0.5, 0])
+                    self.__insert_function(insert_pos=[0.5, 0.5, 0])
                     print("gen bcc octahedral")
                     os.chdir(cwd)
 
@@ -293,7 +293,7 @@ class Interstitial(Property):
                     os.makedirs(output_task3, exist_ok=True)
                     os.chdir(output_task3)
                     task_list.append(output_task3)
-                    self.insert_function(insert_pos=[0.25, 0.25, 0])
+                    self.__insert_function(insert_pos=[0.25, 0.25, 0])
                     print("gen bcc crowdion")
                     os.chdir(cwd)
 
@@ -313,7 +313,7 @@ class Interstitial(Property):
                     os.makedirs(output_task4, exist_ok=True)
                     os.chdir(output_task4)
                     task_list.append(output_task4)
-                    self.insert_function(insert_pos=[1/3, 1/3, 1/3],
+                    self.__insert_function(insert_pos=[1/3, 1/3, 1/3],
                                          adjust_dict={replace_label: [2/3, 2/3, 2/3]})
                     print("gen bcc <111> dumbbell")
                     os.chdir(cwd)
@@ -324,7 +324,7 @@ class Interstitial(Property):
                     os.makedirs(output_task5, exist_ok=True)
                     os.chdir(output_task5)
                     task_list.append(output_task5)
-                    self.insert_function(insert_pos=[1/4, 3/4, 1/2],
+                    self.__insert_function(insert_pos=[1/4, 3/4, 1/2],
                                          adjust_dict={replace_label: [3/4, 1/4, 1/2]})
                     print("gen bcc <110> dumbbell")
                     os.chdir(cwd)
@@ -335,7 +335,7 @@ class Interstitial(Property):
                     os.makedirs(output_task6, exist_ok=True)
                     os.chdir(output_task6)
                     task_list.append(output_task6)
-                    self.insert_function(insert_pos=[1/2, 1/2, 1/6],
+                    self.__insert_function(insert_pos=[1/2, 1/2, 1/6],
                                          adjust_dict={replace_label: [1/2, 1/2, 5/6]})
                     print("gen bcc <100> dumbbell")
                     os.chdir(cwd)
