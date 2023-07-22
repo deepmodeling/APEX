@@ -186,9 +186,9 @@ class Interstitial(Property):
 
                 # gen defects
                 dss = []
-                insert_element_task = os.path.join(path_to_work, "element.out")
-                if os.path.isfile(insert_element_task):
-                    os.remove(insert_element_task)
+                self.insert_element_task = os.path.join(path_to_work, "element.out")
+                if os.path.isfile(self.insert_element_task):
+                    os.remove(self.insert_element_task)
 
                 for ii in self.insert_ele:
                     pre_vds = InterstitialGenerator()
@@ -205,11 +205,11 @@ class Interstitial(Property):
                             min_dist = self.parameter["conf_filters"]["min_dist"]
                             if smallest_distance >= min_dist:
                                 dss.append(temp)
-                                with open(insert_element_task, "a+") as fout:
+                                with open(self.insert_element_task, "a+") as fout:
                                     print(ii, file=fout)
                         else:
                             dss.append(temp)
-                            with open(insert_element_task, "a+") as fout:
+                            with open(self.insert_element_task, "a+") as fout:
                                 print(ii, file=fout)
                 #            dss.append(jj.generate_defect_structure(self.supercell))
 
@@ -252,39 +252,28 @@ class Interstitial(Property):
                         self.supercell[0] * self.supercell[1] * self.supercell[2]
                     )
                     num_atom = super_size * 2
-                    chl = -num_atom - 2
+                    self.chl = -num_atom - 2
                     os.chdir(path_to_work)
                     with open("POSCAR", "r") as fin:
                         fin.readline()
                         scale = float(fin.readline().split()[0])
-                        latt_param = float(fin.readline().split()[0])
-                        latt_param *= scale
+                        self.latt_param = float(fin.readline().split()[0])
+                        self.latt_param *= scale
 
                     if not os.path.isfile("task.000000/POSCAR"):
                         raise RuntimeError("need task.000000 structure as reference")
 
                     with open("task.000000/POSCAR", "r") as fin:
-                        pos_line = fin.read().split("\n")
+                        self.pos_line = fin.read().split("\n")
 
-                    super_latt_param = float(pos_line[2].split()[0])
+                    self.super_latt_param = float(self.pos_line[2].split()[0])
+                    self.unit_frac = self.latt_param / self.super_latt_param
 
                     output_task1 = os.path.join(path_to_work, "task.%06d" % (len(dss)))
                     os.makedirs(output_task1, exist_ok=True)
                     os.chdir(output_task1)
                     task_list.append(output_task1)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " 0.000000 "
-                        + self.insert_ele[0]
-                    )
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
+                    self.insert_function(insert_pos=[0.25, 0.5, 0])
                     print("gen bcc tetrahedral")
                     os.chdir(cwd)
 
@@ -294,19 +283,7 @@ class Interstitial(Property):
                     os.makedirs(output_task2, exist_ok=True)
                     os.chdir(output_task2)
                     task_list.append(output_task2)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " 0.000000 "
-                        + self.insert_ele[0]
-                    )
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
+                    self.insert_function(insert_pos=[0.5, 0.5, 0])
                     print("gen bcc octahedral")
                     os.chdir(cwd)
 
@@ -316,38 +293,17 @@ class Interstitial(Property):
                     os.makedirs(output_task3, exist_ok=True)
                     os.chdir(output_task3)
                     task_list.append(output_task3)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
+                    self.insert_function(insert_pos=[0.25, 0.25, 0])
                     print("gen bcc crowdion")
                     os.chdir(cwd)
 
-                    for idx, ii in enumerate(pos_line):
+                    for idx, ii in enumerate(self.pos_line):
                         ss = ii.split()
                         if len(ss) > 3:
                             if (
-                                abs(latt_param / 2 / super_latt_param - float(ss[0]))
-                                < 1e-5
-                                and abs(
-                                    latt_param / 2 / super_latt_param - float(ss[1])
-                                )
-                                < 1e-5
-                                and abs(
-                                    latt_param / 2 / super_latt_param - float(ss[2])
-                                )
-                                < 1e-5
+                                abs(self.unit_frac * 0.5 - float(ss[0])) < 1e-5
+                                and abs(self.unit_frac * 0.5 - float(ss[1])) < 1e-5
+                                and abs(self.unit_frac * 0.5 - float(ss[2])) < 1e-5
                             ):
                                 replace_label = idx
 
@@ -357,31 +313,8 @@ class Interstitial(Property):
                     os.makedirs(output_task4, exist_ok=True)
                     os.chdir(output_task4)
                     task_list.append(output_task4)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 3 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    pos_line[replace_label] = (
-                        "%.6f" % float(latt_param / 3 * 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 * 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 * 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
+                    self.insert_function(insert_pos=[1/3, 1/3, 1/3],
+                                         adjust_dict={replace_label: [2/3, 2/3, 2/3]})
                     print("gen bcc <111> dumbbell")
                     os.chdir(cwd)
 
@@ -391,35 +324,8 @@ class Interstitial(Property):
                     os.makedirs(output_task5, exist_ok=True)
                     os.chdir(output_task5)
                     task_list.append(output_task5)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f"
-                        % float((latt_param + 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f"
-                        % float((latt_param - 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    pos_line[replace_label] = (
-                        "%.6f"
-                        % float((latt_param - 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f"
-                        % float((latt_param + 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
+                    self.insert_function(insert_pos=[1/4, 3/4, 1/2],
+                                         adjust_dict={replace_label: [3/4, 1/4, 1/2]})
                     print("gen bcc <110> dumbbell")
                     os.chdir(cwd)
 
@@ -429,31 +335,8 @@ class Interstitial(Property):
                     os.makedirs(output_task6, exist_ok=True)
                     os.chdir(output_task6)
                     task_list.append(output_task6)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float((latt_param - 2.1) / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    pos_line[replace_label] = (
-                        "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float((latt_param + 2.1) / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
+                    self.insert_function(insert_pos=[1/2, 1/2, 1/6],
+                                         adjust_dict={replace_label: [1/2, 1/2, 5/6]})
                     print("gen bcc <100> dumbbell")
                     os.chdir(cwd)
 
@@ -470,6 +353,34 @@ class Interstitial(Property):
                     os.chdir(cwd)
 
         return task_list
+
+    def insert_function(self, insert_pos: list, adjust_dict=None):
+        with open(self.insert_element_task, "a+") as fout:
+            print(self.insert_ele[0], file=fout)
+        dumpfn(self.supercell, "supercell.json")
+        self.pos_line[self.chl] = (
+                "%.6f" % float(self.unit_frac * insert_pos[0])
+                + " "
+                + "%.6f" % float(self.unit_frac * insert_pos[1])
+                + " "
+                + "%.6f" % float(self.unit_frac * insert_pos[2])
+                + " "
+                + self.insert_ele[0]
+        )
+        if adjust_dict:
+            for line, pos in adjust_dict.items():
+                self.pos_line[line] = (
+                        "%.6f" % float(self.unit_frac * pos[0])
+                        + " "
+                        + "%.6f" % float(self.unit_frac * pos[1])
+                        + " "
+                        + "%.6f" % float(self.unit_frac * pos[2])
+                        + " "
+                        + self.insert_ele[0]
+                )
+        with open("POSCAR", "w+") as fout:
+            for ii in self.pos_line:
+                print(ii, file=fout)
 
     def post_process(self, task_list):
         if True:
