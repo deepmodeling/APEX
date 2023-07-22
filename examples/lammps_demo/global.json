@@ -11,6 +11,6 @@
     "lammps_run_command":"lmp -in in.lammps",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "cpu_scass_type":"c16_m64_cpu",
-    "gpu_scass_type":"c8_m32_1 * NVIDIA V100"
+    "cpu_scass_type":"c4_m8_cpu",
+    "gpu_scass_type":"c8_m31_1 * NVIDIA T4"
 }
