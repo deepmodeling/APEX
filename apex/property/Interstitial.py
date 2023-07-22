@@ -354,7 +354,7 @@ class Interstitial(Property):
 
         return task_list
 
-    def insert_function(self, insert_pos: list, adjust_dict=None):
+    def __insert_function(self, insert_pos: list, adjust_dict=None):
         with open(self.insert_element_task, "a+") as fout:
             print(self.insert_ele[0], file=fout)
         dumpfn(self.supercell, "supercell.json")
