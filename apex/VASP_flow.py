@@ -30,8 +30,8 @@ class VASPFlow(TestFlow):
     """
     Generate autotest workflow and submit automatically for VASP Calculations.
     """
-    def __init__(self, flow_info):
-        super().__init__(flow_info)
+    def __init__(self, flow_type, relax_param, props_param):
+        super().__init__(flow_type, relax_param, props_param)
         # initiate params defined in global.json
         global_param = loadfn("global.json")
         self.global_param = global_param
