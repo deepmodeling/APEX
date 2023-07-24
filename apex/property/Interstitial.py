@@ -2,6 +2,7 @@ import glob
 import json
 import os
 import re
+import copy
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
@@ -13,6 +14,7 @@ import apex.calculator.lib.lammps as lammps
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro
+from apex.property.Structure import StructureType
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -80,7 +82,7 @@ class Interstitial(Property):
         self.inter_param = inter_param if inter_param != None else {"type": "vasp"}
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
-        path_to_work = os.path.abspath(path_to_work)
+        self.path_to_work = os.path.abspath(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
 
         if "start_confs_path" in self.parameter and os.path.exists(
@@ -92,7 +94,7 @@ class Interstitial(Property):
             struct_init_name_list = []
             for ii in init_path_list:
                 struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
+            struct_output_name = self.path_to_work.split("/")[-2]
             assert struct_output_name in struct_init_name_list
             path_to_equi = os.path.abspath(
                 os.path.join(
@@ -103,7 +105,7 @@ class Interstitial(Property):
                 )
             )
 
-        task_list = []
+        self.task_list = []
         cwd = os.getcwd()
 
         if self.reprod:
@@ -111,11 +113,11 @@ class Interstitial(Property):
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
-            task_list = make_repro(
+            self.task_list = make_repro(
                 self.inter_param,
                 init_data_path,
                 self.init_from_suffix,
-                path_to_work,
+                self.path_to_work,
                 self.parameter.get("reprod_last_frame", False),
             )
             os.chdir(cwd)
@@ -123,21 +125,21 @@ class Interstitial(Property):
         else:
             if refine:
                 print("interstitial refine starts")
-                task_list = make_refine(
+                self.task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
-                    path_to_work,
+                    self.path_to_work,
                 )
 
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
                     self.parameter["init_from_suffix"][::-1],
-                    path_to_work[::-1],
+                    self.path_to_work[::-1],
                     count=1,
                 )[::-1]
                 task_list_basename = list(map(os.path.basename, task_list))
 
-                os.chdir(path_to_work)
+                os.chdir(self.path_to_work)
                 if os.path.isfile("element.out"):
                     os.remove("element.out")
                 if os.path.islink("element.out"):
@@ -150,7 +152,7 @@ class Interstitial(Property):
 
                 for ii in task_list_basename:
                     init_from_task = os.path.join(init_from_path, ii)
-                    output_task = os.path.join(path_to_work, ii)
+                    output_task = os.path.join(self.path_to_work, ii)
                     os.chdir(output_task)
                     if os.path.isfile("supercell.json"):
                         os.remove("supercell.json")
@@ -179,11 +181,18 @@ class Interstitial(Property):
                 else:
                     ss = Structure.from_file(equi_contcar)
 
+                # get structure type
+                os.chdir(self.path_to_work)
+                ss.to("POSCAR", "POSCAR")
+                st = StructureType(ss)
+                self.structure_type = st.get_structure_type()
+                os.chdir(cwd)
+
                 # gen defects
                 dss = []
-                insert_element_task = os.path.join(path_to_work, "element.out")
-                if os.path.isfile(insert_element_task):
-                    os.remove(insert_element_task)
+                self.insert_element_task = os.path.join(self.path_to_work, "element.out")
+                if os.path.isfile(self.insert_element_task):
+                    os.remove(self.insert_element_task)
 
                 for ii in self.insert_ele:
                     pre_vds = InterstitialGenerator()
@@ -200,13 +209,14 @@ class Interstitial(Property):
                             min_dist = self.parameter["conf_filters"]["min_dist"]
                             if smallest_distance >= min_dist:
                                 dss.append(temp)
-                                with open(insert_element_task, "a+") as fout:
+                                with open(self.insert_element_task, "a+") as fout:
                                     print(ii, file=fout)
                         else:
                             dss.append(temp)
-                            with open(insert_element_task, "a+") as fout:
+                            with open(self.insert_element_task, "a+") as fout:
                                 print(ii, file=fout)
                 #            dss.append(jj.generate_defect_structure(self.supercell))
+                        self.dss = dss
 
                 print(
                     "gen interstitial with supercell "
@@ -214,7 +224,7 @@ class Interstitial(Property):
                     + " with element "
                     + str(self.insert_ele)
                 )
-                os.chdir(path_to_work)
+                os.chdir(self.path_to_work)
                 if os.path.isfile(POSCAR):
                     os.remove(POSCAR)
                 if os.path.islink(POSCAR):
@@ -223,7 +233,7 @@ class Interstitial(Property):
                 #           task_poscar = os.path.join(output, 'POSCAR')
 
                 for ii in range(len(dss)):
-                    output_task = os.path.join(path_to_work, "task.%06d" % ii)
+                    output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
                     for jj in [
@@ -236,235 +246,166 @@ class Interstitial(Property):
                     ]:
                         if os.path.exists(jj):
                             os.remove(jj)
-                    task_list.append(output_task)
+                    self.task_list.append(output_task)
                     dss[ii].to("POSCAR", "POSCAR")
                     # np.savetxt('supercell.out', self.supercell, fmt='%d')
                     dumpfn(self.supercell, "supercell.json")
                 os.chdir(cwd)
 
-                if "bcc_self" in self.parameter and self.parameter["bcc_self"]:
-                    super_size = (
+                super_size = (
                         self.supercell[0] * self.supercell[1] * self.supercell[2]
-                    )
-                    num_atom = super_size * 2
-                    chl = -num_atom - 2
-                    os.chdir(path_to_work)
-                    with open("POSCAR", "r") as fin:
-                        fin.readline()
-                        scale = float(fin.readline().split()[0])
-                        latt_param = float(fin.readline().split()[0])
-                        latt_param *= scale
+                )
+                num_atom = super_size * 2
+                #chl = -num_atom - 2
+                os.chdir(self.path_to_work)
 
-                    if not os.path.isfile("task.000000/POSCAR"):
-                        raise RuntimeError("need task.000000 structure as reference")
+                if not os.path.isfile("task.000000/POSCAR"):
+                    raise RuntimeError("need task.000000 structure as reference")
 
-                    with open("task.000000/POSCAR", "r") as fin:
-                        pos_line = fin.read().split("\n")
+                with open('POSCAR', "r") as fin:
+                    fin.readline()
+                    scale = float(fin.readline().split()[0])
+                    self.latt_param = float(fin.readline().split()[0])
+                    self.latt_param *= scale
 
-                    super_latt_param = float(pos_line[2].split()[0])
+                with open("task.000000/POSCAR", "r") as fin:
+                    self.pos_line = fin.read().split("\n")
 
-                    output_task1 = os.path.join(path_to_work, "task.%06d" % (len(dss)))
-                    os.makedirs(output_task1, exist_ok=True)
-                    os.chdir(output_task1)
-                    task_list.append(output_task1)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " 0.000000 "
-                        + self.insert_ele[0]
-                    )
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
-                    print("gen bcc tetrahedral")
-                    os.chdir(cwd)
 
-                    output_task2 = os.path.join(
-                        path_to_work, "task.%06d" % (len(dss) + 1)
-                    )
-                    os.makedirs(output_task2, exist_ok=True)
-                    os.chdir(output_task2)
-                    task_list.append(output_task2)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " 0.000000 "
-                        + self.insert_ele[0]
-                    )
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
-                    print("gen bcc octahedral")
-                    os.chdir(cwd)
+                self.super_latt_param = float(self.pos_line[2].split()[0])
+                self.unit_frac = self.latt_param / self.super_latt_param
 
-                    output_task3 = os.path.join(
-                        path_to_work, "task.%06d" % (len(dss) + 2)
-                    )
-                    os.makedirs(output_task3, exist_ok=True)
-                    os.chdir(output_task3)
-                    task_list.append(output_task3)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 4 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
-                    print("gen bcc crowdion")
-                    os.chdir(cwd)
+                for idx, ii in enumerate(self.pos_line):
+                    ss = ii.split()
+                    if len(ss) > 3:
+                        if (
+                                abs(self.unit_frac * 0.1 - float(ss[0])) < 1e-5
+                                and abs(self.unit_frac * 0.1 - float(ss[1])) < 1e-5
+                                and abs(self.unit_frac * 0.1 - float(ss[2])) < 1e-5
+                        ):
+                            chl = idx
 
-                    for idx, ii in enumerate(pos_line):
+                os.chdir(cwd)
+
+                # specify interstitial structures
+                if self.structure_type == 'bcc':
+                    for idx, ii in enumerate(self.pos_line):
                         ss = ii.split()
                         if len(ss) > 3:
                             if (
-                                abs(latt_param / 2 / super_latt_param - float(ss[0]))
-                                < 1e-5
-                                and abs(
-                                    latt_param / 2 / super_latt_param - float(ss[1])
-                                )
-                                < 1e-5
-                                and abs(
-                                    latt_param / 2 / super_latt_param - float(ss[2])
-                                )
-                                < 1e-5
+                                    abs(self.unit_frac * 0.5 - float(ss[0])) < 1e-5
+                                    and abs(self.unit_frac * 0.5 - float(ss[1])) < 1e-5
+                                    and abs(self.unit_frac * 0.5 - float(ss[2])) < 1e-5
                             ):
-                                replace_label = idx
+                                center = idx
+                    bcc_interstital_dict = {
+                        'tetrahedral':   {chl: [0.25, 0.5, 0]},
+                        'octahedral':    {chl: [0.5, 0.5, 0]},
+                        'crowdion':      {chl: [0.25, 0.25, 0]},
+                        '<111>dumbbell': {chl: [1/3, 1/3, 1/3],
+                                          center: [2/3, 2/3, 2/3]},
+                        '<110>dumbbell': {chl: [1/4, 3/4, 1/2],
+                                          center: [3/4, 1/4, 1/2]},
+                        '<100>dumbbell': {chl: [1/2, 1/2, 1/6],
+                                          center: [1/2, 1/2, 5/6]}
+                    }
+                    total_task = self.__gen_tasks(bcc_interstital_dict)
 
-                    output_task4 = os.path.join(
-                        path_to_work, "task.%06d" % (len(dss) + 3)
-                    )
-                    os.makedirs(output_task4, exist_ok=True)
-                    os.chdir(output_task4)
-                    task_list.append(output_task4)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 3 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    pos_line[replace_label] = (
-                        "%.6f" % float(latt_param / 3 * 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 * 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 3 * 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
+                elif self.structure_type == 'fcc':
+                    for idx, ii in enumerate(self.pos_line):
+                        ss = ii.split()
+                        if len(ss) > 3:
+                            if (
+                                    abs(self.unit_frac * 1 - float(ss[0])) < 1e-5
+                                    and abs(self.unit_frac * 0.5 - float(ss[1])) < 1e-5
+                                    and abs(self.unit_frac * 0.5 - float(ss[2])) < 1e-5
+                            ):
+                                face = idx
 
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
-                    print("gen bcc <111> dumbbell")
-                    os.chdir(cwd)
+                            if (
+                                    abs(self.unit_frac * 1 - float(ss[0])) < 1e-5
+                                    and abs(self.unit_frac * 1 - float(ss[1])) < 1e-5
+                                    and abs(self.unit_frac * 1 - float(ss[2])) < 1e-5
+                            ):
+                                corner = idx
 
-                    output_task5 = os.path.join(
-                        path_to_work, "task.%06d" % (len(dss) + 4)
-                    )
-                    os.makedirs(output_task5, exist_ok=True)
-                    os.chdir(output_task5)
-                    task_list.append(output_task5)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f"
-                        % float((latt_param + 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f"
-                        % float((latt_param - 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    pos_line[replace_label] = (
-                        "%.6f"
-                        % float((latt_param - 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f"
-                        % float((latt_param + 2.1 / 2**0.5) / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
+                    fcc_interstital_dict = {
+                        'tetrahedral':      {chl: [0.75, 0.25, 0.25]},
+                        'octahedral':       {chl: [1, 0, 0.5]},
+                        'crowdion':         {chl: [1, 0.25, 0.25]},
+                        '<111>dumbbell':    {
+                            chl: [1-0.3/np.sqrt(3),
+                                    1-0.3/np.sqrt(3),
+                                    1-0.3/np.sqrt(3)],
+                            corner: [0.3/np.sqrt(3),
+                                    0.3/np.sqrt(3),
+                                    0.3/np.sqrt(3)]
+                        },
+                        '<110>dumbbell': {
+                            chl: [1,
+                                    0.5+(0.3/np.sqrt(2)),
+                                    0.5+(0.3/np.sqrt(2))],
+                            face: [1,
+                                    0.5-(0.3/np.sqrt(2)),
+                                    0.5-(0.3/np.sqrt(2))]
+                        },
+                        '<100>dumbbell': {
+                            chl: [1, 0.2, 0.5],
+                            face: [1, 0.8, 0.5]
+                        },
+                    }
+                    total_task = self.__gen_tasks(fcc_interstital_dict)
 
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
-                    print("gen bcc <110> dumbbell")
-                    os.chdir(cwd)
-
-                    output_task6 = os.path.join(
-                        path_to_work, "task.%06d" % (len(dss) + 5)
-                    )
-                    os.makedirs(output_task6, exist_ok=True)
-                    os.chdir(output_task6)
-                    task_list.append(output_task6)
-                    with open(insert_element_task, "a+") as fout:
-                        print(self.insert_ele[0], file=fout)
-                    dumpfn(self.supercell, "supercell.json")
-                    pos_line[chl] = (
-                        "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float((latt_param - 2.1) / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-                    pos_line[replace_label] = (
-                        "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float(latt_param / 2 / super_latt_param)
-                        + " "
-                        + "%.6f" % float((latt_param + 2.1) / 2 / super_latt_param)
-                        + " "
-                        + self.insert_ele[0]
-                    )
-
-                    with open("POSCAR", "w+") as fout:
-                        for ii in pos_line:
-                            print(ii, file=fout)
-                    print("gen bcc <100> dumbbell")
-                    os.chdir(cwd)
-
-                    total_task = len(dss) + 6
+                elif self.structure_type == 'hcp':
+                    pass
                 else:
                     total_task = len(dss)
 
                 if self.inter_param["type"] == "abacus":
                     for ii in range(total_task):
-                        output_task = os.path.join(path_to_work, "task.%06d" % ii)
+                        output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                         os.chdir(output_task)
                         abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
                     os.chdir(cwd)
 
-        return task_list
+        return self.task_list
+
+
+    def __gen_tasks(self, interstitial_dict):
+        cwd = os.getcwd()
+        for ii, (type_str, adjust_dict) in enumerate(interstitial_dict.items()):
+            output_task = os.path.join(
+                self.path_to_work, "task.%06d" % (len(self.dss) + ii)
+            )
+            os.makedirs(output_task, exist_ok=True)
+            os.chdir(output_task)
+            self.task_list.append(output_task)
+            # adjust atom positions in POSCAR
+            with open(self.insert_element_task, "a+") as fout:
+                print(self.insert_ele[0], file=fout)
+            dumpfn(self.supercell, "supercell.json")
+            dumpfn(type_str, 'interstitial_type.json')
+            new_pos_line = self.pos_line.copy()
+            for line, pos in adjust_dict.items():
+                new_pos_line[line] = (
+                        "%.6f" % float(self.unit_frac * pos[0])
+                        + " "
+                        + "%.6f" % float(self.unit_frac * pos[1])
+                        + " "
+                        + "%.6f" % float(self.unit_frac * pos[2])
+                        + " "
+                        + self.insert_ele[0]
+                )
+            with open("POSCAR", "w+") as fout:
+                for ii in new_pos_line:
+                    print(ii, file=fout)
+            print(f"gen {type_str}")
+            os.chdir(cwd)
+
+        total_task = len(self.dss) + len(interstitial_dict)
+
+        return total_task
 
     def post_process(self, task_list):
         if True:
