@@ -137,7 +137,7 @@ class Interstitial(Property):
                     self.path_to_work[::-1],
                     count=1,
                 )[::-1]
-                task_list_basename = list(map(os.path.basename, task_list))
+                task_list_basename = list(map(os.path.basename, self.task_list))
 
                 os.chdir(self.path_to_work)
                 if os.path.isfile("element.out"):
