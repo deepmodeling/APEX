@@ -188,7 +188,7 @@ class TestABACUS(unittest.TestCase):
             self.assertTrue(natom1 == natom2 + 1)
 
     def test_make_property_interstitial(self):
-        property = {"type": "interstitial", "supercell": [1, 1, 1], "insert_ele": ["H"]}
+        property = {"type": "interstitial", "supercell": [2, 2, 2], "insert_ele": ["H"]}
         self.inter_param["potcars"]["H"] = "H_ONCV_PBE-1.0.upf"
         self.inter_param["orb_files"]["H"] = "H_gga_8au_100Ry_2s1p.orb"
 
@@ -206,7 +206,10 @@ class TestABACUS(unittest.TestCase):
         stru_data = abacus_scf.get_abacus_STRU(
             os.path.realpath(os.path.join(work_path, "STRU"))
         )
-        natom1 = np.array(stru_data["atom_numbs"]).sum()
+        supercell_scale = property["supercell"][0] * \
+                          property["supercell"][1] * \
+                          property["supercell"][2]
+        natom1 = np.array(stru_data["atom_numbs"]).sum() * supercell_scale
         for ii in glob.glob(os.path.join(work_path, "task.*")):
             self.assertTrue(os.path.isfile(os.path.join(ii, "STRU")))
             stru_data = abacus_scf.get_abacus_STRU(

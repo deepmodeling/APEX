@@ -30,9 +30,12 @@ class StructureType(object):
                 structure_type = 'diamond'
             else:
                 structure_type = 'other'
+
         elif self.lattice_type == 'hexagonal':
             if self.num_atoms == 2 and self.space_group_symbol == 'P6_3/mmc':
                 structure_type = 'hcp'
+            elif self.space_group_symbol == 'P6/mmm':
+                structure_type = 'c32'
             else:
                 structure_type = 'other'
         else:
