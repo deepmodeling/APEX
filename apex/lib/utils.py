@@ -104,12 +104,7 @@ def judge_flow(args) -> (str, dict):
     else:
         raise ValueError('A maximum of two input arguments is allowed')
 
-    flow_info = {
-        'flow_type': flow_type,
-        'relax_param': relax_param,
-        'props_param': props_param,
-    }
-    return task_type, flow_info
+    return task_type, flow_type, relax_param, props_param
 
 def check_args_ss(args):
     num_args = len(args.files)

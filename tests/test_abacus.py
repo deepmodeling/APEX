@@ -50,6 +50,8 @@ class TestABACUS(unittest.TestCase):
     def tearDown(self):
         if os.path.exists("confs/fcc-Al/relaxation"):
             shutil.rmtree("confs/fcc-Al/relaxation")
+        if os.path.isfile('apex_gen.log'):
+            os.remove('apex_gen.log')
 
     def test_make_potential_files(self):
         if not os.path.exists(os.path.join(self.equi_path, "STRU")):
