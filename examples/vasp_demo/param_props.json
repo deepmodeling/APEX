@@ -32,13 +32,11 @@
          "type":         "interstitial",
          "skip":         true,
          "supercell":   [1, 1, 1],
-         "insert_ele":  ["Mo"],
-         "bcc_self":    false
+         "insert_ele":  ["Mo"]
         },
 	{
 	"type":            "gamma",
 	"skip":            true,
-        "lattice_type":    "bcc",
         "miller_index":    [1,1,2],
         "displace_direction":  [1,1,1],
         "supercell_size":   [1,1,5],

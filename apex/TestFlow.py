@@ -7,10 +7,10 @@ class TestFlow(ABC):
     """
     Constructor
     """
-    def __init__(self, flow_info):
-        self.flow_type = flow_info['flow_type']
-        self.relax_param = flow_info['relax_param']
-        self.props_param = flow_info['props_param']
+    def __init__(self, flow_type, relax_param, props_param):
+        self.flow_type = flow_type
+        self.relax_param = relax_param
+        self.props_param = props_param
 
     @abstractmethod
     def init_steps(self):
