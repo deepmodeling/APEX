@@ -340,7 +340,7 @@ class Gamma(Property):
     def __displace_slab_generator(self, slab, disp_vector):
         # generator of displaced slab structures
         yield slab.copy()
-        for ii in list(range(self.n_steps)):
+        for _ in list(range(self.n_steps)):
             frac_disp = 1 / self.n_steps
             unit_vector = frac_disp * np.array(disp_vector)
             # return list of atoms number to be displaced which above 0.5 z
