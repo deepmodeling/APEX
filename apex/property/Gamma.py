@@ -189,9 +189,9 @@ class Gamma(Property):
                 print(
                     "we now only support gamma line calculation for BCC FCC and HCP metals"
                 )
-                print(
-                    f"supported slip systems are:\n{SlabSlipSystem.hint_string()}"
-                )
+                #print(
+                #    f"supported slip systems are:\n{SlabSlipSystem.hint_string()}"
+                #)
 
                 if self.inter_param["type"] == "abacus":
                     stru = dpdata.System(equi_contcar, fmt="stru")
@@ -218,12 +218,14 @@ class Gamma(Property):
                 relax_c = ss.lattice.c
                 # gen initial slab
                 if self.structure_type in ['bcc', 'fcc', 'hcp']:
-                    plane_miller, x_miller_index, xy_miller_index, slip_len_frac = self.__return_slip_system_millers()
+                    (plane_miller, x_miller_index,
+                     xy_miller_index, frac_slip_vec) = self.__return_slip_system_millers()
 
                     slab = self.__gen_slab_pmg(ss, plane_miller, x_miller_index,
                                                xy_miller_index, is_reorient_slab=True)
                 else:
-                    raise RuntimeError(f'unsupported crystal structure for Gamma line function: {self.structure_type}')
+                    raise RuntimeError(f'unsupported crystal structure '
+                                       f'for Gamma line function: {self.structure_type}')
 
                 os.chdir(path_to_work)
                 if os.path.isfile(POSCAR):
@@ -234,11 +236,13 @@ class Gamma(Property):
                 #           task_poscar = os.path.join(output, 'POSCAR')
                 count = 0
                 # define slip vector
-                slip_len = slip_len_frac * relax_a
-                self.displace_vector = (slip_len, 0, 0)
+                try:
+                    frac_slip_vec = np.array([frac_slip_vec[0], frac_slip_vec[1], 0]) * relax_a
+                except TypeError or IndexError:
+                    raise RuntimeError('A list array with minimal length of 2 should be input as a slip vector')
                 # get displaced structure
                 for obtained_slab in self.__displace_slab_generator(slab,
-                                                                    disp_vector=self.displace_vector,
+                                                                    disp_vector=frac_slip_vec,
                                                                     is_frac=False):
                     output_task = os.path.join(path_to_work, "task.%06d" % count)
                     os.makedirs(output_task, exist_ok=True)
@@ -291,25 +295,25 @@ class Gamma(Property):
 
         # get user input slip parameter for specific structure
         self.plane_miller = self.parameter.get("plane_miller", None)
-        self.displace_direction = self.parameter.get("slip_direction", None)
-        self.frac_slip_len = self.parameter.get("frac_slip_length", None)
+        self.primary_direction = self.parameter.get("primary_direction", None)
+        self.frac_slip_vector = self.parameter.get("plane_slip_vector", None)
         type_param = self.parameter.get(self.structure_type, None)
         if type_param:
             self.plane_miller = type_param.get("plane_miller", None)
-            self.displace_direction = type_param.get("slip_direction", None)
-            self.frac_slip_len = type_param.get("frac_slip_length", None)
-        if not [self.plane_miller or self.displace_direction]:
+            self.primary_direction = type_param.get("primary_direction", None)
+            self.frac_slip_vector = type_param.get("plane_slip_vector", None)
+        if not [self.plane_miller or self.primary_direction]:
             raise RuntimeError(f'fail to get slip plane and direction of '
                                f'{self.structure_type} structure from input json file')
 
         # get search key string
         plane_str = ''.join([str(i) for i in self.plane_miller])
-        slip_str = ''.join([str(i) for i in self.displace_direction])
+        slip_str = ''.join([str(i) for i in self.primary_direction])
         combined_key = 'x'.join([plane_str, slip_str])
 
         # check and get slip miller index info
         try:
-            plane_miller, x_miller, xy_miller, frac_slip_len = system[combined_key].values()
+            plane_miller, x_miller, xy_miller, frac_slip_vector = system[combined_key].values()
         except KeyError:
             raise KeyError(
                 f"Unsupported input combination of miller index and displacement direction:"
@@ -317,10 +321,10 @@ class Gamma(Property):
                 f"Currently support following slip plane and direction:\n" + SlabSlipSystem.hint_string()
             )
 
-        if self.frac_slip_len:
-            frac_slip_len = self.frac_slip_len
+        if self.frac_slip_vector:
+            frac_slip_vector = self.frac_slip_vector
 
-        return plane_miller, x_miller, xy_miller, frac_slip_len
+        return plane_miller, x_miller, xy_miller, frac_slip_vector
 
     def __gen_slab_pmg(self, structure, plane_miller,
                        x_miller_index, xy_miller_index,
@@ -360,7 +364,7 @@ class Gamma(Property):
                             coords=slab.frac_coords, species=slab.species)
 
        # Order the atoms in the lattice in the increasing order of the third lattice direction
-       n_atoms_slab = len(slab.frac_coords)
+       #n_atoms_slab = len(slab.frac_coords)
        order = zip(slab.frac_coords, slab.species)
        c_order = sorted(order, key=lambda x: x[0][2])
        sorted_frac_coords = []
@@ -372,9 +376,9 @@ class Gamma(Property):
        slab = Structure(lattice=slab_lattice, coords=sorted_frac_coords, species=sorted_species)
 
        # Slab area
-       slab_area = np.linalg.norm(np.cross(slab.lattice.matrix[0], slab.lattice.matrix[1]))
+       #slab_area = np.linalg.norm(np.cross(slab.lattice.matrix[0], slab.lattice.matrix[1]))
 
-       slab.make_supercell(scaling_matrix=[self.supercell_size[0],self.supercell_size[1],1])
+       slab.make_supercell(scaling_matrix=[self.supercell_size[0], self.supercell_size[1], 1])
        return slab
 
     def __displace_slab_generator(self, slab, disp_vector,

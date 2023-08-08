@@ -246,11 +246,11 @@ class TestABACUS(unittest.TestCase):
         property = {
             "type":            "gamma",
             "plane_miller":    [0,0,1],
-            "slip_direction":  [1,0,0],
+            "primary_direction":  [1,0,0],
             "hcp": {
                     "plane_miller":    [0,0,0,1],
-                    "slip_direction":  [2,-1,-1,0],
-                    "frac_slip_length": 1
+                    "primary_direction":  [2,-1,-1,0],
+                    "plane_slip_vector": [1, 0]
                     },
             "supercell_size":   [1,1,10],
             "min_vacuum_size": 10,

@@ -12,6 +12,7 @@
     - [3.1. Input Files Preperation](#31-input-files-preperation)
       - [3.1.1. Global Setting](#311-global-setting)
       - [3.1.2. Calculation Parameters](#312-calculation-parameters)
+        - [3.1.2.1. Gamma Line Settings](#3121-gamma-line-settings)
     - [3.2. Submittion Command](#32-submittion-command)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
@@ -22,7 +23,7 @@
 
 APEX adopts the functionality of the second-generation alloy properties calculations and is developed utilizing the [dflow](https://github.com/deepmodeling/dflow) framework. By integrating the benefits of cloud-native workflows, APEX streamlines the intricate procedure of automatically testing various configurations and properties. Owing to its cloud-native characteristic, APEX provides users with a more intuitive and user-friendly interaction, enhancing the overall user experience by eliminating concerns related to process control, task scheduling, observability, and disaster tolerance.
 
-The comprehensive architecture of APEX is illustrated as follows:
+The comprehensive architecture of APEX is demonstrated below:
 
 <div>
     <img src="./docs/images/apex_demo.png" alt="Fig1" style="zoom: 35%;">
@@ -44,7 +45,7 @@ APEX currently offers computation methods for the following alloy properties:
 * Vacancy formation energy
 * Generalized stacking fault energy (Gamma line)
 
-Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dynamics simulations, and **VASP** and **ABACUS** for first-principles calculations. For information on extending these functions, please refer to the [Extensibility](#5-extensibility) section.
+Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dynamics simulations, and **VASP** and **ABACUS** for first-principles calculations.
 
 ## 2. Easy Install
 Easy install by
@@ -102,13 +103,13 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | cpu_scass_type | String | None | CPU node type on Bohrium to run the first-principle jobs |
   | gpu_scass_type | String | None | GPU node type on Bohrium to run LAMMPS jobs |
 
-Please refer to the [User scenario examples](#4-Userscenarioexamples) section for various instances of `global.json` usage in different situations.
+Please refer to the [Quick Start](#4-quick-start) section for various instances of `global.json` usage in different situations.
 
 #### 3.1.2. Calculation Parameters
 The method for indicating parameters in alloy property calculations is akin to the previous `dpgen.autotest` approach. There are **three** categories of JSON files that determine the parameters to be passed to APEX, based on their contents. Users have the flexibility to assign any name to these files.
 
 Categories calculation parameter files:
-| Type | File format | Dict contained | Usage |
+| Type | File format | Dictionary contained | Usage |
 | :------------ | ---- | ----- | ------------------- |
 | Relaxation | json | `structures`; `interaction`; `Relaxation` | For `relaxation` worflow |
 | Property | json |  `structures`; `interaction`; `Properties`  | For `property` worflow |
@@ -161,18 +162,7 @@ Below are three examples (for detailed explanations of each parameter, please re
           "shear_deform": 1e-2,
           "cal_setting":  {"etol": 0,
                           "ftol": 1e-10}
-        },
-	      {
-	        "type":               "gamma",
-	        "skip":               true,
-            "lattice_type":       "bcc",
-            "miller_index":         [1,1,2],
-            "supercell_size":       [1,1,5],
-            "displace_direction":   [1,1,1],
-            "min_vacuum_size":      0,
-	        "add_fix":              ["true","true","false"], 
-            "n_steps":             10
-	      }
+        }
         ]
   }
   ```
@@ -208,21 +198,57 @@ Below are three examples (for detailed explanations of each parameter, please re
         "shear_deform": 1e-2,
         "cal_setting":  {"etol": 0,
                         "ftol": 1e-10}
-      },
-      {
-        "type":               "gamma",
-        "skip":               true,
-          "lattice_type":       "bcc",
-          "miller_index":         [1,1,2],
-          "supercell_size":       [1,1,5],
-          "displace_direction":   [1,1,1],
-          "min_vacuum_size":      0,
-        "add_fix":              ["true","true","false"], 
-          "n_steps":             10
       }
       ]
   }
   ```
+##### 3.1.2.1. Gamma Line Settings
+  <div>
+      <img src="./docs/images/gamma_demo.png" alt="Fig2" style="zoom: 35%;">
+      <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
+  </div>
+
+The Gamma line (stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector** is then defined by unit vectors along those two directions with unit length of the relaxed lattice parameter **$a$**.
+
+APEX now support most common slip systems in respect to FCC, BCC and HCP crystal structures. Key information is listed below:
+* FCC
+  | Plane miller index | Primary direction | Secondary direction | Default slip vector |
+  | :-------- | ----- | ----- | ---- |
+  | $(001)$ | $[100]$ | $[010]$ | $(a,0)$ |
+  | $(110)$ | $[\bar{1}10]$ | $[001]$ | $(\sqrt{2}a,0)$ |
+  | $(111)$ | $[11\bar{2}]$ | $[\bar{1}10]$ | $(\sqrt{6}a,0)$ |
+  | $(111)$ | $[\bar{1}\bar{1}2]$ | $[1\bar{1}0]$ | $(\sqrt{6}a,0)$ |
+  | $(111)$ | $[\bar{1}10]$ | $[1\bar{1}\bar{1}2]$ | $(\sqrt{2}a,0)$ |
+  | $(111)$ | $[1\bar{1}0]$ | $[11\bar{2}]$ | $(\sqrt{2}a,0)$ |
+
+* BCC
+  | Plane miller index | Primary direction | Secondary direction | Default slip vector |
+  | :-------- | ----- | ----- | ---- |
+  | $(001)$ | $[100]$ | $[010]$ | $(a, 0)$ |
+  | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $(\frac{\sqrt{2}}{2}a,0)$ |
+  | $(110)$ | $[\bar{1}11]$ | $[001]$ | $(\frac{\sqrt{3}}{2}a,0)$ |
+  | $(110)$ | $[1\bar{1}\bar{1}]$ | $[00\bar{1}]$ | $(\frac{\sqrt{3}}{2}a, 0)$ |
+  | $(112)$ | $[11\bar{1}]$ | $[\bar{1}10]$ | $(\frac{\sqrt{3}}{2}a,0)$ |
+  | $(112)$ | $[\bar{1}\bar{1}1]$ | $[1\bar{1}0]$ | $(\frac{\sqrt{3}}{2}a,0)$ |
+  | $(123)$ | $[11\bar{1}]$ | $[\bar{2}10]$ | $(\frac{\sqrt{3}}{2}a,0)$ |
+  | $(123)$ | $[\bar{1}\bar{1}1]$ | $[2\bar{1}0]$ | $(\frac{\sqrt{3}}{2}a,0)$ |
+
+* HCP (Bravais lattice)
+  | Plane miller index | Primary direction | Secondary direction | Default slip vector |
+  | :-------- | ----- | ----- | ---- |
+  | $(0001)$ | $[2\bar{1}\bar{1}0]$ | $[01\bar{1}0]$ |  |
+  | $(0001)$ | $[1\bar{1}00]$ | $[01\bar{1}0]$ |  |
+  | $(0001)$ | $[10\bar{1}0]$ | $[01\bar{1}0]$ |  |
+  | $(01\bar{1}0)$ | $[\bar{2}110]$ | $[0001]$ |  |
+  | $(01\bar{1}0)$ | $[\bar{2}113]$ | $[0001]$ |  |
+  | $(\bar{1}2\bar{1}0)$ | $[\bar{1}010]$ | $[0001]$ |  |
+  | $(01\bar{1}1)$ | $[\bar{2}110]$ | $[1\bar{2}13]$ |  |
+  | $(01\bar{1}1)$ | $[1\bar{2}13]$ | $[2\bar{1}\bar{1}0]$ |  |
+  | $(01\bar{1}1)$ | $[0\bar{1}12]$ | $[1\bar{2}13]$ |  |
+  | $(\bar{1}2\bar{1}2)$ | $[\bar{1}010]$ | $[1\bar{2}13]$ |  |
+  | $(\bar{1}2\bar{1}2)$ | $[1\bar{2}13]$ | $[10\bar{1}0]$ |  |
+
+
 
 ### 3.2. Submittion Command
 APEX will execute a specific workflow upon each invocation of the command in the format: `apex [file_names] [--optional_argument]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by the user. Additionally, users can specify the workflow type through an optional argument. The following are command examples for submitting three types of workflows:
