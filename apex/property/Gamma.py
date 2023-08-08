@@ -223,6 +223,8 @@ class Gamma(Property):
 
                     slab = self.__gen_slab_pmg(ss, plane_miller, x_miller_index,
                                                xy_miller_index, is_reorient_slab=True)
+                    self.atom_num = len(slab.sites)
+
                 else:
                     raise RuntimeError(f'unsupported crystal structure '
                                        f'for Gamma line function: {self.structure_type}')

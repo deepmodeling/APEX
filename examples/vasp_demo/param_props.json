@@ -45,7 +45,7 @@
                 "plane_slip_vector": [1, 0]
                 },
         "supercell_size":   [1,1,10],
-        "min_vacuum_size": 10,
+        "min_vacuum_size": 6,
         "add_fix": ["true","true","false"],
         "n_steps":         10
         }
