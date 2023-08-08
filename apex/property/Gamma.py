@@ -5,9 +5,9 @@ import re
 
 import dpdata
 import numpy as np
+from ase.lattice.cubic import SimpleCubic as sc
 from ase.lattice.cubic import BodyCenteredCubic as bcc
 from ase.lattice.cubic import FaceCenteredCubic as fcc
-from ase.lattice.hexagonal import HexagonalClosedPacked as hcp
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
@@ -18,6 +18,9 @@ import apex.calculator.lib.vasp as vasp
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro
+from apex.property.Structure import StructureInfo
+from apex.property.lib.slab_orientation import SlabSlipSystem
+from apex.property.lib.trans_tools import trans_mat_basis
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -32,12 +35,10 @@ class Gamma(Property):
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                self.miller_index = parameter["miller_index"]
-                self.displace_direction = parameter["displace_direction"]
-                self.lattice_type = parameter["lattice_type"]
+                self.parameter = parameter
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
-                parameter["min_vacuum_size"] = parameter.get("min_vacuum_size", 20)
+                parameter["min_vacuum_size"] = parameter.get("min_vacuum_size", 0)
                 self.min_vacuum_size = parameter["min_vacuum_size"]
                 parameter["add_fix"] = parameter.get(
                     "add_fix", ["true", "true", "false"]
@@ -186,10 +187,10 @@ class Gamma(Property):
                 if not os.path.exists(equi_contcar):
                     raise RuntimeError("please do relaxation first")
                 print(
-                    "we now only support gamma line calculation for BCC and FCC metals"
+                    "we now only support gamma line calculation for BCC FCC and HCP metals"
                 )
                 print(
-                    "supported slip systems are planes/direction: 100/010, 110/111, 111/110, 111/112, 112/111, and 123/111"
+                    f"supported slip systems are:\n{SlabSlipSystem.hint_string()}"
                 )
 
                 if self.inter_param["type"] == "abacus":
@@ -203,6 +204,10 @@ class Gamma(Property):
                     # read structure from relaxed CONTCAR
                     ss = Structure.from_file(equi_contcar)
 
+                # get structure type
+                st = StructureInfo(ss)
+                self.structure_type = st.lattice_structure
+
                 # rewrite new CONTCAR with direct coords
                 os.chdir(path_to_equi)
                 ss.to("CONTCAR.direct", "POSCAR")
@@ -212,14 +217,13 @@ class Gamma(Property):
                 relax_b = ss.lattice.b
                 relax_c = ss.lattice.c
                 # gen initial slab
-                slab = self.__gen_slab_ase(
-                    symbol=ptypes[0], lat_param=[relax_a, relax_b, relax_c]
-                )
-                # define displace vectors
-                disp_vector = (1 / self.supercell_size[0], 0, 0)
-                # displace structure
-                all_slabs = self.__displace_slab(slab, disp_vector=disp_vector)
-                self.atom_num = len(all_slabs[0].sites)
+                if self.structure_type in ['bcc', 'fcc', 'hcp']:
+                    plane_miller, x_miller_index, xy_miller_index, slip_len_frac = self.__return_slip_system_millers()
+
+                    slab = self.__gen_slab_pmg(ss, plane_miller, x_miller_index,
+                                               xy_miller_index, is_reorient_slab=True)
+                else:
+                    raise RuntimeError(f'unsupported crystal structure for Gamma line function: {self.structure_type}')
 
                 os.chdir(path_to_work)
                 if os.path.isfile(POSCAR):
@@ -228,8 +232,15 @@ class Gamma(Property):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
-                for ii in range(len(all_slabs)):
-                    output_task = os.path.join(path_to_work, "task.%06d" % ii)
+                count = 0
+                # define slip vector
+                slip_len = slip_len_frac * relax_a
+                self.displace_vector = (slip_len, 0, 0)
+                # get displaced structure
+                for obtained_slab in self.__displace_slab_generator(slab,
+                                                                    disp_vector=self.displace_vector,
+                                                                    is_frac=False):
+                    output_task = os.path.join(path_to_work, "task.%06d" % count)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
                     for jj in ["INCAR", "POTCAR", POSCAR, "conf.lmp", "in.lammps"]:
@@ -238,12 +249,12 @@ class Gamma(Property):
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
                     print(
-                        "# %03d generate " % ii,
+                        "# %03d generate " % count,
                         output_task,
-                        " \t %d atoms" % self.atom_num,
+                        " \t %d atoms" % len(obtained_slab.sites)
                     )
                     # make confs
-                    all_slabs[ii].to("POSCAR.tmp", "POSCAR")
+                    obtained_slab.to("POSCAR.tmp", "POSCAR")
                     vasp.regulate_poscar("POSCAR.tmp", "POSCAR")
                     vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
                     if self.inter_param["type"] == "abacus":
@@ -251,7 +262,8 @@ class Gamma(Property):
                         os.remove("POSCAR")
                     # vasp.perturb_xz('POSCAR', 'POSCAR', self.pert_xz)
                     # record miller
-                    dumpfn(self.miller_index, "miller.json")
+                    dumpfn(self.plane_miller, "miller.json")
+                    count += 1
                 os.chdir(cwd)
 
         return task_list
@@ -266,87 +278,121 @@ class Gamma(Property):
         for site in slab:
             site.position[2] += disp_length
 
-    def return_direction(self):
-        miller_str = ""
-        direct_str = ""
-        for ii in range(len(self.miller_index)):
-            miller_str += str(self.miller_index[ii])
-        for ii in range(len(self.displace_direction)):
-            direct_str += str(self.displace_direction[ii])
-        search_key = miller_str + "/" + direct_str
-        # define specific cell vectors
-        dict_directions = {
-            "100/010": [(0, 1, 0), (0, 0, 1), (1, 0, 0)],
-            "110/111": [(-1, 1, 1), (1, -1, 1), (1, 1, 0)],
-            "111/110": [(-1, 1, 0), (-1, -1, 2), (1, 1, 1)],
-            "111/112": [(1, 1, -2), (-1, 1, 0), (1, 1, 1)],
-            "112/111": [(-1, -1, 1), (1, -1, 0), (1, 1, 2)],
-            "123/111": [(-1, -1, 1), (2, -1, 0), (1, 2, 3)],
-        }
+    def __return_slip_system_millers(self):
+        dict_directions = SlabSlipSystem.atomic_system_dict()
+        # check if support relaxed structure and get specific pre-defined direction dict
         try:
-            directions = dict_directions[search_key]
+            system = dict_directions[self.structure_type]
         except KeyError:
-            raise RuntimeError(
-                f"Unsupported input combination of miller index and displacement direction: "
-                f"{miller_str}:{direct_str}"
+            raise KeyError(
+                f"{self.structure_type} structure is not supported for stacking fault (Gamma) calculation\n"
+                f"Currently support: {' '.join(dict_directions.keys())}"
             )
-        return directions
 
-    def __gen_slab_ase(self, symbol, lat_param):
-        if not self.lattice_type:
-            raise RuntimeError("Error! Please provide the input lattice type!")
-        elif self.lattice_type == "bcc":
-            slab_ase = bcc(
-                symbol=symbol,
-                size=self.supercell_size,
-                latticeconstant=lat_param[0],
-                directions=self.return_direction(),
+        # get user input slip parameter for specific structure
+        self.plane_miller = self.parameter.get("plane_miller", None)
+        self.displace_direction = self.parameter.get("slip_direction", None)
+        self.frac_slip_len = self.parameter.get("frac_slip_length", None)
+        type_param = self.parameter.get(self.structure_type, None)
+        if type_param:
+            self.plane_miller = type_param.get("plane_miller", None)
+            self.displace_direction = type_param.get("slip_direction", None)
+            self.frac_slip_len = type_param.get("frac_slip_length", None)
+        if not [self.plane_miller or self.displace_direction]:
+            raise RuntimeError(f'fail to get slip plane and direction of '
+                               f'{self.structure_type} structure from input json file')
+
+        # get search key string
+        plane_str = ''.join([str(i) for i in self.plane_miller])
+        slip_str = ''.join([str(i) for i in self.displace_direction])
+        combined_key = 'x'.join([plane_str, slip_str])
+
+        # check and get slip miller index info
+        try:
+            plane_miller, x_miller, xy_miller, frac_slip_len = system[combined_key].values()
+        except KeyError:
+            raise KeyError(
+                f"Unsupported input combination of miller index and displacement direction:"
+                f"{plane_str}:{slip_str}"
+                f"Currently support following slip plane and direction:\n" + SlabSlipSystem.hint_string()
             )
-        elif self.lattice_type == "fcc":
-            slab_ase = fcc(
-                symbol=symbol,
-                size=self.supercell_size,
-                latticeconstant=lat_param[0],
-                directions=self.return_direction(),
-            )
-        elif self.lattice_type == "hcp":
-            pass
-        else:
-            raise RuntimeError(f"unsupported lattice type: {self.lattice_type}")
-        self.centralize_slab(slab_ase)
-        if self.min_vacuum_size > 0:
-            slab_ase.center(vacuum=self.min_vacuum_size / 2, axis=2)
-        slab_pymatgen = AseAtomsAdaptor.get_structure(slab_ase)
-        return slab_pymatgen
 
-    # leave this function to later use
-    # def __gen_slab_pmg(self,
-    #                   pmg_struc):
-    #    slabGen = SlabGenerator(pmg_struc, miller_index=self.miller_index,
-    #                            min_slab_size=self.supercell_size[2],
-    #                            min_vacuum_size=self.min_vacuum_size,
-    #                            center_slab=True, in_unit_planes=True, lll_reduce=False,
-    #                            primitive=True, max_normal_search=5)
-    #    slab_pmg = slabGen.get_slab()
-    #    slab_pmg.make_supercell(scaling_matrix=[self.supercell_size[0],self.supercell_size[1],1])
-    #    return slab_pmg
+        if self.frac_slip_len:
+            frac_slip_len = self.frac_slip_len
 
-    def __displace_slab(self, slab, disp_vector):
-        # return a list of displaced slab objects
-        all_slabs = [slab.copy()]
-        for ii in list(range(self.n_steps)):
+        return plane_miller, x_miller, xy_miller, frac_slip_len
+
+    def __gen_slab_pmg(self, structure, plane_miller,
+                       x_miller_index, xy_miller_index,
+                       is_reorient_slab=False):
+       slabGen = SlabGenerator(structure, miller_index=plane_miller,
+                               min_slab_size=self.supercell_size[2],
+                               min_vacuum_size=self.min_vacuum_size,
+                               center_slab=True, in_unit_planes=True,
+                               lll_reduce=True, reorient_lattice=False,
+                               primitive=False)
+       slabs_pmg = slabGen.get_slabs(ftol=0.001)
+       slab = [s for s in slabs_pmg if s.miller_index == tuple(plane_miller)][0]
+       # If is_reorient_slab is True, reorient the slab such that x direction
+       # is along x_miller_index and z direction is along the normal to the slab
+       if is_reorient_slab:
+           # Express x_miller_index and xy_miller_index
+           # in the conventional standard cartesian coordinate system
+           l2_normalize_1d_np_vec = lambda v: v / np.linalg.norm(v, 2)
+           x_cartesian = np.zeros(3)
+           xy_cartesian = np.zeros(3)
+           for idx in range(0, 3):
+               x_cartesian = x_cartesian + x_miller_index[idx] * structure.lattice.matrix[idx]
+               xy_cartesian = xy_cartesian + xy_miller_index[idx] * structure.lattice.matrix[idx]
+
+           x_cartesian_unit_vector = l2_normalize_1d_np_vec(x_cartesian)
+           z_cartesian_unit_vector = l2_normalize_1d_np_vec(np.cross(x_cartesian,
+                                                                     xy_cartesian))
+           y_cartesian_unit_vector = l2_normalize_1d_np_vec(np.cross(z_cartesian_unit_vector,
+                                                                     x_cartesian_unit_vector))
+           reoriented_basis = np.array([x_cartesian_unit_vector,
+                                        y_cartesian_unit_vector,
+                                        z_cartesian_unit_vector])
+           # Transform the lattice vectors of the slab
+           Q = trans_mat_basis(reoriented_basis)
+           reoriented_lattice_vectors = [Q.dot(v) for v in slab.lattice.matrix]
+           slab = Structure(lattice=np.matrix(reoriented_lattice_vectors),
+                            coords=slab.frac_coords, species=slab.species)
+
+       # Order the atoms in the lattice in the increasing order of the third lattice direction
+       n_atoms_slab = len(slab.frac_coords)
+       order = zip(slab.frac_coords, slab.species)
+       c_order = sorted(order, key=lambda x: x[0][2])
+       sorted_frac_coords = []
+       sorted_species = []
+       for (frac_coord, species) in c_order:
+           sorted_frac_coords.append(frac_coord)
+           sorted_species.append(species)
+       slab_lattice = slab.lattice
+       slab = Structure(lattice=slab_lattice, coords=sorted_frac_coords, species=sorted_species)
+
+       # Slab area
+       slab_area = np.linalg.norm(np.cross(slab.lattice.matrix[0], slab.lattice.matrix[1]))
+
+       slab.make_supercell(scaling_matrix=[self.supercell_size[0],self.supercell_size[1],1])
+       return slab
+
+    def __displace_slab_generator(self, slab, disp_vector,
+                                  is_frac=True, to_unit_cell=True):
+        # generator of displaced slab structures
+        yield slab.copy()
+        # return list of atoms number to be displaced which above 0.5 z
+        disp_atoms_list = np.where(slab.frac_coords[:, 2] > 0.5)[0]
+        for _ in list(range(self.n_steps)):
             frac_disp = 1 / self.n_steps
             unit_vector = frac_disp * np.array(disp_vector)
-            # return list of atoms number to be displaced which above 0.5 z
-            disp_atoms_list = np.where(slab.frac_coords[:, 2] > 0.5)[0]
             slab.translate_sites(
                 indices=disp_atoms_list,
                 vector=unit_vector,
-                frac_coords=True,
-                to_unit_cell=True,
+                frac_coords=is_frac,
+                to_unit_cell=to_unit_cell,
             )
-            all_slabs.append(slab.copy())
-        return all_slabs
+            yield slab.copy()
 
     def __poscar_fix(self, poscar) -> None:
         # add position fix condition of x and y in POSCAR
@@ -439,11 +485,13 @@ class Gamma(Property):
         ptr_data = os.path.dirname(output_file) + "\n"
 
         if not self.reprod:
+            """
             ptr_data += (
                 str(tuple(self.miller_index))
                 + " plane along "
                 + str(self.displace_direction)
             )
+            """
             ptr_data += "No_task: \tDisplacement \tStacking_Fault_E(J/m^2) EpA(eV) slab_equi_EpA(eV)\n"
             all_tasks.sort()
             task_result_slab_equi = loadfn(

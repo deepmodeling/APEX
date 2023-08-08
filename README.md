@@ -293,7 +293,7 @@ The most efficient method for submitting an APEX workflow is through the preconf
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/dpgen:0.11.0",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-demo:v0.0.2",
     "dpmd_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
     "lammps_run_command":"lmp -in in.lammps",
     "batch_type": "Bohrium",

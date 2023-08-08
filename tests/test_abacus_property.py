@@ -79,6 +79,8 @@ class TestABACUS(unittest.TestCase):
             shutil.rmtree("confs/fcc-Al/interstitial_00")
         if os.path.exists("confs/fcc-Al/surface_00"):
             shutil.rmtree("confs/fcc-Al/surface_00")
+        if os.path.exists("confs/fcc-Al/gamma_00"):
+            shutil.rmtree("confs/fcc-Al/gamma_00")
 
     def test_make_property(self):
         property = {"type": "eos", "vol_start": 0.85, "vol_end": 1.15, "vol_step": 0.01}
@@ -188,7 +190,7 @@ class TestABACUS(unittest.TestCase):
             self.assertTrue(natom1 == natom2 + 1)
 
     def test_make_property_interstitial(self):
-        property = {"type": "interstitial", "supercell": [1, 1, 1], "insert_ele": ["H"]}
+        property = {"type": "interstitial", "supercell": [2, 2, 2], "insert_ele": ["H"]}
         self.inter_param["potcars"]["H"] = "H_ONCV_PBE-1.0.upf"
         self.inter_param["orb_files"]["H"] = "H_gga_8au_100Ry_2s1p.orb"
 
@@ -206,7 +208,10 @@ class TestABACUS(unittest.TestCase):
         stru_data = abacus_scf.get_abacus_STRU(
             os.path.realpath(os.path.join(work_path, "STRU"))
         )
-        natom1 = np.array(stru_data["atom_numbs"]).sum()
+        supercell_scale = property["supercell"][0] * \
+                          property["supercell"][1] * \
+                          property["supercell"][2]
+        natom1 = np.array(stru_data["atom_numbs"]).sum() * supercell_scale
         for ii in glob.glob(os.path.join(work_path, "task.*")):
             self.assertTrue(os.path.isfile(os.path.join(ii, "STRU")))
             stru_data = abacus_scf.get_abacus_STRU(
@@ -239,14 +244,18 @@ class TestABACUS(unittest.TestCase):
 
     def test_make_property_gamma(self):
         property = {
-            "type": "gamma",
-            "lattice_type": "fcc",
-            "miller_index": [1, 1, 1],
-            "displace_direction": [1, 1, 0],
-            "supercell_size": [1, 1, 10],
+            "type":            "gamma",
+            "plane_miller":    [0,0,1],
+            "slip_direction":  [1,0,0],
+            "hcp": {
+                    "plane_miller":    [0,0,0,1],
+                    "slip_direction":  [2,-1,-1,0],
+                    "frac_slip_length": 1
+                    },
+            "supercell_size":   [1,1,10],
             "min_vacuum_size": 10,
-            "add_fix": ["true", "true", "false"],
-            "n_steps": 20,
+            "add_fix": ["true","true","false"],
+            "n_steps":         10
         }
         work_path = os.path.join(self.conf_path, "gamma_00")
         gamma = Gamma(property, self.inter_param)

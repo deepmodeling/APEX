@@ -67,18 +67,17 @@ def parse_args():
 def run_flow(args):
     args = parse_args()
 
-    task_type, flow_info = judge_flow(args)
-    flow_type = flow_info['flow_type']
+    task_type, flow_type, relax_param, props_param = judge_flow(args)
 
     if task_type == 'abacus':
         print('Simulation via ABACUS')
-        tf = ABACUSFlow(flow_info)
+        tf = ABACUSFlow(flow_type, relax_param, props_param)
     elif task_type == 'vasp':
         print('Simulation via VASP')
-        tf = VASPFlow(flow_info)
+        tf = VASPFlow(flow_type, relax_param, props_param)
     elif task_type == 'lammps':
         print('Simulation via LAMMPS')
-        tf = LAMMPSFlow(flow_info)
+        tf = LAMMPSFlow(flow_type, relax_param, props_param)
 
     if flow_type == 'relax':
         print('Submitting relaxation workflow...')
