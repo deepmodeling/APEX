@@ -1,10 +1,10 @@
 import numpy as np
 from typing import Dict, Union, Any, Tuple
-#from dflow.python import upload_packages
+from dflow.python import upload_packages
 from apex.property.lib.trans_tools import (plane_miller_bravais_to_miller,
                                            direction_miller_bravais_to_miller)
 
-#upload_packages.append(__file__)
+upload_packages.append(__file__)
 
 
 class SlabSlipSystem(object):

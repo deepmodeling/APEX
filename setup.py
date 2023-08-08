@@ -17,7 +17,6 @@ setuptools.setup(
         "pydflow>=1.7.19",
         "pymatgen>=2023.7.17",
         'pymatgen-analysis-defects',
-        "lbg>=1.2.13",
         "dpdata>=0.2.13",
         "dpdispatcher",
         "matplotlib",
