@@ -248,6 +248,40 @@ APEX now support most common slip systems in respect to FCC, BCC and HCP crystal
   | $(\bar{1}2\bar{1}2)$ | $[\bar{1}010]$ | $[1\bar{2}13]$ |  |
   | $(\bar{1}2\bar{1}2)$ | $[1\bar{2}13]$ | $[10\bar{1}0]$ |  |
 
+The parameters related to Gamma line calculation are listed below:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | plane_miller | list[int] | None | Miller index of the target slab |
+  | primary_direction | list[int] | None | Miller index of primary direction of the slab |
+  | plane_slip_vector | list[int] | According to specific slip system as above tables show | Slip vector defined by unit vector along primary and secondary directions (unit length equals to relaxed lattice parameter $a$). Only to be specified when differs from the default value|
+  | n_steps | int | 10 | Number of steps to displace slab along the slip vector  |
+  | min_vacuum_size | int | 0 | Minimal number of vacuum layer added to the slab |
+  | supercell_size | list[int] | [1, 1, 5] | Size of generated supper cell based on slab structure |
+  | add fix | list[str] | ["true","true","false"] | If add fix position constrain along x, y and z direction during calculation |
+
+  Here is an example:
+  ```json
+  {
+    "type":            "gamma",
+    "skip":            false,
+    "plane_miller":     [0,0,1],
+    "primary_direction":  [1,0,0],
+    "fcc": {
+            "plane_miller":      [1,1,1],
+            "primary_direction": [1,1,-2],
+            },
+    "hcp": {
+            "plane_miller":      [0,0,0,1],
+            "primary_direction": [2,-1,-1,0],
+            "plane_slip_vector": [1, 1] 
+            },
+    "supercell_size":   [1,1,10],
+    "min_vacuum_size": 0,
+    "add_fix": ["true","true","false"], 
+    "n_steps":    10
+  }
+  ```
+  Note that for different types of crystal structure, user can further specify `plane_miller`, `primary_direction` and `plane_slip_vector` inside corresponding nested dictionary, where APEX will try to get those values in the first place.
 
 
 ### 3.2. Submittion Command
@@ -319,7 +353,7 @@ The most efficient method for submitting an APEX workflow is through the preconf
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-demo:v0.0.2",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
     "dpmd_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
     "lammps_run_command":"lmp -in in.lammps",
     "batch_type": "Bohrium",

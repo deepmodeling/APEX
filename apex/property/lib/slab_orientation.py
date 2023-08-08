@@ -13,15 +13,15 @@ class SlabSlipSystem(object):
             '001x100': {'plane': (0, 0, 1), 'x': (1, 0, 0), 'xy': (0, 1, 0),
                         'default_frac_slip_vector': (1, 0, 0)},
             '110x-110': {'plane': (1, 1, 0), 'x': (-1, 1, 0), 'xy': (0, 0, 1),
-                         'default_frac_slip_vector': (1, 0, 0)},
+                         'default_frac_slip_vector': (np.sqrt(2), 0, 0)},
             '111x11-2': {'plane': (1, 1, 1), 'x': (1, 1, -2), 'xy': (-1, 1, 0),
-                         'default_frac_slip_vector': (1, 0, 0)},
+                         'default_frac_slip_vector': (np.sqrt(6), 0, 0)},
             '111x-1-12': {'plane': (1, 1, 1), 'x': (-1, -1, 2), 'xy': (1, -1, 0),
-                          'default_frac_slip_vector': (1, 0, 0)},
+                          'default_frac_slip_vector': (np.sqrt(6), 0, 0)},
             '111x-110': {'plane': (1, 1, 1), 'x': (-1, 1, 0), 'xy': (-1, -1, 2),
-                         'default_frac_slip_vector': (1, 0, 0)},
+                         'default_frac_slip_vector': (np.sqrt(2), 0, 0)},
             '111x1-10': {'plane': (1, 1, 1), 'x': (1, -1, 0), 'xy': (1, 1, -2),
-                         'default_frac_slip_vector': (1, 0, 0)}
+                         'default_frac_slip_vector': (np.sqrt(2), 0, 0)}
         },
         
         'bcc': {
