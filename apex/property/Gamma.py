@@ -5,13 +5,14 @@ import re
 
 import dpdata
 import numpy as np
-from ase.lattice.cubic import SimpleCubic as sc
-from ase.lattice.cubic import BodyCenteredCubic as bcc
-from ase.lattice.cubic import FaceCenteredCubic as fcc
+#from ase.lattice.cubic import SimpleCubic as sc
+#from ase.lattice.cubic import BodyCenteredCubic as bcc
+#from ase.lattice.cubic import FaceCenteredCubic as fcc
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
-from pymatgen.io.ase import AseAtomsAdaptor
+#from pymatgen.io.ase import AseAtomsAdaptor
+from pymatgen.analysis.diffraction.tem import TEMCalculator
 
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
@@ -186,9 +187,7 @@ class Gamma(Property):
                 equi_contcar = os.path.join(path_to_equi, CONTCAR)
                 if not os.path.exists(equi_contcar):
                     raise RuntimeError("please do relaxation first")
-                print(
-                    "we now only support gamma line calculation for BCC FCC and HCP metals"
-                )
+                #print("we now only support gamma line calculation for BCC FCC and HCP metals")
                 #print(
                 #    f"supported slip systems are:\n{SlabSlipSystem.hint_string()}"
                 #)
@@ -207,6 +206,7 @@ class Gamma(Property):
                 # get structure type
                 st = StructureInfo(ss)
                 self.structure_type = st.lattice_structure
+                self.conv_std_structure = st.conventional_structure
 
                 # rewrite new CONTCAR with direct coords
                 os.chdir(path_to_equi)
@@ -331,17 +331,24 @@ class Gamma(Property):
     def __gen_slab_pmg(self, structure, plane_miller,
                        x_miller_index, xy_miller_index,
                        is_reorient_slab=False):
-       slabGen = SlabGenerator(structure, miller_index=plane_miller,
-                               min_slab_size=self.supercell_size[2],
+        # Get slab inter-plane distance
+        tem_calc_obj = TEMCalculator()
+        spacing_dict = tem_calc_obj.get_interplanar_spacings(self.conv_std_structure,
+                                                             [plane_miller])
+        slab_size = spacing_dict[plane_miller] * self.supercell_size[2]
+
+        # Generate slab via Pymatgen
+        slabGen = SlabGenerator(structure, miller_index=plane_miller,
+                               min_slab_size=slab_size,
                                min_vacuum_size=self.min_vacuum_size,
-                               center_slab=True, in_unit_planes=True,
+                               center_slab=True, in_unit_planes=False,
                                lll_reduce=True, reorient_lattice=False,
                                primitive=False)
-       slabs_pmg = slabGen.get_slabs(ftol=0.001)
-       slab = [s for s in slabs_pmg if s.miller_index == tuple(plane_miller)][0]
-       # If is_reorient_slab is True, reorient the slab such that x direction
-       # is along x_miller_index and z direction is along the normal to the slab
-       if is_reorient_slab:
+        slabs_pmg = slabGen.get_slabs(ftol=0.001)
+        slab = [s for s in slabs_pmg if s.miller_index == tuple(plane_miller)][0]
+        # If is_reorient_slab is True, reorient the slab such that x direction
+        # is along x_miller_index and z direction is along the normal to the slab
+        if is_reorient_slab:
            # Express x_miller_index and xy_miller_index
            # in the conventional standard cartesian coordinate system
            l2_normalize_1d_np_vec = lambda v: v / np.linalg.norm(v, 2)
@@ -365,23 +372,21 @@ class Gamma(Property):
            slab = Structure(lattice=np.matrix(reoriented_lattice_vectors),
                             coords=slab.frac_coords, species=slab.species)
 
-       # Order the atoms in the lattice in the increasing order of the third lattice direction
-       #n_atoms_slab = len(slab.frac_coords)
-       order = zip(slab.frac_coords, slab.species)
-       c_order = sorted(order, key=lambda x: x[0][2])
-       sorted_frac_coords = []
-       sorted_species = []
-       for (frac_coord, species) in c_order:
+        # Order the atoms in the lattice in the increasing order of the third lattice direction
+        #n_atoms_slab = len(slab.frac_coords)
+        order = zip(slab.frac_coords, slab.species)
+        c_order = sorted(order, key=lambda x: x[0][2])
+        sorted_frac_coords = []
+        sorted_species = []
+        for (frac_coord, species) in c_order:
            sorted_frac_coords.append(frac_coord)
            sorted_species.append(species)
-       slab_lattice = slab.lattice
-       slab = Structure(lattice=slab_lattice, coords=sorted_frac_coords, species=sorted_species)
-
-       # Slab area
-       #slab_area = np.linalg.norm(np.cross(slab.lattice.matrix[0], slab.lattice.matrix[1]))
-
-       slab.make_supercell(scaling_matrix=[self.supercell_size[0], self.supercell_size[1], 1])
-       return slab
+        slab_lattice = slab.lattice
+        slab = Structure(lattice=slab_lattice, coords=sorted_frac_coords, species=sorted_species)
+        # Slab area
+        #slab_area = np.linalg.norm(np.cross(slab.lattice.matrix[0], slab.lattice.matrix[1]))
+        slab.make_supercell(scaling_matrix=[self.supercell_size[0], self.supercell_size[1], 1])
+        return slab
 
     def __displace_slab_generator(self, slab, disp_vector,
                                   is_frac=True, to_unit_cell=True):
