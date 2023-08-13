@@ -280,9 +280,9 @@ class Gamma(Property):
         self.slip_length = self.parameter.get("slip_length", None)
         type_param = self.parameter.get(self.structure_type, None)
         if type_param:
-            self.plane_miller = self.parameter.get("plane_miller", None)
-            self.slip_direction = self.parameter.get("slip_direction", None)
-            self.slip_length = self.parameter.get("slip_length", None)
+            self.plane_miller = type_param.get("plane_miller", None)
+            self.slip_direction = type_param.get("slip_direction", None)
+            self.slip_length = type_param.get("slip_length", None)
         if not [self.plane_miller or self.slip_direction]:
             raise RuntimeError(f'fail to get slip plane and slip direction of '
                                f'{self.structure_type} structure from input json file')
