@@ -44,14 +44,13 @@ class TestGamma(unittest.TestCase):
                 {
                     "type": "gamma",
                     "plane_miller": [0, 0, 1],
-                    "primary_direction": [1, 0, 0],
+                    "slip_direction": [1, 0, 0],
                     "hcp": {
                         "plane_miller": [0, 0, 0, 1],
-                        "primary_direction": [2, -1, -1, 0],
-                        "plane_slip_vector": [1, 0]
+                        "slip_direction": [2, -1, -1, 0],
                     },
                     "supercell_size": [1, 1, 10],
-                    "min_vacuum_size": 10,
+                    "vacuum_size": 10,
                     "add_fix": ["true", "true", "false"],
                     "n_steps": 10
                 }
