@@ -212,15 +212,29 @@ class Gamma(Property):
                 st = StructureInfo(ss)
                 self.structure_type = st.lattice_structure
                 self.conv_std_structure = st.conventional_structure
-
+                '''
                 # rewrite new CONTCAR with direct coords
                 os.chdir(path_to_equi)
                 ss.to("CONTCAR.direct", "POSCAR")
                 # re-read new CONTCAR
                 ss = Structure.from_file("CONTCAR.direct")
+                '''
                 relax_a = ss.lattice.a
                 relax_b = ss.lattice.b
                 relax_c = ss.lattice.c
+                # get user input slip parameter for specific structure
+                type_param = self.parameter.get(self.structure_type, None)
+                if type_param:
+                    self.plane_miller = type_param.get("plane_miller", self.plane_miller)
+                    self.slip_direction = type_param.get("slip_direction", self.slip_direction)
+                    self.slip_length = type_param.get("slip_length", self.slip_length)
+                    self.supercell_size = type_param.get("supercell_size", self.supercell_size)
+                    self.vacuum_size = type_param.get("vacuum_size", self.supercell_size)
+                    self.add_fix = type_param.get("add_fix", self.add_fix)
+                    self.n_steps = type_param.get("n_steps", self.n_steps)
+                if not (self.plane_miller and self.slip_direction):
+                    raise RuntimeError(f'fail to get slip plane and slip direction of '
+                                       f'{self.structure_type} structure from input json file')
                 # gen initial slab
                 if self.structure_type in ['bcc', 'fcc', 'hcp']:
                     (plane_miller, slip_direction,
@@ -277,19 +291,6 @@ class Gamma(Property):
         return task_list
 
     def __convert_input_miller(self, structure):
-        # get user input slip parameter for specific structure
-        type_param = self.parameter.get(self.structure_type, None)
-        if type_param:
-            self.plane_miller = type_param.get("plane_miller", self.plane_miller)
-            self.slip_direction = type_param.get("slip_direction", self.slip_direction)
-            self.slip_length = type_param.get("slip_length", self.slip_length)
-            self.supercell_size = type_param.get("supercell_size", self.supercell_size)
-            self.vacuum_size = type_param.get("vacuum_size", self.supercell_size)
-            self.add_fix = type_param.get("add_fix", self.add_fix)
-            self.n_steps = type_param.get("n_steps", self.n_steps)
-        if not (self.plane_miller and self.slip_direction):
-            raise RuntimeError(f'fail to get slip plane and slip direction of '
-                               f'{self.structure_type} structure from input json file')
         plane_miller = tuple(self.plane_miller)
         slip_direction = tuple(self.slip_direction)
         slip_length = self.slip_length
