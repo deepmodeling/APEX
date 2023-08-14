@@ -42,7 +42,7 @@ class Gamma(Property):
                 self.parameter = parameter
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
-                parameter["min_vacuum_size"] = parameter.get("min_vacuum_size", 0)
+                parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
                 self.vacuum_size = parameter["vacuum_size"]
                 parameter["add_fix"] = parameter.get(
                     "add_fix", ["true", "true", "false"]
@@ -221,8 +221,9 @@ class Gamma(Property):
                 relax_c = ss.lattice.c
                 # gen initial slab
                 if self.structure_type in ['bcc', 'fcc', 'hcp']:
-                    (plane_miller, slip_direction, slip_length, Q) = self.__convert_input_miller(ss)
-                    slab = self.__gen_slab_pmg(ss, plane_miller, trans_matrix=Q)
+                    (plane_miller, slip_direction,
+                     slip_length, Q) = self.__convert_input_miller(self.conv_std_structure)
+                    slab = self.__gen_slab_pmg(self.conv_std_structure, plane_miller, trans_matrix=Q)
                     self.atom_num = len(slab.sites)
                 else:
                     raise Warning(f'Gamma line function for {self.structure_type} '
