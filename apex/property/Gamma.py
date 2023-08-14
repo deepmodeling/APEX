@@ -39,7 +39,9 @@ class Gamma(Property):
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                self.parameter = parameter
+                self.plane_miller = parameter.get("plane_miller", None)
+                self.slip_direction = parameter.get("slip_direction", None)
+                self.slip_length = parameter.get("slip_length", 1)
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
@@ -276,15 +278,16 @@ class Gamma(Property):
 
     def __convert_input_miller(self, structure):
         # get user input slip parameter for specific structure
-        self.plane_miller = self.parameter.get("plane_miller", None)
-        self.slip_direction = self.parameter.get("slip_direction", None)
-        self.slip_length = self.parameter.get("slip_length", None)
         type_param = self.parameter.get(self.structure_type, None)
         if type_param:
-            self.plane_miller = type_param.get("plane_miller", None)
-            self.slip_direction = type_param.get("slip_direction", None)
-            self.slip_length = type_param.get("slip_length", None)
-        if not [self.plane_miller or self.slip_direction]:
+            self.plane_miller = type_param.get("plane_miller", self.plane_miller)
+            self.slip_direction = type_param.get("slip_direction", self.slip_direction)
+            self.slip_length = type_param.get("slip_length", self.slip_length)
+            self.supercell_size = type_param.get("supercell_size", self.supercell_size)
+            self.vacuum_size = type_param.get("vacuum_size", self.supercell_size)
+            self.add_fix = type_param.get("add_fix")
+            self.n_steps = type_param.get("n_steps")
+        if not (self.plane_miller and self.slip_direction):
             raise RuntimeError(f'fail to get slip plane and slip direction of '
                                f'{self.structure_type} structure from input json file')
         plane_miller = tuple(self.plane_miller)
