@@ -290,46 +290,56 @@ class Gamma(Property):
         plane_miller = tuple(self.plane_miller)
         slip_direction = tuple(self.slip_direction)
         slip_length = self.slip_length
-        # try to get default slip length if no user specification
-        if not slip_length:
-            try:
-                dir_dict = SlabSlipSystem.atomic_system_dict()
-                system = dir_dict[self.structure_type]
-                # get search key string
-                plane_str = ''.join([str(i) for i in plane_miller])
-                slip_str = ''.join([str(i) for i in slip_direction])
-                combined_key = 'x'.join([plane_str, slip_str])
-                _, _, _, slip_length = system[combined_key].values()
-            except:
-                slip_length = 1
-
-        if self.structure_type == 'hcp' and (len(plane_miller) == 4 or len(slip_direction) == 4):
-            if len(plane_miller) == 4:
-                plane_miller = plane_miller_bravais_to_miller(self.plane_miller)
-            if len(slip_direction) == 4:
-                slip_direction = direction_miller_bravais_to_miller(self.slip_direction)
-        # check user input miller index
-        dir_dot = np.array(self.plane_miller).dot(np.array(self.slip_direction))
-        if not dir_dot == 0:
-            raise RuntimeError(f'slip direction {self.slip_direction} is not '
-                               f'on plane given {self.plane_miller}')
-        # Express x_miller_index and xy_miller_index
-        # in the conventional standard cartesian coordinate system
+        # get search key string
+        plane_str = ''.join([str(i) for i in plane_miller])
+        slip_str = ''.join([str(i) for i in slip_direction])
+        combined_key = 'x'.join([plane_str, slip_str])
         l2_normalize_1d = lambda v: v / np.linalg.norm(v, 2)
-        x_cartesian = np.dot(np.array(slip_direction), structure.lattice.matrix)
-        z_cartesian = np.dot(np.array(plane_miller), structure.lattice.matrix)
+        # try to get default slip system from pre-defined dict
+        try:
+            dir_dict = SlabSlipSystem.atomic_system_dict()
+            system = dir_dict[self.structure_type]
+            plane_miller, x_miller, xy_miller, slip_length = system[combined_key].values()
+        except:
+            RuntimeWarning('Warning:\n'
+                           'The input slip system is not pre-defined in the Gamma module!\n'
+                           'We highly recommend you to double check the slab structure generated'
+                           'of an undefined slip system, as it may not be what you expected, '
+                           'especially for a HCP structure.')
+            x_miller = slip_direction
+            if self.structure_type == 'hcp' and (len(self.plane_miller) == 4 or len(self.slip_direction) == 4):
+                if len(plane_miller) == 4:
+                    plane_miller = plane_miller_bravais_to_miller(self.plane_miller)
+                if len(x_miller) == 4:
+                    x_miller = direction_miller_bravais_to_miller(self.slip_direction)
+            # check user input miller index
+            dir_dot = np.array(plane_miller).dot(np.array(x_miller))
+            if not dir_dot == 0:
+                raise RuntimeError(f'slip direction {self.slip_direction} is not '
+                                   f'on plane given {self.plane_miller}')
+            # Express x_miller_index and plane_miller_index
+            # in the conventional standard cartesian coordinate system
+            x_cartesian = np.dot(np.array(x_miller), structure.lattice.matrix)
+            z_cartesian = np.dot(np.array(plane_miller), structure.lattice.matrix)
+            x_cartesian_unit_vector = l2_normalize_1d(x_cartesian)
+            y_cartesian_unit_vector = l2_normalize_1d(np.cross(z_cartesian, x_cartesian))
+            z_cartesian_unit_vector = l2_normalize_1d(np.cross(x_cartesian_unit_vector,
+                                                               y_cartesian_unit_vector))
+        else:
+            x_cartesian = np.dot(np.array(x_miller), structure.lattice.matrix)
+            xy_cartesian = np.dot(np.array(xy_miller), structure.lattice.matrix)
+            x_cartesian_unit_vector = l2_normalize_1d(x_cartesian)
+            z_cartesian_unit_vector = l2_normalize_1d(np.cross(x_cartesian, xy_cartesian))
+            y_cartesian_unit_vector = l2_normalize_1d(np.cross(z_cartesian_unit_vector,
+                                                                x_cartesian_unit_vector))
 
-        x_cartesian_unit_vector = l2_normalize_1d(x_cartesian)
-        y_cartesian_unit_vector = l2_normalize_1d(np.cross(z_cartesian, x_cartesian))
-        z_cartesian_unit_vector = l2_normalize_1d(np.cross(x_cartesian_unit_vector,
-                                                           y_cartesian_unit_vector))
         reoriented_basis = np.array([x_cartesian_unit_vector,
                                      y_cartesian_unit_vector,
                                      z_cartesian_unit_vector])
         # Transform the lattice vectors of the slab
         Q = trans_mat_basis(reoriented_basis)
 
-        return plane_miller, slip_direction, slip_length, Q
+        return plane_miller, x_miller, slip_length, Q
 
     def __gen_slab_pmg(self, structure, plane_miller, trans_matrix=None):
         # Get slab inter-plane distance
