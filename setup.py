@@ -15,7 +15,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         "pydflow>=1.7.19",
-        "2023.8.10>pymatgen>=2023.7.17",
+        "pymatgen>=2023.7.17, <2023.8.10",
         'pymatgen-analysis-defects',
         "dpdata>=0.2.13",
         "dpdispatcher",
