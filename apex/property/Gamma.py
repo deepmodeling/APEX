@@ -3,7 +3,7 @@ import json
 import os
 import re
 import warnings
-#from typing import Sequence
+from typing import Sequence
 
 import dpdata
 import numpy as np
@@ -422,7 +422,8 @@ class Gamma(Property):
         return slab
 
     def __displace_slab_generator(self, slab: Structure,
-                                  disp_vector, is_frac=True,
+                                  disp_vector: Sequence[int | float],
+                                  is_frac=True,
                                   to_unit_cell=True) -> Structure:
         # generator of displaced slab structures
         yield slab.copy()
