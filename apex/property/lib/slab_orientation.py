@@ -90,7 +90,7 @@ class SlabSlipSystem(object):
             '01-11x1-213': {'plane': plane_miller_bravais_to_miller([0, 1, -1, 1]),
                             'x': direction_miller_bravais_to_miller([1, -2, 1, 3]),
                             'xy': direction_miller_bravais_to_miller([2, -1, -1, 0]),
-                            'default_frac_slip_len': 1},
+                            'default_frac_slip_len': (1, 0, 1)},
 
             # Pyramidal I, shear SF2 along x
             '01-11x0-112': {'plane': plane_miller_bravais_to_miller([0, 1, -1, 1]),
