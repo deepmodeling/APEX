@@ -362,8 +362,7 @@ class Gamma(Property):
         return plane_miller, x_miller, slip_length, Q
 
     def __gen_slab_pmg(self, structure: Structure,
-                       plane_miller: tuple[int],
-                       trans_matrix=None) -> Structure:
+                       plane_miller, trans_matrix=None) -> Structure:
         # Get slab inter-plane distance
         tem_calc_obj = TEMCalculator()
         spacing_dict = tem_calc_obj.get_interplanar_spacings(self.conv_std_structure,
@@ -422,8 +421,7 @@ class Gamma(Property):
         return slab
 
     def __displace_slab_generator(self, slab: Structure,
-                                  disp_vector: Sequence[int | float],
-                                  is_frac=True,
+                                  disp_vector, is_frac=True,
                                   to_unit_cell=True) -> Structure:
         # generator of displaced slab structures
         yield slab.copy()
