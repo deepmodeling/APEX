@@ -44,6 +44,7 @@ class Gamma(Property):
                 self.plane_miller = parameter.get("plane_miller", None)
                 self.slip_direction = parameter.get("slip_direction", None)
                 self.slip_length = parameter.get("slip_length", None)
+                self.plane_shift = parameter.get("plane_shift", 0)
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
@@ -217,24 +218,25 @@ class Gamma(Property):
                 ss = Structure.from_file("CONTCAR.direct")
                 # get structure type
                 st = StructureInfo(ss)
-                relax_a = ss.lattice.a
-                relax_b = ss.lattice.b
-                relax_c = ss.lattice.c
                 self.structure_type = st.lattice_structure
                 self.conv_std_structure = st.conventional_structure
+                relax_a = self.conv_std_structure.lattice.a
+                relax_b = self.conv_std_structure.lattice.b
+                relax_c = self.conv_std_structure.lattice.c
                 # get user input slip parameter for specific structure
                 type_param = self.parameter.get(self.structure_type, None)
                 if type_param:
                     self.plane_miller = type_param.get("plane_miller", self.plane_miller)
                     self.slip_direction = type_param.get("slip_direction", self.slip_direction)
                     self.slip_length = type_param.get("slip_length", self.slip_length)
+                    self.plane_shift = type_param.get("plane_shift", self.plane_shift)
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
                     self.vacuum_size = type_param.get("vacuum_size", self.vacuum_size)
                     self.add_fix = type_param.get("add_fix", self.add_fix)
                     self.n_steps = type_param.get("n_steps", self.n_steps)
                 if not (self.plane_miller and self.slip_direction):
-                    raise RuntimeError(f'fail to get slip plane and slip direction of '
-                                       f'{self.structure_type} structure from input json file')
+                    raise RuntimeError(f'fail to obtain both slip plane '
+                                       f'and slip direction info from input json file!')
                 # gen initial slab
                 if self.structure_type in ['bcc', 'fcc', 'hcp']:
                     (plane_miller, slip_direction,
@@ -314,12 +316,12 @@ class Gamma(Property):
         combined_key = 'x'.join([plane_str, slip_str])
         l2_normalize_1d = lambda v: v / np.linalg.norm(v, 2)
         # try to get default slip system from pre-defined dict
+        dir_dict = SlabSlipSystem.atomic_system_dict()
         try:
-            dir_dict = SlabSlipSystem.atomic_system_dict()
             system = dir_dict[self.structure_type]
             (plane_miller, x_miller,
              xy_miller, stored_slip_length) = system[combined_key].values()
-        except:
+        except KeyError:
             warnings.warn(
                 message=
                 'Warning:\n'
@@ -386,7 +388,6 @@ class Gamma(Property):
             reoriented_lattice_vectors = [trans_matrix.dot(v) for v in slab.lattice.matrix]
             slab = Structure(lattice=np.matrix(reoriented_lattice_vectors),
                              coords=slab.frac_coords, species=slab.species)
-
         # Order the atoms in the lattice in the increasing order of the third lattice direction
         # n_atoms_slab = len(slab.frac_coords)
         order = zip(slab.frac_coords, slab.species)
@@ -415,10 +416,11 @@ class Gamma(Property):
                          coords=new_frac_coords, species=sorted_species)
         # Slab area
         # slab_area = np.linalg.norm(np.cross(slab.lattice.matrix[0], slab.lattice.matrix[1]))
-
-        # center the slab layer around the vacuum
+        # center the slab layer around the vacuum & add plane shift along z
+        plane_shift_frac = self.plane_shift * structure.lattice.c / slab.lattice.matrix[2][2]
         avg_c = np.average([c[2] for c in slab.frac_coords])
-        slab.translate_sites(list(range(len(slab))), [0, 0, 0.5 - avg_c])
+        slab.translate_sites(list(range(len(slab))),
+                             [0, 0, 0.5 - avg_c - plane_shift_frac])
         # replicate slab to make specific supercell
         slab.make_supercell(scaling_matrix=[self.supercell_size[0],
                                             self.supercell_size[1],
