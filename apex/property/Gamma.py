@@ -3,7 +3,7 @@ import json
 import os
 import re
 import warnings
-from typing import Sequence
+#from typing import Sequence
 
 import dpdata
 import numpy as np
@@ -352,12 +352,12 @@ class Gamma(Property):
             z_cartesian_unit_vector = l2_normalize_1d(np.cross(x_cartesian, xy_cartesian))
             y_cartesian_unit_vector = l2_normalize_1d(np.cross(z_cartesian_unit_vector,
                                                                 x_cartesian_unit_vector))
-
-        reoriented_basis = np.array([x_cartesian_unit_vector,
-                                     y_cartesian_unit_vector,
-                                     z_cartesian_unit_vector])
-        # Transform the lattice vectors of the slab
-        Q = trans_mat_basis(reoriented_basis)
+        finally:
+            reoriented_basis = np.array([x_cartesian_unit_vector,
+                                        y_cartesian_unit_vector,
+                                        z_cartesian_unit_vector])
+            # Transform the lattice vectors of the slab
+            Q = trans_mat_basis(reoriented_basis)
 
         return plane_miller, x_miller, slip_length, Q
 
@@ -422,8 +422,8 @@ class Gamma(Property):
         return slab
 
     def __displace_slab_generator(self, slab: Structure,
-                                  disp_vector: Sequence[int | float],
-                                  is_frac=True, to_unit_cell=True) -> Structure:
+                                  disp_vector, is_frac=True,
+                                  to_unit_cell=True) -> Structure:
         # generator of displaced slab structures
         yield slab.copy()
         # return list of atoms number to be displaced which above 0.5 z
