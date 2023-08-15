@@ -43,7 +43,7 @@ class Gamma(Property):
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
                 self.plane_miller = parameter.get("plane_miller", None)
                 self.slip_direction = parameter.get("slip_direction", None)
-                self.slip_length = parameter.get("slip_length", 1)
+                self.slip_length = parameter.get("slip_length", None)
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
@@ -317,7 +317,8 @@ class Gamma(Property):
         try:
             dir_dict = SlabSlipSystem.atomic_system_dict()
             system = dir_dict[self.structure_type]
-            plane_miller, x_miller, xy_miller, slip_length = system[combined_key].values()
+            (plane_miller, x_miller,
+             xy_miller, stored_slip_length) = system[combined_key].values()
         except:
             warnings.warn(
                 message=
@@ -328,6 +329,8 @@ class Gamma(Property):
                 'especially for a HCP structure.'
             )
             x_miller = slip_direction
+            if not slip_length:
+                slip_length = 1
             if self.structure_type == 'hcp' and (len(self.plane_miller) == 4 or len(self.slip_direction) == 4):
                 if len(plane_miller) == 4:
                     plane_miller = plane_miller_bravais_to_miller(self.plane_miller)
@@ -346,6 +349,8 @@ class Gamma(Property):
             z_cartesian_unit_vector = l2_normalize_1d(np.cross(x_cartesian_unit_vector,
                                                                y_cartesian_unit_vector))
         else:
+            if not slip_length:
+                slip_length = stored_slip_length
             x_cartesian = np.dot(np.array(x_miller), structure.lattice.matrix)
             xy_cartesian = np.dot(np.array(xy_miller), structure.lattice.matrix)
             x_cartesian_unit_vector = l2_normalize_1d(x_cartesian)
