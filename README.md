@@ -363,7 +363,7 @@ The most efficient method for submitting an APEX workflow is through the preconf
 Just replace the values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
 
 ### 4.2. In a Local Argo Service
-Additionally, a dflow environment can be constructed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository. For instance, to install on a Linux system without root access:
+Additionally, a dflow environment can be installed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (User can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
 ```shell
 bash install-linux-cn.sh
 ```
@@ -371,6 +371,8 @@ This process will automatically configure the required local tools, including Do
 
 ```json
 {
+    "dflow_host": "https://127.0.0.1:2746",
+    "k8s_api_server": "https://127.0.0.1:2746",
     "apex_image_name": "zhuoyli/apex:amd64",
     "dpmd_image_name": "deepmodeling/deepmd-kit:2.2.1_cuda10.1_gpu",
     "lammps_run_command": "lmp -in in.lammps",
