@@ -14,7 +14,7 @@ import apex.calculator.lib.lammps as lammps
 from apex.property.Property import Property
 from apex.property.refine import make_refine
 from apex.property.reproduce import make_repro, post_repro
-from apex.property.Structure import StructureType
+from apex.property.Structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -137,7 +137,7 @@ class Interstitial(Property):
                     self.path_to_work[::-1],
                     count=1,
                 )[::-1]
-                task_list_basename = list(map(os.path.basename, task_list))
+                task_list_basename = list(map(os.path.basename, self.task_list))
 
                 os.chdir(self.path_to_work)
                 if os.path.isfile("element.out"):
@@ -184,8 +184,8 @@ class Interstitial(Property):
                 # get structure type
                 os.chdir(self.path_to_work)
                 ss.to("POSCAR", "POSCAR")
-                st = StructureType(ss)
-                self.structure_type = st.get_structure_type()
+                st = StructureInfo(ss)
+                self.structure_type = st.lattice_structure
                 os.chdir(cwd)
 
                 # gen defects

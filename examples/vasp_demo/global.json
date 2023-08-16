@@ -6,7 +6,7 @@
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/dpgen:0.11.0",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
     "vasp_image_name":"registry.dp.tech/dptech/vasp:5.4.4-dflow",
     "vasp_run_command":"bash -c \"source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std \"",
     "batch_type": "Bohrium",

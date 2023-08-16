@@ -43,14 +43,18 @@ class TestGamma(unittest.TestCase):
             "properties": [
                 {
                     "type": "gamma",
-                    "lattice_type": "fcc",
-                    "miller_index": [1, 1, 1],
-                    "displace_direction": [1, 1, 0],
+                    "plane_miller": [0, 0, 1],
+                    "slip_direction": [1, 0, 0],
+                    "hcp": {
+                        "plane_miller": [0, 0, 0, 1],
+                        "slip_direction": [2, -1, -1, 0],
+                    },
                     "supercell_size": [1, 1, 10],
-                    "min_vacuum_size": 10,
+                    "vacuum_size": 10,
                     "add_fix": ["true", "true", "false"],
-                    "n_steps": 20,
+                    "n_steps": 10
                 }
+
             ],
         }
 

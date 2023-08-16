@@ -29,21 +29,26 @@
          "max_miller":     2,
          "cal_type":       "static"
         },
-	{
+      {
          "type":         "interstitial",
          "skip":         true,
          "supercell":   [1, 1, 1],
          "insert_ele":  ["Mo"]
         },
-	{
-	"type":            "gamma",
-	"skip":            true,
-        "miller_index":    [1,1,2],
-        "displace_direction":  [1,1,1],
-        "supercell_size":   [1,1,5],
-        "min_vacuum_size": 0,
-	"add_fix": ["true","true","false"], 
-        "n_steps":         10
+	  {
+	  "type":            "gamma",
+	  "skip":            true,
+      "plane_miller":    [1,2,3],
+      "slip_direction":  [1,1,-1],
+	  "hcp": {
+        	"plane_miller":    [0,0,0,1],
+        	"slip_direction":  [2,-1,-1,0],
+		    "slip_length": 2
+		},
+      "supercell_size":   [1,1,20],
+      "vacuum_size": 15,
+	  "add_fix": ["true","true","false"],
+      "n_steps":         20
 	}
         ]
 }
