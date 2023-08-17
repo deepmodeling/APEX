@@ -237,19 +237,20 @@ class Gamma(Property):
                 if not (self.plane_miller and self.slip_direction):
                     raise RuntimeError(f'fail to obtain both slip plane '
                                        f'and slip direction info from input json file!')
-                # gen initial slab
-                if self.structure_type in ['bcc', 'fcc', 'hcp']:
-                    (plane_miller, slip_direction,
-                     slip_length, Q) = self.__convert_input_miller(self.conv_std_structure)
-                    slab = self.__gen_slab_pmg(self.conv_std_structure, plane_miller, trans_matrix=Q)
-                    self.atom_num = len(slab.sites)
-                else:
+
+                if not self.structure_type in ['bcc', 'fcc', 'hcp']:
                     warnings.warn(
                         message=
                         f'Gamma line function for {self.structure_type} '
                         f'is not fully supported so far.\n'
                         f'You may need to double check the generated slab structures'
                     )
+                # gen initial slab
+                (plane_miller, slip_direction,
+                 slip_length, Q) = self.__convert_input_miller(self.conv_std_structure)
+                slab = self.__gen_slab_pmg(self.conv_std_structure, plane_miller, trans_matrix=Q)
+                self.atom_num = len(slab.sites)
+
                 os.chdir(path_to_work)
                 if os.path.isfile(POSCAR):
                     os.remove(POSCAR)
@@ -259,7 +260,6 @@ class Gamma(Property):
                 # task_poscar = os.path.join(output, 'POSCAR')
                 count = 0
                 # define slip vector
-                # for int | float input slip_length
                 if type(slip_length) == int or type(slip_length) == float:
                     frac_slip_vec = np.array([slip_length, 0, 0]) * relax_a
                 else:
@@ -268,7 +268,7 @@ class Gamma(Property):
                         slip_vector_cartesian = np.multiply(np.array(slip_length),
                                                             np.array([relax_a, relax_b, relax_c]))
                         norm_length = np.linalg.norm(np.multiply(slip_vector_cartesian, 2))
-                        frac_slip_vec = np.array([slip_length[0], 0, 0]) * relax_a
+                        frac_slip_vec = np.array([norm_length, 0, 0])
                     except:
                         raise RuntimeError(
                             'Only int | float or '
