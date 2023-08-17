@@ -19,6 +19,7 @@ class StructureInfo(object):
         self.__num_atoms = structure.num_sites
         self.__crystal_structure = self.__indentify_crystal()
         # standard structure
+        self.orig_structure = structure
         self.primitive_structure = analyzer.find_primitive()
         self.conventional_structure = analyzer.get_conventional_standard_structure()
 

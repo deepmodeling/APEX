@@ -208,22 +208,21 @@ Below are three examples (for detailed explanations of each parameter, please re
       <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
   </div>
 
-The Gamma line (stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with unit length of the relaxed lattice parameter **$a$**. Thus, by indicating `plane_miller` and the `slip_direction` (primary direction), a slip system can be defined.
+The Gamma line (stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with unit length of the relaxed lattice parameter **$a$**. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
 
-
-For some common slip systems in respect to FCC, BCC and HCP crystal structures (Key information is listed below), default fractional slip lengths are given which user indication can be skipped:
+For most common slip systems in respect to FCC, BCC and HCP crystal structures, slip direction, secondary direction and default fractional slip lengths are already documented and listed below (Users are **strongly advised** to follow those pre-defined slip system, or may need to double-check the generated slab structure, as unexpected results may occur especially for system like HCP):
 * FCC
-  | Plane miller index | Primary direction | Secondary direction | Default slip length |
+  | Plane miller index | Slip direction | Secondary direction | Default slip length |
   | :-------- | ----- | ----- | ---- |
   | $(001)$ | $[100]$ | $[010]$ | $a$ |
   | $(110)$ | $[\bar{1}10]$ | $[001]$ | $\sqrt{2}a$ |
   | $(111)$ | $[11\bar{2}]$ | $[\bar{1}10]$ | $\sqrt{6}a$ |
   | $(111)$ | $[\bar{1}\bar{1}2]$ | $[1\bar{1}0]$ | $\sqrt{6}a$ |
-  | $(111)$ | $[\bar{1}10]$ | $[1\bar{1}\bar{1}2]$ | $\sqrt{2}a$ |
+  | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\sqrt{2}a$ |
   | $(111)$ | $[1\bar{1}0]$ | $[11\bar{2}]$ | $\sqrt{2}a$ |
 
 * BCC
-  | Plane miller index | Primary direction | Secondary direction | Default slip length |
+  | Plane miller index | Slip direction | Secondary direction | Default slip length |
   | :-------- | ----- | ----- | ---- |
   | $(001)$ | $[100]$ | $[010]$ | $a$ |
   | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\frac{\sqrt{2}}{2}a$ |
@@ -235,7 +234,7 @@ For some common slip systems in respect to FCC, BCC and HCP crystal structures (
   | $(123)$ | $[\bar{1}\bar{1}1]$ | $[2\bar{1}0]$ | $\frac{\sqrt{3}}{2}a$ |
 
 * HCP (Bravais lattice)
-  | Plane miller index | Primary direction | Secondary direction | Default slip length |
+  | Plane miller index | Slip direction | Secondary direction | Default slip length |
   | :-------- | ----- | ----- | ---- |
   | $(0001)$ | $[2\bar{1}\bar{1}0]$ | $[01\bar{1}0]$ |  |
   | $(0001)$ | $[1\bar{1}00]$ | $[01\bar{1}0]$ |  |
@@ -252,25 +251,27 @@ For some common slip systems in respect to FCC, BCC and HCP crystal structures (
 The parameters related to Gamma line calculation are listed below:
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
-  | plane_miller | list[int] | None | Miller index of the target slab |
-  | slip_direction | list[int] | None | Miller index of slip (primary) direction of the slab |
-  | slip_length | int; float | Refer to specific slip system as above tables shows, or 1 | Slip length defined by unit vector along the primary direction (unit length equals to relaxed lattice parameter $a$). Can be default for above pre-loaded system |
-  | n_steps | int | 10 | Number of steps to displace slab along the slip vector  |
-  | vacuum_size | int | 0 | Thickness of vacuum layer added around the slab with unit of Angstrom |
-  | supercell_size | list[int] | [1, 1, 5] | Size of generated supper cell based on slab structure |
-  | add fix | list[str] | ["true","true","false"] | If add fix position constrain along x, y and z direction during calculation |
+  | plane_miller | Sequence[Int] | None | Miller index of the target slab |
+  | slip_direction | Sequence[Int] | None | Miller index of slip (primary) direction of the slab |
+  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as above tables shows, or 1 if not indicated | Slip length along the primary direction with default unit of lattice parameter **$a$**. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
+  | plane_shift | Int\|Float | 0 | Shift of displacement plane with unit of lattice parameter **$c$** (positive for upwards) |
+  | n_steps | Int | 10 | Number of steps to displace slab along the slip vector  |
+  | vacuum_size | Int\|Float | 0 | Thickness of vacuum layer added around the slab with unit of Angstrom |
+  | supercell_size | Sequence[Int, Int, Int] | [1, 1, 5] | Size of generated supper cell based on slab structure |
+  | add fix | Sequence[Str, Str, Str] | ["true","true","false"] | If add fix position constrain along x, y and z direction during calculation |
 
   Here is an example:
   ```json
   {
 	  "type":            "gamma",
 	  "skip":            true,
-      "plane_miller":    [1,2,3],
-      "slip_direction":  [1,1,-1],
+      "plane_miller":    [0,0,1],
+      "slip_direction":  [1,0,0],
 	  "hcp": {
-        	"plane_miller":    [0,0,0,1],
-        	"slip_direction":  [2,-1,-1,0],
-          "slip_length": 2
+        	"plane_miller":    [0,1,-1,1],
+        	"slip_direction":  [-2,1,1,0],
+          "slip_length":     [1,0,1],
+          "plane_shift": 1
 		},
       "supercell_size":   [2,2,50],
       "vacuum_size": 15,
@@ -278,7 +279,7 @@ The parameters related to Gamma line calculation are listed below:
       "n_steps":         20
 	}
   ```
-  Note that for different types of crystal structure, user can further specify `plane_miller`, `slip_direction` and `slip_length` inside corresponding nested dictionary for higher priority to be adopted.
+  Note that for different types of crystal structure, user can further specify slip parameters inside corresponding nested dictionary with higher priority to be adopted.
 
 
 ### 3.2. Submittion Command
@@ -362,7 +363,7 @@ The most efficient method for submitting an APEX workflow is through the preconf
 Just replace the values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
 
 ### 4.2. In a Local Argo Service
-Additionally, a dflow environment can be constructed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository. For instance, to install on a Linux system without root access:
+Additionally, a dflow environment can be installed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (User can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
 ```shell
 bash install-linux-cn.sh
 ```
@@ -370,6 +371,8 @@ This process will automatically configure the required local tools, including Do
 
 ```json
 {
+    "dflow_host": "https://127.0.0.1:2746",
+    "k8s_api_server": "https://127.0.0.1:2746",
     "apex_image_name": "zhuoyli/apex:amd64",
     "dpmd_image_name": "deepmodeling/deepmd-kit:2.2.1_cuda10.1_gpu",
     "lammps_run_command": "lmp -in in.lammps",
