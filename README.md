@@ -67,7 +67,7 @@ pip install .
 In APEX, all essential input parameters must be organized in specific JSON files within the **current working directory** before proceeding. There are two distinct types of JSON files that will be discussed in detail.
 
 #### 3.1.1. Global Setting
-The instructions regarding global configuration, [dflow](https://github.com/deepmodeling/dflow), and [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) specific settings must be saved in JSON format within a file named precisely as `global.json`. The table below describes some crucial keywords, classified into three categories:
+The instructions regarding global configuration, [dflow](https://github.com/deepmodeling/dflow), and [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) specific settings must be saved in JSON format within a file named exactly as `global.json`. The table below describes some crucial keywords, classified into three categories:
 
 * **Dflow**
   | Key words | Data structure | Default | Description |
@@ -113,7 +113,7 @@ Categories calculation parameter files:
 | :------------ | ---- | ----- | ------------------- |
 | Relaxation | json | `structures`; `interaction`; `Relaxation` | For `relaxation` worflow |
 | Property | json |  `structures`; `interaction`; `Properties`  | For `property` worflow |
-| Joint | json |  `structures`; `interaction`; `Relaxation`; `Properties` | For `relaxation`, `property` and `joint` worflow |
+| Joint | json |  `structures`; `interaction`; `Relaxation`; `Properties` | For `relaxation`, `property` and `joint` worflows |
 
 It should be noted that files such as POSCAR, located within the `structure` directory, or any other files specified within the JSON file, must be pre-prepared in the current working directory.
 
@@ -208,7 +208,7 @@ Below are three examples (for detailed explanations of each parameter, please re
       <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
   </div>
 
-The Gamma line (stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with unit length of the relaxed lattice parameter **$a$**. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
+The Gamma line (generalized stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with slip length defined by user or default settings. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
 
 For most common slip systems in respect to FCC, BCC and HCP crystal structures, slip direction, secondary direction and default fractional slip lengths are already documented and listed below (Users are **strongly advised** to follow those pre-defined slip system, or may need to double-check the generated slab structure, as unexpected results may occur especially for system like HCP):
 * FCC
@@ -226,8 +226,8 @@ For most common slip systems in respect to FCC, BCC and HCP crystal structures, 
   | :-------- | ----- | ----- | ---- |
   | $(001)$ | $[100]$ | $[010]$ | $a$ |
   | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\frac{\sqrt{2}}{2}a$ |
-  | $(110)$ | $[\bar{1}11]$ | $[001]$ | $\frac{\sqrt{3}}{2}a$ |
-  | $(110)$ | $[1\bar{1}\bar{1}]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(110)$ | $[\bar{1}11]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(110)$ | $[1\bar{1}\bar{1}]$ | $[001]$ | $\frac{\sqrt{3}}{2}a$ |
   | $(112)$ | $[11\bar{1}]$ | $[\bar{1}10]$ | $\frac{\sqrt{3}}{2}a$ |
   | $(112)$ | $[\bar{1}\bar{1}1]$ | $[1\bar{1}0]$ | $\frac{\sqrt{3}}{2}a$ |
   | $(123)$ | $[11\bar{1}]$ | $[\bar{2}10]$ | $\frac{\sqrt{3}}{2}a$ |
@@ -236,29 +236,31 @@ For most common slip systems in respect to FCC, BCC and HCP crystal structures, 
 * HCP (Bravais lattice)
   | Plane miller index | Slip direction | Secondary direction | Default slip length |
   | :-------- | ----- | ----- | ---- |
-  | $(0001)$ | $[2\bar{1}\bar{1}0]$ | $[01\bar{1}0]$ |  |
-  | $(0001)$ | $[1\bar{1}00]$ | $[01\bar{1}0]$ |  |
-  | $(0001)$ | $[10\bar{1}0]$ | $[01\bar{1}0]$ |  |
-  | $(01\bar{1}0)$ | $[\bar{2}110]$ | $[0001]$ |  |
-  | $(01\bar{1}0)$ | $[\bar{2}113]$ | $[0001]$ |  |
-  | $(\bar{1}2\bar{1}0)$ | $[\bar{1}010]$ | $[0001]$ |  |
-  | $(01\bar{1}1)$ | $[\bar{2}110]$ | $[1\bar{2}13]$ |  |
-  | $(01\bar{1}1)$ | $[1\bar{2}13]$ | $[2\bar{1}\bar{1}0]$ |  |
-  | $(01\bar{1}1)$ | $[0\bar{1}12]$ | $[1\bar{2}13]$ |  |
-  | $(\bar{1}2\bar{1}2)$ | $[\bar{1}010]$ | $[1\bar{2}13]$ |  |
-  | $(\bar{1}2\bar{1}2)$ | $[1\bar{2}13]$ | $[10\bar{1}0]$ |  |
+  | $(0001)$ | $[2\bar{1}\bar{1}0]$ | $[01\bar{1}0]$ | $a$ |
+  | $(0001)$ | $[1\bar{1}00]$ | $[01\bar{1}0]$ | $\sqrt{3}a$ |
+  | $(0001)$ | $[10\bar{1}0]$ | $[01\bar{1}0]$ | $\sqrt{3}a$ |
+  | $(01\bar{1}0)$ | $[\bar{2}110]$ | $[000\bar{1}]$ | $a$ |
+  | $(01\bar{1}0)$ | $[0001]$ | $[\bar{2}110]$ | $c$ |
+  | $(01\bar{1}0)$ | $[\bar{2}113]$ | $[000\bar{1}]$ | $\sqrt{a^2+c^2}$ |
+  | $(\bar{1}2\bar{1}0)$ | $[\bar{1}010]$ | $[000\bar{1}]$ | $\sqrt{3}a$ |
+  | $(\bar{1}2\bar{1}0)$ | $[0001]$ | $[\bar{1}010]$ | $c$ |
+  | $(01\bar{1}1)$ | $[\bar{2}110]$ | $[\bar{1}2\bar{1}\bar{3}]$ | $a$ |
+  | $(01\bar{1}1)$ | $[\bar{1}2\bar{1}\bar{3}]$ | $[2\bar{1}\bar{1}0]$ | $\sqrt{a^2+c^2}$ |
+  | $(01\bar{1}1)$ | $[0\bar{1}12]$ | $[\bar{1}2\bar{1}\bar{3}]$ | $\sqrt{3a^2+4c^2}$ |
+  | $(\bar{1}2\bar{1}2)$ | $[10\bar{1}0]$ | $[1\bar{2}13]$ | $\sqrt{3}a$ |
+  | $(\bar{1}2\bar{1}2)$ | $[1\bar{2}13]$ | $[\bar{1}010]$ | $\sqrt{a^2+c^2}$ |
 
 The parameters related to Gamma line calculation are listed below:
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
   | plane_miller | Sequence[Int] | None | Miller index of the target slab |
   | slip_direction | Sequence[Int] | None | Miller index of slip (primary) direction of the slab |
-  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as above tables shows, or 1 if not indicated | Slip length along the primary direction with default unit of lattice parameter **$a$**. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
-  | plane_shift | Int\|Float | 0 | Shift of displacement plane with unit of lattice parameter **$c$** (positive for upwards) |
+  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as the table shows above, or 1 if not indicated | Slip length along the primary direction with default unit set by user or default setting. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
+  | plane_shift | Int\|Float | 0 | Shift of displacement plane with unit of lattice parameter **$c$** (positive for upwards). This allows creating slip plane within narrowly-spaced planes (see [ref](https://doi.org/10.1016/j.actamat.2016.10.042)). |
   | n_steps | Int | 10 | Number of steps to displace slab along the slip vector  |
   | vacuum_size | Int\|Float | 0 | Thickness of vacuum layer added around the slab with unit of Angstrom |
   | supercell_size | Sequence[Int, Int, Int] | [1, 1, 5] | Size of generated supper cell based on slab structure |
-  | add fix | Sequence[Str, Str, Str] | ["true","true","false"] | If add fix position constrain along x, y and z direction during calculation |
+  | add fix | Sequence[Str, Str, Str] | ["true","true","false"] | Whether to add fix position constraint along x, y and z direction during calculation |
 
   Here is an example:
   ```json
@@ -271,15 +273,15 @@ The parameters related to Gamma line calculation are listed below:
         	"plane_miller":    [0,1,-1,1],
         	"slip_direction":  [-2,1,1,0],
           "slip_length":     [1,0,1],
-          "plane_shift": 1
+          "plane_shift": 0.25
 		},
-      "supercell_size":   [2,2,50],
-      "vacuum_size": 15,
+      "supercell_size":   [1,1,6],
+      "vacuum_size": 10,
 	  "add_fix": ["true","true","false"],
-      "n_steps":         20
+      "n_steps":         10
 	}
   ```
-  Note that for different types of crystal structure, user can further specify slip parameters inside corresponding nested dictionary with higher priority to be adopted.
+  #### It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.
 
 
 ### 3.2. Submittion Command
