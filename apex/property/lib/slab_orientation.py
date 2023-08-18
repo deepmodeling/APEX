@@ -77,14 +77,14 @@ class SlabSlipSystem(object):
             # Prism I, shear SF2 along x
             '01-10x-2113': {'plane': plane_miller_bravais_to_miller([0, 1, -1, 0]),
                             'x': direction_miller_bravais_to_miller([-2, 1, 1, 3]),
-                            'xy': direction_miller_bravais_to_miller([0, 0, 0, 1]),
+                            'xy': direction_miller_bravais_to_miller([0, 0, 0, -1]),
                             'default_frac_slip_len': (1, 0, 1)},
 
             # Prism II, cleavage
             '-12-10x-1010': {'plane': plane_miller_bravais_to_miller([-1, 2, -1, 0]),
                              'x': direction_miller_bravais_to_miller([-1, 0, 1, 0]),
-                             'xy': direction_miller_bravais_to_miller([0, 0, 0, 1]),
-                             'default_frac_slip_len': np.sqrt(3)},
+                             'xy': direction_miller_bravais_to_miller([0, 0, 0, -1]),
+                             'default_frac_slip_len': float(np.sqrt(3))},
 
             # Prism II, cleavage along c
             '-12-10x0001': {'plane': plane_miller_bravais_to_miller([-1, 2, -1, 0]),
@@ -107,8 +107,8 @@ class SlabSlipSystem(object):
             # Pyramidal I, shear SF2 along x
             '01-11x0-112': {'plane': plane_miller_bravais_to_miller([0, 1, -1, 1]),
                             'x': direction_miller_bravais_to_miller([0, -1, 1, 2]),
-                            'xy': direction_miller_bravais_to_miller([1, -2, 1, 3]),
-                            'default_frac_slip_len': (np.sqrt(3), 0, 2)},
+                            'xy': direction_miller_bravais_to_miller([-1, 2, -1, -3]),
+                            'default_frac_slip_len': (float(np.sqrt(3)), 0, 2)},
 
             # Pyramidal II, Cleavage
             '-12-12x10-10': {'plane': plane_miller_bravais_to_miller([-1, 2, -1, 2]),
