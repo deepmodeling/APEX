@@ -43,7 +43,7 @@
 	  "hcp": {
         	"plane_miller":    [0,0,0,1],
         	"slip_direction":  [2,-1,-1,0],
-		    "slip_length": 2
+		    "slip_length": 1
 		},
       "supercell_size":   [1,1,20],
       "vacuum_size": 15,
