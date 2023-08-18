@@ -267,7 +267,7 @@ class Gamma(Property):
                     try:
                         slip_vector_cartesian = np.multiply(np.array(slip_length),
                                                             np.array([relax_a, relax_b, relax_c]))
-                        norm_length = np.linalg.norm(np.multiply(slip_vector_cartesian, 1))
+                        norm_length = np.linalg.norm(slip_vector_cartesian, 2)
                         frac_slip_vec = np.array([norm_length, 0, 0])
                     except:
                         raise RuntimeError(
