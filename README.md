@@ -12,6 +12,7 @@
     - [3.1. Input Files Preperation](#31-input-files-preperation)
       - [3.1.1. Global Setting](#311-global-setting)
       - [3.1.2. Calculation Parameters](#312-calculation-parameters)
+        - [3.1.2.1. Gamma Line Settings](#3121-gamma-line-settings)
     - [3.2. Submittion Command](#32-submittion-command)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
@@ -22,7 +23,7 @@
 
 APEX adopts the functionality of the second-generation alloy properties calculations and is developed utilizing the [dflow](https://github.com/deepmodeling/dflow) framework. By integrating the benefits of cloud-native workflows, APEX streamlines the intricate procedure of automatically testing various configurations and properties. Owing to its cloud-native characteristic, APEX provides users with a more intuitive and user-friendly interaction, enhancing the overall user experience by eliminating concerns related to process control, task scheduling, observability, and disaster tolerance.
 
-The comprehensive architecture of APEX is illustrated as follows:
+The comprehensive architecture of APEX is demonstrated below:
 
 <div>
     <img src="./docs/images/apex_demo.png" alt="Fig1" style="zoom: 35%;">
@@ -44,7 +45,7 @@ APEX currently offers computation methods for the following alloy properties:
 * Vacancy formation energy
 * Generalized stacking fault energy (Gamma line)
 
-Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dynamics simulations, and **VASP** and **ABACUS** for first-principles calculations. For information on extending these functions, please refer to the [Extensibility](#5-extensibility) section.
+Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dynamics simulations, and **VASP** and **ABACUS** for first-principles calculations.
 
 ## 2. Easy Install
 Easy install by
@@ -66,7 +67,7 @@ pip install .
 In APEX, all essential input parameters must be organized in specific JSON files within the **current working directory** before proceeding. There are two distinct types of JSON files that will be discussed in detail.
 
 #### 3.1.1. Global Setting
-The instructions regarding global configuration, [dflow](https://github.com/deepmodeling/dflow), and [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) specific settings must be saved in JSON format within a file named precisely as `global.json`. The table below describes some crucial keywords, classified into three categories:
+The instructions regarding global configuration, [dflow](https://github.com/deepmodeling/dflow), and [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) specific settings must be saved in JSON format within a file named exactly as `global.json`. The table below describes some crucial keywords, classified into three categories:
 
 * **Dflow**
   | Key words | Data structure | Default | Description |
@@ -102,17 +103,17 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | cpu_scass_type | String | None | CPU node type on Bohrium to run the first-principle jobs |
   | gpu_scass_type | String | None | GPU node type on Bohrium to run LAMMPS jobs |
 
-Please refer to the [User scenario examples](#4-Userscenarioexamples) section for various instances of `global.json` usage in different situations.
+Please refer to the [Quick Start](#4-quick-start) section for various instances of `global.json` usage in different situations.
 
 #### 3.1.2. Calculation Parameters
 The method for indicating parameters in alloy property calculations is akin to the previous `dpgen.autotest` approach. There are **three** categories of JSON files that determine the parameters to be passed to APEX, based on their contents. Users have the flexibility to assign any name to these files.
 
 Categories calculation parameter files:
-| Type | File format | Dict contained | Usage |
+| Type | File format | Dictionary contained | Usage |
 | :------------ | ---- | ----- | ------------------- |
 | Relaxation | json | `structures`; `interaction`; `Relaxation` | For `relaxation` worflow |
 | Property | json |  `structures`; `interaction`; `Properties`  | For `property` worflow |
-| Joint | json |  `structures`; `interaction`; `Relaxation`; `Properties` | For `relaxation`, `property` and `joint` worflow |
+| Joint | json |  `structures`; `interaction`; `Relaxation`; `Properties` | For `relaxation`, `property` and `joint` worflows |
 
 It should be noted that files such as POSCAR, located within the `structure` directory, or any other files specified within the JSON file, must be pre-prepared in the current working directory.
 
@@ -161,18 +162,7 @@ Below are three examples (for detailed explanations of each parameter, please re
           "shear_deform": 1e-2,
           "cal_setting":  {"etol": 0,
                           "ftol": 1e-10}
-        },
-	      {
-	        "type":               "gamma",
-	        "skip":               true,
-            "lattice_type":       "bcc",
-            "miller_index":         [1,1,2],
-            "supercell_size":       [1,1,5],
-            "displace_direction":   [1,1,1],
-            "min_vacuum_size":      0,
-	        "add_fix":              ["true","true","false"], 
-            "n_steps":             10
-	      }
+        }
         ]
   }
   ```
@@ -208,21 +198,91 @@ Below are three examples (for detailed explanations of each parameter, please re
         "shear_deform": 1e-2,
         "cal_setting":  {"etol": 0,
                         "ftol": 1e-10}
-      },
-      {
-        "type":               "gamma",
-        "skip":               true,
-          "lattice_type":       "bcc",
-          "miller_index":         [1,1,2],
-          "supercell_size":       [1,1,5],
-          "displace_direction":   [1,1,1],
-          "min_vacuum_size":      0,
-        "add_fix":              ["true","true","false"], 
-          "n_steps":             10
       }
       ]
   }
   ```
+##### 3.1.2.1. Gamma Line Settings
+  <div>
+      <img src="./docs/images/gamma_demo.png" alt="Fig2" style="zoom: 35%;">
+      <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
+  </div>
+
+The Gamma line (generalized stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with slip length defined by user or default settings. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
+
+For most common slip systems in respect to FCC, BCC and HCP crystal structures, slip direction, secondary direction and default fractional slip lengths are already documented and listed below (Users are **strongly advised** to follow those pre-defined slip system, or may need to double-check the generated slab structure, as unexpected results may occur especially for system like HCP):
+* FCC
+  | Plane miller index | Slip direction | Secondary direction | Default slip length |
+  | :-------- | ----- | ----- | ---- |
+  | $(001)$ | $[100]$ | $[010]$ | $a$ |
+  | $(110)$ | $[\bar{1}10]$ | $[001]$ | $\sqrt{2}a$ |
+  | $(111)$ | $[11\bar{2}]$ | $[\bar{1}10]$ | $\sqrt{6}a$ |
+  | $(111)$ | $[\bar{1}\bar{1}2]$ | $[1\bar{1}0]$ | $\sqrt{6}a$ |
+  | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\sqrt{2}a$ |
+  | $(111)$ | $[1\bar{1}0]$ | $[11\bar{2}]$ | $\sqrt{2}a$ |
+
+* BCC
+  | Plane miller index | Slip direction | Secondary direction | Default slip length |
+  | :-------- | ----- | ----- | ---- |
+  | $(001)$ | $[100]$ | $[010]$ | $a$ |
+  | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\frac{\sqrt{2}}{2}a$ |
+  | $(110)$ | $[\bar{1}11]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(110)$ | $[1\bar{1}\bar{1}]$ | $[001]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(112)$ | $[11\bar{1}]$ | $[\bar{1}10]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(112)$ | $[\bar{1}\bar{1}1]$ | $[1\bar{1}0]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(123)$ | $[11\bar{1}]$ | $[\bar{2}10]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(123)$ | $[\bar{1}\bar{1}1]$ | $[2\bar{1}0]$ | $\frac{\sqrt{3}}{2}a$ |
+
+* HCP (Bravais lattice)
+  | Plane miller index | Slip direction | Secondary direction | Default slip length |
+  | :-------- | ----- | ----- | ---- |
+  | $(0001)$ | $[2\bar{1}\bar{1}0]$ | $[01\bar{1}0]$ | $a$ |
+  | $(0001)$ | $[1\bar{1}00]$ | $[01\bar{1}0]$ | $\sqrt{3}a$ |
+  | $(0001)$ | $[10\bar{1}0]$ | $[01\bar{1}0]$ | $\sqrt{3}a$ |
+  | $(01\bar{1}0)$ | $[\bar{2}110]$ | $[000\bar{1}]$ | $a$ |
+  | $(01\bar{1}0)$ | $[0001]$ | $[\bar{2}110]$ | $c$ |
+  | $(01\bar{1}0)$ | $[\bar{2}113]$ | $[000\bar{1}]$ | $\sqrt{a^2+c^2}$ |
+  | $(\bar{1}2\bar{1}0)$ | $[\bar{1}010]$ | $[000\bar{1}]$ | $\sqrt{3}a$ |
+  | $(\bar{1}2\bar{1}0)$ | $[0001]$ | $[\bar{1}010]$ | $c$ |
+  | $(01\bar{1}1)$ | $[\bar{2}110]$ | $[\bar{1}2\bar{1}\bar{3}]$ | $a$ |
+  | $(01\bar{1}1)$ | $[\bar{1}2\bar{1}\bar{3}]$ | $[2\bar{1}\bar{1}0]$ | $\sqrt{a^2+c^2}$ |
+  | $(01\bar{1}1)$ | $[0\bar{1}12]$ | $[\bar{1}2\bar{1}\bar{3}]$ | $\sqrt{3a^2+4c^2}$ |
+  | $(\bar{1}2\bar{1}2)$ | $[10\bar{1}0]$ | $[1\bar{2}13]$ | $\sqrt{3}a$ |
+  | $(\bar{1}2\bar{1}2)$ | $[1\bar{2}13]$ | $[\bar{1}010]$ | $\sqrt{a^2+c^2}$ |
+
+The parameters related to Gamma line calculation are listed below:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | plane_miller | Sequence[Int] | None | Miller index of the target slab |
+  | slip_direction | Sequence[Int] | None | Miller index of slip (primary) direction of the slab |
+  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as the table shows above, or 1 if not indicated | Slip length along the primary direction with default unit set by user or default setting. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
+  | plane_shift | Int\|Float | 0 | Shift of displacement plane with unit of lattice parameter **$c$** (positive for upwards). This allows creating slip plane within narrowly-spaced planes (see [ref](https://doi.org/10.1016/j.actamat.2016.10.042)). |
+  | n_steps | Int | 10 | Number of steps to displace slab along the slip vector  |
+  | vacuum_size | Int\|Float | 0 | Thickness of vacuum layer added around the slab with unit of Angstrom |
+  | supercell_size | Sequence[Int, Int, Int] | [1, 1, 5] | Size of generated supper cell based on slab structure |
+  | add fix | Sequence[Str, Str, Str] | ["true","true","false"] | Whether to add fix position constraint along x, y and z direction during calculation |
+
+  Here is an example:
+  ```json
+  {
+	  "type":            "gamma",
+	  "skip":            true,
+      "plane_miller":    [0,0,1],
+      "slip_direction":  [1,0,0],
+	  "hcp": {
+        	"plane_miller":    [0,1,-1,1],
+        	"slip_direction":  [-2,1,1,0],
+          "slip_length":     [1,0,1],
+          "plane_shift": 0.25
+		},
+      "supercell_size":   [1,1,6],
+      "vacuum_size": 10,
+	  "add_fix": ["true","true","false"],
+      "n_steps":         10
+	}
+  ```
+  #### It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.
+
 
 ### 3.2. Submittion Command
 APEX will execute a specific workflow upon each invocation of the command in the format: `apex [file_names] [--optional_argument]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by the user. Additionally, users can specify the workflow type through an optional argument. The following are command examples for submitting three types of workflows:
@@ -293,7 +353,7 @@ The most efficient method for submitting an APEX workflow is through the preconf
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-demo:v0.0.2",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
     "dpmd_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
     "lammps_run_command":"lmp -in in.lammps",
     "batch_type": "Bohrium",
@@ -305,7 +365,7 @@ The most efficient method for submitting an APEX workflow is through the preconf
 Just replace the values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
 
 ### 4.2. In a Local Argo Service
-Additionally, a dflow environment can be constructed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository. For instance, to install on a Linux system without root access:
+Additionally, a dflow environment can be installed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (User can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
 ```shell
 bash install-linux-cn.sh
 ```
@@ -313,6 +373,8 @@ This process will automatically configure the required local tools, including Do
 
 ```json
 {
+    "dflow_host": "https://127.0.0.1:2746",
+    "k8s_api_server": "https://127.0.0.1:2746",
     "apex_image_name": "zhuoyli/apex:amd64",
     "dpmd_image_name": "deepmodeling/deepmd-kit:2.2.1_cuda10.1_gpu",
     "lammps_run_command": "lmp -in in.lammps",
