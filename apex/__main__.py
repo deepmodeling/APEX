@@ -31,8 +31,8 @@ from apex.LAMMPS_flow import LAMMPSFlow
 from apex.ABACUS_flow import ABACUSFlow
 from apex.lib.utils import judge_flow
 from apex.lib.utils import check_args_ss
-from apex.property.common_equi import (make_equi, post_equi)
-from apex.property.common_prop import (make_property, post_property)
+from apex.core.common_equi import (make_equi, post_equi)
+from apex.core.common_prop import (make_property, post_property)
 
 
 def parse_args():
@@ -41,9 +41,9 @@ def parse_args():
                         help='Input indicating json files')
     parser.add_argument('-r', "--relax", help="Submit relaxation workflow",
                         action="store_true")
-    parser.add_argument('-p', "--props", help="Submit property test workflow",
+    parser.add_argument('-p', "--props", help="Submit core test workflow",
                         action="store_true")
-    parser.add_argument('-j', "--joint", help="Submit relaxation followed by property test joint workflow",
+    parser.add_argument('-j', "--joint", help="Submit relaxation followed by core test joint workflow",
                         action="store_true")
     parser.add_argument('-mr', "--make_relax", help="Run make relaxation step locally",
                         action="store_true")
@@ -82,9 +82,9 @@ def run_flow(args):
     if flow_type == 'relax':
         print('Submitting relaxation workflow...')
     elif flow_type == 'props':
-        print('Submitting property test workflow...')
+        print('Submitting core test workflow...')
     else:
-        print('Submitting relaxation & property test joint workflow...')
+        print('Submitting relaxation & core test joint workflow...')
 
     tf.init_steps()
     tf.generate_flow()

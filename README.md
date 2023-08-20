@@ -295,24 +295,24 @@ APEX will execute a specific workflow upon each invocation of the command in the
   apex joint.json --relax
   ```
    ```shell
-  apex relaxation.json property.json --relax
+  apex relaxation.json core.json --relax
   ```
 * `property` workflow:
   ```shell
-  apex property.json
+  apex core.json
   ```
   ```shell
   apex joint.json --props
   ```
   ```shell
-  apex relaxation.json property.json --props
+  apex relaxation.json core.json --props
   ```
 * `joint` workflow:
   ```shell
   apex joint.json
   ```
   ```shell
-  apex property.json relaxation.json
+  apex core.json relaxation.json
   ```
 APEX also provides a **single-step local debug mode**, which can run `Make` and `Post` step individually under local enviornment. User can invoke them by following optional arguments like:
 

@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from pymatgen.io.vasp import Incar, Kpoints, Potcar
 
-import apex.property.lib.util as util
+import apex.core.lib.util as util
 #from apex.calculator.lib.vasp import incar_upper
 from dflow.python import upload_packages
 upload_packages.append(__file__)

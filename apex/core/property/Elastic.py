@@ -13,8 +13,8 @@ from pymatgen.io.vasp import Incar, Kpoints
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
 import apex.calculator.lib.abacus_scf as abacus_scf
-from apex.property.Property import Property
-from apex.property.refine import make_refine
+from apex.core.Property import Property
+from apex.core.refine import make_refine
 from apex.calculator.lib.vasp import incar_upper
 from dflow.python import upload_packages
 upload_packages.append(__file__)
@@ -201,8 +201,8 @@ class Elastic(Property):
             KPOINTS = "KPOINTS"
 
         cwd = os.getcwd()
-        poscar_start = os.path.abspath(os.path.join(task_list[0], "..", POSCAR))
-        os.chdir(os.path.join(task_list[0], ".."))
+        poscar_start = os.path.abspath(os.path.join(task_list[0], "../..", POSCAR))
+        os.chdir(os.path.join(task_list[0], "../.."))
         if os.path.isfile(os.path.join(task_list[0], INCAR)):
             if self.inter_param["type"] == "abacus":
                 input_aba = abacus_scf.get_abacus_input_parameters("INPUT")
@@ -230,7 +230,7 @@ class Elastic(Property):
 
             os.chdir(cwd)
             kpoints_universal = os.path.abspath(
-                os.path.join(task_list[0], "..", KPOINTS)
+                os.path.join(task_list[0], "../..", KPOINTS)
             )
             for ii in task_list:
                 if os.path.isfile(os.path.join(ii, KPOINTS)):

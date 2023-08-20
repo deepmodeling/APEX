@@ -15,7 +15,7 @@ __package__ = "tests"
 from pymatgen.io.vasp import Incar
 
 from apex.calculator.calculator import make_calculator
-from apex.property.common_equi import make_equi, post_equi
+from apex.core.common_equi import make_equi, post_equi
 
 from .context import make_kspacing_kpoints, setUpModule
 

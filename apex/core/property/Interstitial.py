@@ -11,10 +11,10 @@ from pymatgen.core.structure import Structure
 
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.lammps as lammps
-from apex.property.Property import Property
-from apex.property.refine import make_refine
-from apex.property.reproduce import make_repro, post_repro
-from apex.property.Structure import StructureInfo
+from apex.core.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
+from apex.core.Structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -409,7 +409,7 @@ class Interstitial(Property):
 
     def post_process(self, task_list):
         if True:
-            fin1 = open(os.path.join(task_list[0], "..", "element.out"), "r")
+            fin1 = open(os.path.join(task_list[0], "../..", "element.out"), "r")
             for ii in task_list:
                 conf = os.path.join(ii, "conf.lmp")
                 inter = os.path.join(ii, "inter.json")

@@ -1,19 +1,14 @@
 import glob
 import os
-import warnings
-from multiprocessing import Pool
 
-from packaging.version import Version
-
-import apex.property.lib.util as util
 from apex.calculator.calculator import make_calculator
-from apex.property.Elastic import Elastic
-from apex.property.EOS import EOS
-from apex.property.Gamma import Gamma
-from apex.property.Interstitial import Interstitial
-from apex.property.lib.utils import create_path
-from apex.property.Surface import Surface
-from apex.property.Vacancy import Vacancy
+from apex.core.property import Elastic
+from apex.core.property import EOS
+from apex.core.property import Gamma
+from apex.core.property.Interstitial import Interstitial
+from apex.core.lib.utils import create_path
+from apex.core.property.Surface import Surface
+from apex.core.property.Vacancy import Vacancy
 from apex.lib.util import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)

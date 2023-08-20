@@ -9,7 +9,7 @@ import dpdata
 from dpdata.periodic_table import Element
 from packaging.version import Version
 
-import apex.property.lib.util as util
+import apex.core.lib.util as util
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

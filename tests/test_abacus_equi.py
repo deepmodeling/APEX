@@ -7,7 +7,7 @@ import unittest
 
 from monty.serialization import loadfn
 
-from apex.property.common_equi import make_equi, post_equi
+from apex.core.common_equi import make_equi, post_equi
 from apex.calculator.lib import abacus_scf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))

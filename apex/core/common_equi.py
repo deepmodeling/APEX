@@ -7,11 +7,11 @@ from monty.serialization import dumpfn
 from packaging.version import Version
 import dpdata
 import apex.calculator.lib.abacus as abacus
-import apex.property.lib.crys as crys
-import apex.property.lib.util as util
+import apex.core.lib.crys as crys
+import apex.core.lib.util as util
 from apex.calculator.calculator import make_calculator
-from apex.property.lib.utils import create_path
-from apex.property.mpdb import get_structure
+from apex.core.lib.utils import create_path
+from apex.core.mpdb import get_structure
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]

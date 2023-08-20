@@ -7,7 +7,7 @@ import re
 from pymatgen.analysis.structure_matcher import StructureMatcher
 from pymatgen.ext.matproj import Composition, MPRester
 
-import apex.property.lib.crys as crys
+import apex.core.lib.crys as crys
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

@@ -13,8 +13,8 @@ try:
     from typing import List
     from monty.serialization import loadfn
     from apex.lib.utils import return_prop_list
-    from apex.property.common_equi import (make_equi, post_equi)
-    from apex.property.common_prop import (make_property, post_property)
+    from apex.core.common_equi import (make_equi, post_equi)
+    from apex.core.common_prop import (make_property, post_property)
     upload_packages.append(__file__)
 except:
     pass
@@ -49,7 +49,7 @@ class RelaxMakeFp(OP):
             self,
             op_in: OPIO,
     ) -> OPIO:
-        from apex.property.common_equi import make_equi
+        from apex.core.common_equi import make_equi
 
         cwd = os.getcwd()
         os.chdir(op_in["input"])
@@ -113,7 +113,7 @@ class RelaxPostFp(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
-        from apex.property.common_equi import post_equi
+        from apex.core.common_equi import post_equi
 
         cwd = os.getcwd()
         os.chdir(str(op_in['input_all']) + op_in['path'])
@@ -164,7 +164,7 @@ class PropsMakeFp(OP):
             self,
             op_in: OPIO,
     ) -> OPIO:
-        from apex.property.common_prop import make_property
+        from apex.core.common_prop import make_property
 
         cwd = os.getcwd()
         os.chdir(op_in["input"])
@@ -234,7 +234,7 @@ class PropsPostFp(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
-        from apex.property.common_prop import post_property
+        from apex.core.common_prop import post_property
 
         cwd = os.getcwd()
         os.chdir(str(op_in['input_post']))

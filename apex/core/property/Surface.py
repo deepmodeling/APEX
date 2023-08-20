@@ -3,30 +3,36 @@ import json
 import os
 import re
 
+import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
+from pymatgen.core.structure import Structure
+from pymatgen.core.surface import generate_all_slabs
 
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
-import apex.calculator.lib.abacus_scf as abacus_scf
-from apex.property.Property import Property
-from apex.property.refine import make_refine
-from apex.property.reproduce import make_repro, post_repro
+from apex.core.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 
-class EOS(Property):
+class Surface(Property):
     def __init__(self, parameter, inter_param=None):
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                self.vol_start = parameter["vol_start"]
-                self.vol_end = parameter["vol_end"]
-                self.vol_step = parameter["vol_step"]
-                parameter["vol_abs"] = parameter.get("vol_abs", False)
-                self.vol_abs = parameter["vol_abs"]
+                self.min_slab_size = parameter["min_slab_size"]
+                self.min_vacuum_size = parameter["min_vacuum_size"]
+                parameter["pert_xz"] = parameter.get("pert_xz", 0.01)
+                self.pert_xz = parameter["pert_xz"]
+                default_max_miller = 2
+                parameter["max_miller"] = parameter.get(
+                    "max_miller", default_max_miller
+                )
+                self.miller = parameter["max_miller"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
@@ -108,10 +114,11 @@ class EOS(Property):
                 )
             )
 
-        cwd = os.getcwd()
         task_list = []
+        cwd = os.getcwd()
+
         if self.reprod:
-            print("eos reproduce starts")
+            print("surface reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -126,14 +133,14 @@ class EOS(Property):
 
         else:
             if refine:
-                print("eos refine starts")
+                print("surface refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
                     path_to_work,
                 )
                 os.chdir(cwd)
-
+                # record miller
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
                     self.parameter["init_from_suffix"][::-1],
@@ -146,99 +153,83 @@ class EOS(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("eos.json"):
-                        os.remove("eos.json")
-                    if os.path.islink("eos.json"):
-                        os.remove("eos.json")
+                    if os.path.isfile("miller.json"):
+                        os.remove("miller.json")
+                    if os.path.islink("miller.json"):
+                        os.remove("miller.json")
                     os.symlink(
-                        os.path.relpath(os.path.join(init_from_task, "eos.json")),
-                        "eos.json",
+                        os.path.relpath(os.path.join(init_from_task, "miller.json")),
+                        "miller.json",
                     )
                 os.chdir(cwd)
 
             else:
-                print(
-                    "gen eos from "
-                    + str(self.vol_start)
-                    + " to "
-                    + str(self.vol_end)
-                    + " by every "
-                    + str(self.vol_step)
+                if self.inter_param["type"] == "abacus":
+                    CONTCAR = abacus.final_stru(path_to_equi)
+                    POSCAR = "STRU"
+                else:
+                    CONTCAR = "CONTCAR"
+                    POSCAR = "POSCAR"
+
+                equi_contcar = os.path.join(path_to_equi, CONTCAR)
+                if not os.path.exists(equi_contcar):
+                    raise RuntimeError("please do relaxation first")
+
+                if self.inter_param["type"] == "abacus":
+                    stru = dpdata.System(equi_contcar, fmt="stru")
+                    stru.to("contcar", "CONTCAR.tmp")
+                    ptypes = vasp.get_poscar_types("CONTCAR.tmp")
+                    ss = Structure.from_file("CONTCAR.tmp")
+                    os.remove("CONTCAR.tmp")
+                else:
+                    ptypes = vasp.get_poscar_types(equi_contcar)
+                    # gen structure
+                    ss = Structure.from_file(equi_contcar)
+
+                # gen slabs
+                all_slabs = generate_all_slabs(
+                    ss, self.miller, self.min_slab_size, self.min_vacuum_size
                 )
-                if self.vol_abs:
-                    print("treat vol_start and vol_end as absolute volume")
-                    #dlog.info("treat vol_start and vol_end as absolute volume")
-                else:
-                    print("treat vol_start and vol_end as relative volume")
-                    #dlog.info("treat vol_start and vol_end as relative volume")
 
-                if self.inter_param["type"] == "abacus":
-                    equi_contcar = os.path.join(
-                        path_to_equi, abacus.final_stru(path_to_equi)
-                    )
-                else:
-                    equi_contcar = os.path.join(path_to_equi, "CONTCAR")
-
-                if not os.path.isfile(equi_contcar):
-                    raise RuntimeError(
-                        "Can not find %s, please do relaxation first" % equi_contcar
-                    )
-
-                if self.inter_param["type"] == "abacus":
-                    stru_data = abacus_scf.get_abacus_STRU(equi_contcar)
-                    vol_to_poscar = (
-                        abs(np.linalg.det(stru_data["cells"]))
-                        / np.array(stru_data["atom_numbs"]).sum()
-                    )
-                else:
-                    vol_to_poscar = vasp.poscar_vol(equi_contcar) / vasp.poscar_natoms(
-                        equi_contcar
-                    )
-                self.parameter["scale2equi"] = []
-
-                task_num = 0
-                while self.vol_start + self.vol_step * task_num < self.vol_end:
-                    # for vol in np.arange(int(self.vol_start * 100), int(self.vol_end * 100), int(self.vol_step * 100)):
-                    # vol = vol / 100.0
-                    vol = self.vol_start + task_num * self.vol_step
-                    # task_num = int((vol - self.vol_start) / self.vol_step)
-                    output_task = os.path.join(path_to_work, "task.%06d" % task_num)
+                os.chdir(path_to_work)
+                if os.path.isfile(POSCAR):
+                    os.remove(POSCAR)
+                if os.path.islink(POSCAR):
+                    os.remove(POSCAR)
+                os.symlink(os.path.relpath(equi_contcar), POSCAR)
+                #           task_poscar = os.path.join(output, 'POSCAR')
+                for ii in range(len(all_slabs)):
+                    output_task = os.path.join(path_to_work, "task.%06d" % ii)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
-                    if self.inter_param["type"] == "abacus":
-                        POSCAR = "STRU"
-                        POSCAR_orig = "STRU.orig"
-                        scale_func = abacus.stru_scale
-                    else:
-                        POSCAR = "POSCAR"
-                        POSCAR_orig = "POSCAR.orig"
-                        scale_func = vasp.poscar_scale
-
-                    for ii in [
+                    for jj in [
                         "INCAR",
                         "POTCAR",
-                        POSCAR_orig,
-                        POSCAR,
+                        "POSCAR",
                         "conf.lmp",
                         "in.lammps",
+                        "STRU",
                     ]:
-                        if os.path.exists(ii):
-                            os.remove(ii)
+                        if os.path.exists(jj):
+                            os.remove(jj)
                     task_list.append(output_task)
-                    os.symlink(os.path.relpath(equi_contcar), POSCAR_orig)
-                    # scale = (vol / vol_to_poscar) ** (1. / 3.)
-
-                    if self.vol_abs:
-                        scale = (vol / vol_to_poscar) ** (1.0 / 3.0)
-                        eos_params = {"volume": vol, "scale": scale}
-                    else:
-                        scale = vol ** (1.0 / 3.0)
-                        eos_params = {"volume": vol * vol_to_poscar, "scale": scale}
-                    dumpfn(eos_params, "eos.json", indent=4)
-                    self.parameter["scale2equi"].append(scale)  # 06/22
-                    scale_func(POSCAR_orig, POSCAR, scale)
-                    task_num += 1
+                    print(
+                        "# %03d generate " % ii,
+                        output_task,
+                        " \t %d atoms" % len(all_slabs[ii].sites),
+                    )
+                    # make confs
+                    all_slabs[ii].to("POSCAR.tmp", "POSCAR")
+                    vasp.regulate_poscar("POSCAR.tmp", "POSCAR")
+                    vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
+                    vasp.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
+                    if self.inter_param["type"] == "abacus":
+                        abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
+                        os.remove("POSCAR")
+                    # record miller
+                    dumpfn(all_slabs[ii].miller_index, "miller.json")
                 os.chdir(cwd)
+
         return task_list
 
     def post_process(self, task_list):
@@ -253,22 +244,44 @@ class EOS(Property):
     def _compute_lower(self, output_file, all_tasks, all_res):
         output_file = os.path.abspath(output_file)
         res_data = {}
-        ptr_data = "conf_dir: " + os.path.dirname(output_file) + "\n"
+        ptr_data = os.path.dirname(output_file) + "\n"
+
         if not self.reprod:
-            ptr_data += " VpA(A^3)  EpA(eV)\n"
-            for ii in range(len(all_tasks)):
-                # vol = self.vol_start + ii * self.vol_step
-                vol = loadfn(os.path.join(all_tasks[ii], "eos.json"))["volume"]
-                task_result = loadfn(all_res[ii])
-                res_data[vol] = task_result["energies"][-1] / sum(
-                    task_result["atom_numbs"]
+            ptr_data += "Miller_Indices: \tSurf_E(J/m^2) EpA(eV) equi_EpA(eV)\n"
+            for ii in all_tasks:
+                task_result = loadfn(os.path.join(ii, "result_task.json"))
+                natoms = np.sum(task_result["atom_numbs"])
+                epa = task_result["energies"][-1] / natoms
+                AA = np.linalg.norm(
+                    np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
                 )
-                ptr_data += "%7.3f  %8.4f \n" % (
-                    vol,
-                    task_result["energies"][-1] / sum(task_result["atom_numbs"]),
+
+                equi_path = os.path.abspath(
+                    os.path.join(
+                        os.path.dirname(output_file), "../relaxation/relax_task"
+                    )
                 )
-                # res_data[vol] = all_res[ii]['energy'] / len(all_res[ii]['force'])
-                # ptr_data += '%7.3f  %8.4f \n' % (vol, all_res[ii]['energy'] / len(all_res[ii]['force']))
+                equi_result = loadfn(os.path.join(equi_path, "result.json"))
+                equi_epa = equi_result["energies"][-1] / np.sum(
+                    equi_result["atom_numbs"]
+                )
+                structure_dir = os.path.basename(ii)
+
+                Cf = 1.60217657e-16 / (1e-20 * 2) * 0.001
+                evac = (task_result["energies"][-1] - equi_epa * natoms) / AA * Cf
+
+                miller_index = loadfn(os.path.join(ii, "miller.json"))
+                ptr_data += "%-25s     %7.3f    %8.3f %8.3f\n" % (
+                    str(miller_index) + "-" + structure_dir + ":",
+                    evac,
+                    epa,
+                    equi_epa,
+                )
+                res_data[str(miller_index) + "-" + structure_dir] = [
+                    evac,
+                    epa,
+                    equi_epa,
+                ]
 
         else:
             if "init_data_path" not in self.parameter:

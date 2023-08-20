@@ -12,15 +12,13 @@ from apex.calculator.lib import abacus_scf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-from apex.property.common_prop import make_property
-from apex.property.Elastic import Elastic
-from apex.property.EOS import EOS
-from apex.property.Gamma import Gamma
-from apex.property.Interstitial import Interstitial
-from apex.property.Surface import Surface
-from apex.property.Vacancy import Vacancy
-
-from .context import setUpModule
+from apex.core.common_prop import make_property
+from apex.core.property import Elastic
+from apex.core.property import EOS
+from apex.core.property import Gamma
+from apex.core.property.Interstitial import Interstitial
+from apex.core.property.Surface import Surface
+from apex.core.property.Vacancy import Vacancy
 
 
 class TestABACUS(unittest.TestCase):

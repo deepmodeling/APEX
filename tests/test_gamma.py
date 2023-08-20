@@ -1,33 +1,18 @@
 import glob
-import json
 import os
 import shutil
 import sys
 import unittest
 
-import dpdata
-import numpy as np
-from ase.lattice.cubic import BodyCenteredCubic as bcc
-from ase.lattice.cubic import FaceCenteredCubic as fcc
-from ase.lattice.hexagonal import HexagonalClosedPacked as hcp
-from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
-from pymatgen.core.surface import SlabGenerator
-from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.vasp import Incar
 
-import apex.calculator.lib.vasp as vasp
 #from dpgen import dlog
-from apex.property.Property import Property
-from apex.property.refine import make_refine
-from apex.property.reproduce import make_repro, post_repro
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
-from apex.property.Gamma import Gamma
-
-from .context import make_kspacing_kpoints, setUpModule
+from apex.core.property import Gamma
 
 
 class TestGamma(unittest.TestCase):

@@ -14,7 +14,7 @@ __package__ = "tests"
 
 from pymatgen.io.vasp import Incar
 
-from apex.property.common_prop import make_property
+from apex.core.common_prop import make_property
 
 from .context import make_kspacing_kpoints, setUpModule
 

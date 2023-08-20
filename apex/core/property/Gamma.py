@@ -18,14 +18,14 @@ from pymatgen.analysis.diffraction.tem import TEMCalculator
 
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
-from apex.property.Property import Property
-from apex.property.refine import make_refine
-from apex.property.reproduce import make_repro, post_repro
-from apex.property.Structure import StructureInfo
-from apex.property.lib.slab_orientation import SlabSlipSystem
-from apex.property.lib.trans_tools import trans_mat_basis
-from apex.property.lib.trans_tools import (plane_miller_bravais_to_miller,
-                                           direction_miller_bravais_to_miller)
+from apex.core.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
+from apex.core.Structure import StructureInfo
+from apex.core.lib.slab_orientation import SlabSlipSystem
+from apex.core.lib.trans_tools import trans_mat_basis
+from apex.core.lib.trans_tools import (plane_miller_bravais_to_miller,
+                                       direction_miller_bravais_to_miller)
 from dflow.python import upload_packages
 
 upload_packages.append(__file__)

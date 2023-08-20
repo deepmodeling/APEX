@@ -62,7 +62,7 @@ def judge_flow(args) -> (str, dict):
             props_param = None
         elif flow == 'props':
             if args.relax or args.joint:
-                raise RuntimeError('property json file argument provided! Please check your jason file.')
+                raise RuntimeError('core json file argument provided! Please check your jason file.')
             flow_type = 'props'
             relax_param = None
             props_param = args.files[0]

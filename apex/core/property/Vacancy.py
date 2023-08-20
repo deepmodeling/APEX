@@ -3,42 +3,34 @@ import json
 import os
 import re
 
-import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
+from pymatgen.analysis.defects.generators import VacancyGenerator
 from pymatgen.core.structure import Structure
-from pymatgen.core.surface import generate_all_slabs
 
 import apex.calculator.lib.abacus as abacus
-import apex.calculator.lib.vasp as vasp
-from apex.property.Property import Property
-from apex.property.refine import make_refine
-from apex.property.reproduce import make_repro, post_repro
+from apex.core.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 
-class Surface(Property):
+class Vacancy(Property):
     def __init__(self, parameter, inter_param=None):
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                self.min_slab_size = parameter["min_slab_size"]
-                self.min_vacuum_size = parameter["min_vacuum_size"]
-                parameter["pert_xz"] = parameter.get("pert_xz", 0.01)
-                self.pert_xz = parameter["pert_xz"]
-                default_max_miller = 2
-                parameter["max_miller"] = parameter.get(
-                    "max_miller", default_max_miller
-                )
-                self.miller = parameter["max_miller"]
+                default_supercell = [1, 1, 1]
+                parameter["supercell"] = parameter.get("supercell", default_supercell)
+                self.supercell = parameter["supercell"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": True,
-                "relax_vol": False,
+                "relax_vol": True,
             }
             if "cal_setting" not in parameter:
                 parameter["cal_setting"] = default_cal_setting
@@ -118,7 +110,7 @@ class Surface(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            print("surface reproduce starts")
+            print("vacancy reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -127,20 +119,19 @@ class Surface(Property):
                 init_data_path,
                 self.init_from_suffix,
                 path_to_work,
-                self.parameter.get("reprod_last_frame", True),
+                self.parameter.get("reprod_last_frame", False),
             )
             os.chdir(cwd)
 
         else:
             if refine:
-                print("surface refine starts")
+                print("vacancy refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
                     path_to_work,
                 )
-                os.chdir(cwd)
-                # record miller
+
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
                     self.parameter["init_from_suffix"][::-1],
@@ -153,16 +144,15 @@ class Surface(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("miller.json"):
-                        os.remove("miller.json")
-                    if os.path.islink("miller.json"):
-                        os.remove("miller.json")
+                    if os.path.isfile("supercell.json"):
+                        os.remove("supercell.json")
+                    if os.path.islink("supercell.json"):
+                        os.remove("supercell.json")
                     os.symlink(
-                        os.path.relpath(os.path.join(init_from_task, "miller.json")),
-                        "miller.json",
+                        os.path.relpath(os.path.join(init_from_task, "supercell.json")),
+                        "supercell.json",
                     )
                 os.chdir(cwd)
-
             else:
                 if self.inter_param["type"] == "abacus":
                     CONTCAR = abacus.final_stru(path_to_equi)
@@ -176,21 +166,19 @@ class Surface(Property):
                     raise RuntimeError("please do relaxation first")
 
                 if self.inter_param["type"] == "abacus":
-                    stru = dpdata.System(equi_contcar, fmt="stru")
-                    stru.to("contcar", "CONTCAR.tmp")
-                    ptypes = vasp.get_poscar_types("CONTCAR.tmp")
-                    ss = Structure.from_file("CONTCAR.tmp")
-                    os.remove("CONTCAR.tmp")
+                    ss = abacus.stru2Structure(equi_contcar)
                 else:
-                    ptypes = vasp.get_poscar_types(equi_contcar)
-                    # gen structure
                     ss = Structure.from_file(equi_contcar)
 
-                # gen slabs
-                all_slabs = generate_all_slabs(
-                    ss, self.miller, self.min_slab_size, self.min_vacuum_size
-                )
+                pre_vds = VacancyGenerator()
+                vds = pre_vds.generate(ss)
+                dss = []
+                for jj in vds:
+                    dss.append(
+                        jj.get_supercell_structure(sc_mat=np.diag(self.supercell, k=0))
+                    )
 
+                print("gen vacancy with supercell " + str(self.supercell))
                 os.chdir(path_to_work)
                 if os.path.isfile(POSCAR):
                     os.remove(POSCAR)
@@ -198,7 +186,8 @@ class Surface(Property):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
-                for ii in range(len(all_slabs)):
+
+                for ii in range(len(dss)):
                     output_task = os.path.join(path_to_work, "task.%06d" % ii)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
@@ -213,23 +202,13 @@ class Surface(Property):
                         if os.path.exists(jj):
                             os.remove(jj)
                     task_list.append(output_task)
-                    print(
-                        "# %03d generate " % ii,
-                        output_task,
-                        " \t %d atoms" % len(all_slabs[ii].sites),
-                    )
-                    # make confs
-                    all_slabs[ii].to("POSCAR.tmp", "POSCAR")
-                    vasp.regulate_poscar("POSCAR.tmp", "POSCAR")
-                    vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
-                    vasp.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
+                    dss[ii].to("POSCAR", "POSCAR")
                     if self.inter_param["type"] == "abacus":
                         abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
-                    # record miller
-                    dumpfn(all_slabs[ii].miller_index, "miller.json")
+                    # np.savetxt('supercell.out', self.supercell, fmt='%d')
+                    dumpfn(self.supercell, "supercell.json")
                 os.chdir(cwd)
-
         return task_list
 
     def post_process(self, task_list):
@@ -247,40 +226,33 @@ class Surface(Property):
         ptr_data = os.path.dirname(output_file) + "\n"
 
         if not self.reprod:
-            ptr_data += "Miller_Indices: \tSurf_E(J/m^2) EpA(eV) equi_EpA(eV)\n"
+            ptr_data += "Structure: \tVac_E(eV)  E(eV) equi_E(eV)\n"
+            idid = -1
             for ii in all_tasks:
-                task_result = loadfn(os.path.join(ii, "result_task.json"))
-                natoms = np.sum(task_result["atom_numbs"])
-                epa = task_result["energies"][-1] / natoms
-                AA = np.linalg.norm(
-                    np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
-                )
-
+                idid += 1
+                structure_dir = os.path.basename(ii)
+                task_result = loadfn(all_res[idid])
+                natoms = task_result["atom_numbs"][0]
                 equi_path = os.path.abspath(
                     os.path.join(
                         os.path.dirname(output_file), "../relaxation/relax_task"
                     )
                 )
                 equi_result = loadfn(os.path.join(equi_path, "result.json"))
-                equi_epa = equi_result["energies"][-1] / np.sum(
-                    equi_result["atom_numbs"]
-                )
-                structure_dir = os.path.basename(ii)
+                equi_epa = equi_result["energies"][-1] / equi_result["atom_numbs"][0]
+                evac = task_result["energies"][-1] - equi_epa * natoms
 
-                Cf = 1.60217657e-16 / (1e-20 * 2) * 0.001
-                evac = (task_result["energies"][-1] - equi_epa * natoms) / AA * Cf
-
-                miller_index = loadfn(os.path.join(ii, "miller.json"))
-                ptr_data += "%-25s     %7.3f    %8.3f %8.3f\n" % (
-                    str(miller_index) + "-" + structure_dir + ":",
+                supercell_index = loadfn(os.path.join(ii, "supercell.json"))
+                ptr_data += "%s: %7.3f  %7.3f %7.3f \n" % (
+                    str(supercell_index) + "-" + structure_dir,
                     evac,
-                    epa,
-                    equi_epa,
+                    task_result["energies"][-1],
+                    equi_epa * natoms,
                 )
-                res_data[str(miller_index) + "-" + structure_dir] = [
+                res_data[str(supercell_index) + "-" + structure_dir] = [
                     evac,
-                    epa,
-                    equi_epa,
+                    task_result["energies"][-1],
+                    equi_epa * natoms,
                 ]
 
         else:
@@ -292,7 +264,7 @@ class Surface(Property):
                 self.parameter["init_from_suffix"],
                 all_tasks,
                 ptr_data,
-                self.parameter.get("reprod_last_frame", True),
+                self.parameter.get("reprod_last_frame", False),
             )
 
         with open(output_file, "w") as fp:

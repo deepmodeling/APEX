@@ -6,7 +6,7 @@ import requests
 
 #from dpgen import dlog
 from apex.calculator.lib import abacus, lammps, vasp
-from apex.property.lib.utils import cmd_append_log
+from apex.core.lib.utils import cmd_append_log
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

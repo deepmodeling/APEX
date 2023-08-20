@@ -5,32 +5,34 @@ import re
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
-from pymatgen.analysis.defects.generators import VacancyGenerator
-from pymatgen.core.structure import Structure
 
 import apex.calculator.lib.abacus as abacus
-from apex.property.Property import Property
-from apex.property.refine import make_refine
-from apex.property.reproduce import make_repro, post_repro
+import apex.calculator.lib.vasp as vasp
+import apex.calculator.lib.abacus_scf as abacus_scf
+from apex.core.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 
-class Vacancy(Property):
+class EOS(Property):
     def __init__(self, parameter, inter_param=None):
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                default_supercell = [1, 1, 1]
-                parameter["supercell"] = parameter.get("supercell", default_supercell)
-                self.supercell = parameter["supercell"]
+                self.vol_start = parameter["vol_start"]
+                self.vol_end = parameter["vol_end"]
+                self.vol_step = parameter["vol_step"]
+                parameter["vol_abs"] = parameter.get("vol_abs", False)
+                self.vol_abs = parameter["vol_abs"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": True,
-                "relax_vol": True,
+                "relax_vol": False,
             }
             if "cal_setting" not in parameter:
                 parameter["cal_setting"] = default_cal_setting
@@ -106,11 +108,10 @@ class Vacancy(Property):
                 )
             )
 
-        task_list = []
         cwd = os.getcwd()
-
+        task_list = []
         if self.reprod:
-            print("vacancy reproduce starts")
+            print("eos reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -119,18 +120,19 @@ class Vacancy(Property):
                 init_data_path,
                 self.init_from_suffix,
                 path_to_work,
-                self.parameter.get("reprod_last_frame", False),
+                self.parameter.get("reprod_last_frame", True),
             )
             os.chdir(cwd)
 
         else:
             if refine:
-                print("vacancy refine starts")
+                print("eos refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
                     path_to_work,
                 )
+                os.chdir(cwd)
 
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
@@ -144,70 +146,98 @@ class Vacancy(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("supercell.json"):
-                        os.remove("supercell.json")
-                    if os.path.islink("supercell.json"):
-                        os.remove("supercell.json")
+                    if os.path.isfile("eos.json"):
+                        os.remove("eos.json")
+                    if os.path.islink("eos.json"):
+                        os.remove("eos.json")
                     os.symlink(
-                        os.path.relpath(os.path.join(init_from_task, "supercell.json")),
-                        "supercell.json",
+                        os.path.relpath(os.path.join(init_from_task, "eos.json")),
+                        "eos.json",
                     )
                 os.chdir(cwd)
+
             else:
-                if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus.final_stru(path_to_equi)
-                    POSCAR = "STRU"
+                print(
+                    "gen eos from "
+                    + str(self.vol_start)
+                    + " to "
+                    + str(self.vol_end)
+                    + " by every "
+                    + str(self.vol_step)
+                )
+                if self.vol_abs:
+                    print("treat vol_start and vol_end as absolute volume")
+                    #dlog.info("treat vol_start and vol_end as absolute volume")
                 else:
-                    CONTCAR = "CONTCAR"
-                    POSCAR = "POSCAR"
-
-                equi_contcar = os.path.join(path_to_equi, CONTCAR)
-                if not os.path.exists(equi_contcar):
-                    raise RuntimeError("please do relaxation first")
+                    print("treat vol_start and vol_end as relative volume")
+                    #dlog.info("treat vol_start and vol_end as relative volume")
 
                 if self.inter_param["type"] == "abacus":
-                    ss = abacus.stru2Structure(equi_contcar)
+                    equi_contcar = os.path.join(
+                        path_to_equi, abacus.final_stru(path_to_equi)
+                    )
                 else:
-                    ss = Structure.from_file(equi_contcar)
+                    equi_contcar = os.path.join(path_to_equi, "CONTCAR")
 
-                pre_vds = VacancyGenerator()
-                vds = pre_vds.generate(ss)
-                dss = []
-                for jj in vds:
-                    dss.append(
-                        jj.get_supercell_structure(sc_mat=np.diag(self.supercell, k=0))
+                if not os.path.isfile(equi_contcar):
+                    raise RuntimeError(
+                        "Can not find %s, please do relaxation first" % equi_contcar
                     )
 
-                print("gen vacancy with supercell " + str(self.supercell))
-                os.chdir(path_to_work)
-                if os.path.isfile(POSCAR):
-                    os.remove(POSCAR)
-                if os.path.islink(POSCAR):
-                    os.remove(POSCAR)
-                os.symlink(os.path.relpath(equi_contcar), POSCAR)
-                #           task_poscar = os.path.join(output, 'POSCAR')
+                if self.inter_param["type"] == "abacus":
+                    stru_data = abacus_scf.get_abacus_STRU(equi_contcar)
+                    vol_to_poscar = (
+                        abs(np.linalg.det(stru_data["cells"]))
+                        / np.array(stru_data["atom_numbs"]).sum()
+                    )
+                else:
+                    vol_to_poscar = vasp.poscar_vol(equi_contcar) / vasp.poscar_natoms(
+                        equi_contcar
+                    )
+                self.parameter["scale2equi"] = []
 
-                for ii in range(len(dss)):
-                    output_task = os.path.join(path_to_work, "task.%06d" % ii)
+                task_num = 0
+                while self.vol_start + self.vol_step * task_num < self.vol_end:
+                    # for vol in np.arange(int(self.vol_start * 100), int(self.vol_end * 100), int(self.vol_step * 100)):
+                    # vol = vol / 100.0
+                    vol = self.vol_start + task_num * self.vol_step
+                    # task_num = int((vol - self.vol_start) / self.vol_step)
+                    output_task = os.path.join(path_to_work, "task.%06d" % task_num)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
-                    for jj in [
+                    if self.inter_param["type"] == "abacus":
+                        POSCAR = "STRU"
+                        POSCAR_orig = "STRU.orig"
+                        scale_func = abacus.stru_scale
+                    else:
+                        POSCAR = "POSCAR"
+                        POSCAR_orig = "POSCAR.orig"
+                        scale_func = vasp.poscar_scale
+
+                    for ii in [
                         "INCAR",
                         "POTCAR",
-                        "POSCAR",
+                        POSCAR_orig,
+                        POSCAR,
                         "conf.lmp",
                         "in.lammps",
-                        "STRU",
                     ]:
-                        if os.path.exists(jj):
-                            os.remove(jj)
+                        if os.path.exists(ii):
+                            os.remove(ii)
                     task_list.append(output_task)
-                    dss[ii].to("POSCAR", "POSCAR")
-                    if self.inter_param["type"] == "abacus":
-                        abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
-                    # np.savetxt('supercell.out', self.supercell, fmt='%d')
-                    dumpfn(self.supercell, "supercell.json")
+                    os.symlink(os.path.relpath(equi_contcar), POSCAR_orig)
+                    # scale = (vol / vol_to_poscar) ** (1. / 3.)
+
+                    if self.vol_abs:
+                        scale = (vol / vol_to_poscar) ** (1.0 / 3.0)
+                        eos_params = {"volume": vol, "scale": scale}
+                    else:
+                        scale = vol ** (1.0 / 3.0)
+                        eos_params = {"volume": vol * vol_to_poscar, "scale": scale}
+                    dumpfn(eos_params, "eos.json", indent=4)
+                    self.parameter["scale2equi"].append(scale)  # 06/22
+                    scale_func(POSCAR_orig, POSCAR, scale)
+                    task_num += 1
                 os.chdir(cwd)
         return task_list
 
@@ -223,37 +253,22 @@ class Vacancy(Property):
     def _compute_lower(self, output_file, all_tasks, all_res):
         output_file = os.path.abspath(output_file)
         res_data = {}
-        ptr_data = os.path.dirname(output_file) + "\n"
-
+        ptr_data = "conf_dir: " + os.path.dirname(output_file) + "\n"
         if not self.reprod:
-            ptr_data += "Structure: \tVac_E(eV)  E(eV) equi_E(eV)\n"
-            idid = -1
-            for ii in all_tasks:
-                idid += 1
-                structure_dir = os.path.basename(ii)
-                task_result = loadfn(all_res[idid])
-                natoms = task_result["atom_numbs"][0]
-                equi_path = os.path.abspath(
-                    os.path.join(
-                        os.path.dirname(output_file), "../relaxation/relax_task"
-                    )
+            ptr_data += " VpA(A^3)  EpA(eV)\n"
+            for ii in range(len(all_tasks)):
+                # vol = self.vol_start + ii * self.vol_step
+                vol = loadfn(os.path.join(all_tasks[ii], "eos.json"))["volume"]
+                task_result = loadfn(all_res[ii])
+                res_data[vol] = task_result["energies"][-1] / sum(
+                    task_result["atom_numbs"]
                 )
-                equi_result = loadfn(os.path.join(equi_path, "result.json"))
-                equi_epa = equi_result["energies"][-1] / equi_result["atom_numbs"][0]
-                evac = task_result["energies"][-1] - equi_epa * natoms
-
-                supercell_index = loadfn(os.path.join(ii, "supercell.json"))
-                ptr_data += "%s: %7.3f  %7.3f %7.3f \n" % (
-                    str(supercell_index) + "-" + structure_dir,
-                    evac,
-                    task_result["energies"][-1],
-                    equi_epa * natoms,
+                ptr_data += "%7.3f  %8.4f \n" % (
+                    vol,
+                    task_result["energies"][-1] / sum(task_result["atom_numbs"]),
                 )
-                res_data[str(supercell_index) + "-" + structure_dir] = [
-                    evac,
-                    task_result["energies"][-1],
-                    equi_epa * natoms,
-                ]
+                # res_data[vol] = all_res[ii]['energy'] / len(all_res[ii]['force'])
+                # ptr_data += '%7.3f  %8.4f \n' % (vol, all_res[ii]['energy'] / len(all_res[ii]['force']))
 
         else:
             if "init_data_path" not in self.parameter:
@@ -264,7 +279,7 @@ class Vacancy(Property):
                 self.parameter["init_from_suffix"],
                 all_tasks,
                 ptr_data,
-                self.parameter.get("reprod_last_frame", False),
+                self.parameter.get("reprod_last_frame", True),
             )
 
         with open(output_file, "w") as fp:
