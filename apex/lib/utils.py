@@ -16,6 +16,8 @@ def return_prop_list(parameters: list) -> list:
         elif 'reproduce' in ii and ii['reproduce']:
             #do_refine = False
             suffix = 'reprod'
+        elif 'suffix' in ii and ii['suffix']:
+            suffix = str(ii['suffix'])
         else:
             #do_refine = False
             suffix = '00'
