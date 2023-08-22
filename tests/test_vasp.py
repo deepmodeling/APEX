@@ -5,19 +5,15 @@ import shutil
 import sys
 import unittest
 
-import dpdata
 import numpy as np
-from dpdata import LabeledSystem
-from monty.serialization import dumpfn, loadfn
+from monty.serialization import loadfn
 from pymatgen.io.vasp import Incar
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
-from apex.calculator.VASP import VASP
+from apex.core.calculator.VASP import VASP
 from apex.calculator.lib.vasp import incar_upper
-
-from .context import make_kspacing_kpoints, setUpModule
 
 
 class TestVASP(unittest.TestCase):

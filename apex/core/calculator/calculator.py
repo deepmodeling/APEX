@@ -1,6 +1,6 @@
 from apex.calculator.ABACUS import ABACUS
 from apex.calculator.Lammps import Lammps
-from apex.calculator.VASP import VASP
+from apex.core.calculator.VASP import VASP
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

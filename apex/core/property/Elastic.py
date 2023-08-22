@@ -12,7 +12,7 @@ from pymatgen.io.vasp import Incar, Kpoints
 
 import apex.calculator.lib.abacus as abacus
 import apex.calculator.lib.vasp as vasp
-import apex.calculator.lib.abacus_scf as abacus_scf
+import apex.core.calculator.lib.abacus_scf as abacus_scf
 from apex.core.Property import Property
 from apex.core.refine import make_refine
 from apex.calculator.lib.vasp import incar_upper

@@ -5,7 +5,7 @@ from dpdata import LabeledSystem
 from monty.serialization import dumpfn
 
 import apex.calculator.lib.abacus as abacus
-import apex.calculator.lib.abacus_scf as abacus_scf
+import apex.core.calculator.lib.abacus_scf as abacus_scf
 #from dpgen import dlog
 from apex.calculator.Task import Task
 from apex.lib.util import sepline

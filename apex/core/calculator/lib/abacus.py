@@ -5,7 +5,7 @@ import dpdata
 import numpy as np
 from pymatgen.core.structure import Structure
 
-import apex.calculator.lib.abacus_scf as abacus_scf
+import apex.core.calculator.lib.abacus_scf as abacus_scf
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

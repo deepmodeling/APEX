@@ -1,5 +1,3 @@
-import glob
-import json
 import os
 import shutil
 import sys
@@ -8,11 +6,10 @@ import unittest
 from monty.serialization import loadfn
 
 from apex.core.common_equi import make_equi, post_equi
-from apex.calculator.lib import abacus_scf
+from apex.core.calculator.lib import abacus_scf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-from .context import setUpModule
 
 
 class TestEqui(unittest.TestCase):

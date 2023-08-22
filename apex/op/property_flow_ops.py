@@ -1,0 +1,283 @@
+import os, glob, pathlib, shutil, subprocess
+from pathlib import Path
+from typing import List
+from dflow.python import (
+    OP,
+    OPIO,
+    OPIOSign,
+    Artifact,
+    upload_packages
+)
+try:
+    from monty.serialization import loadfn
+    from apex.lib.utils import return_prop_list
+    from apex.core.common_prop import make_property_instance
+except:
+    pass
+
+upload_packages.append(__file__)
+
+
+class DistributeProps(OP):
+    """
+    OP class for distribution
+    of individual property test steps
+    """
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_input_sign(cls):
+        return OPIOSign({
+            "input_work_dir": Artifact(Path),
+            "param": Artifact(Path)
+        })
+
+    @classmethod
+    def get_output_sign(cls):
+        return OPIOSign({
+            "orig_work_path": Artifact[List[Path]],
+            "dflow_id": List[str],
+            "path_to_prop": List[str],
+            "prop_param": List[dict],
+            "inter_param": List[dict],
+            "do_refine": List[bool],
+            "nflows": int
+        })
+
+    @OP.exec_sign_check
+    def execute(
+            self,
+            op_in: OPIO,
+    ) -> OPIO:
+
+        input_work_dir = OPIO["input_work_dir"]
+        param = OPIO["param"]
+
+
+        op_out = OPIO({
+            "orig_work_path": ,
+            "flow_id": ,
+            "njobs": njobs,
+            "task_paths": jobs
+        })
+        return op_out
+
+
+class PropsMake(OP):
+    """
+    OP class for making calculation tasks (make property)
+    """
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_input_sign(cls):
+        return OPIOSign({
+            'input_work_dir': Artifact(Path),
+            'path_to_prop': str,
+            'prop_param': dict,
+            'inter_param': dict,
+            'do_refine': bool
+        })
+
+    @classmethod
+    def get_output_sign(cls):
+        return OPIOSign({
+            'output_work_path': Artifact(Path),
+            'task_names': List[str],
+            'njobs': int,
+            'task_paths': Artifact(List[Path])
+        })
+
+    @OP.exec_sign_check
+    def execute(
+            self,
+            op_in: OPIO,
+    ) -> OPIO:
+        from apex.core.common_prop import make_property_instance
+        from apex.core.calculator.calculator import make_calculator
+
+        input_work_path = op_in["input_work_path"]
+        path_to_prop = op_in["path_to_prop"]
+        prop_param = op_in["prop_param"]
+        inter_param = op_in["inter_param"]
+        do_refine = op_in["do_refine"]
+
+        cwd = Path.cwd()
+        os.chdir(input_work_path)
+        abs_path_to_prop = input_work_path / path_to_prop
+        conf_path = abs_path_to_prop.parent
+        path_to_equi = conf_path / "relaxation" / "relax_task"
+        prop = make_property_instance(prop_param, inter_param)
+        task_list = prop.make_confs(abs_path_to_prop, path_to_equi, do_refine)
+        for kk in task_list:
+            poscar = os.path.join(kk, "POSCAR")
+            inter = make_calculator(inter_param, poscar)
+            inter.make_potential_files(kk)
+            # dlog.debug(prop.task_type())  ### debug
+            inter.make_input_file(kk, prop.task_type(), prop.task_param())
+        prop.post_process(
+            task_list
+        )  # generate same KPOINTS file for elastic when doing VASP
+
+        task_list.sort()
+        task_list_str = task_list
+
+        all_jobs = task_list
+        njobs = len(all_jobs)
+        jobs = []
+        for job in all_jobs:
+            jobs.append(pathlib.Path(job))
+
+        os.chdir(cwd)
+        op_out = OPIO({
+            "output_work_path": input_work_path,
+            "task_names": task_list_str,
+            "njobs": njobs,
+            "task_paths": jobs
+        })
+        return op_out
+
+
+class PropsPost(OP):
+    """
+    OP class for analyzing calculation results (post property)
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_input_sign(cls):
+        return OPIOSign({
+            'input_post': Artifact(Path, sub_path=False),
+            'input_all': Artifact(Path, sub_path=False),
+            'prop_param': dict,
+            'inter_param': dict,
+            'task_names': List[str],
+            'local_path': str,
+            'path_to_prop': str
+        })
+
+    @classmethod
+    def get_output_sign(cls):
+        return OPIOSign({
+            'output_post': Artifact(Path, sub_path=False)
+        })
+
+    @OP.exec_sign_check
+    def execute(self, op_in: OPIO) -> OPIO:
+        from apex.core.common_prop import make_property_instance
+
+        input_post = op_in["input_post"]
+        input_all = op_in["input_all"]
+        prop_param = op_in["prop_param"]
+        inter_param = op_in["inter_param"]
+        task_names = op_in["task_names"]
+        local_path = op_in["local_path"]
+        path_to_prop = op_in["path_to_prop"]
+        calculator = inter_param["type"]
+
+        cwd = os.getcwd()
+        if calculator in ['vasp', 'abacus']:
+            os.chdir(str(input_post))
+            for ii in task_names:
+                shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
+                shutil.rmtree(os.path.join(ii, "backward_dir"))
+
+        os.chdir(str(input_all) + local_path)
+        shutil.copytree(str(input_post), './', dirs_exist_ok=True)
+
+        if ("cal_setting" in prop_param
+                and "overwrite_interaction" in prop_param["cal_setting"]):
+            inter_param = prop_param["cal_setting"]["overwrite_interaction"]
+
+        abs_path_to_prop = Path.cwd() / path_to_prop
+
+        prop = make_property_instance(prop_param, inter_param)
+        prop.compute(
+            os.path.join(abs_path_to_prop, "result.json"),
+            os.path.join(abs_path_to_prop, "result.out"),
+            abs_path_to_prop,
+        )
+        # remove potential files in each md task
+        os.chdir(abs_path_to_prop)
+        cmd = "for kk in task.*; do cd $kk; rm *.pb; cd ..; done"
+        subprocess.call(cmd, shell=True)
+
+
+        os.chdir(cwd)
+        shutil.copytree(str(input_all) + local_path + path_to_prop,
+                        path_to_prop, dirs_exist_ok=True)
+
+        op_out = OPIO({
+            'output_post': Path(abs_path_to_prop)
+        })
+        return op_out
+
+
+class CollectProps(OP):
+    """
+    OP class for analyzing calculation results (post property)
+    """
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_input_sign(cls):
+        return OPIOSign({
+            'input_post': Artifact(Path, sub_path=False),
+            'input_all': Artifact(Path, sub_path=False),
+            'prop_param': dict,
+            'inter_param': dict,
+            'task_names': List[str]
+        })
+
+    @classmethod
+    def get_output_sign(cls):
+        return OPIOSign({
+            'output_post': Artifact(Path, sub_path=False)
+        })
+
+    @OP.exec_sign_check
+    def execute(self, op_in: OPIO) -> OPIO:
+        from apex.core.common_prop import make_property_instance
+
+        input_post = op_in["input_post"]
+        input_all = op_in["input_all"]
+        prop_param = op_in["prop_param"]
+        inter_param = op_in["inter_param"]
+        task_names = op_in["task_names"]
+        calculator = inter_param["type"]
+
+        cwd = os.getcwd()
+        if calculator in ['vasp', 'abacus']:
+            os.chdir(str(input_post))
+            for ii in op_in['task_names']:
+                shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
+                shutil.rmtree(os.path.join(ii, "backward_dir"))
+
+        os.chdir(str(input_all))
+        shutil.copytree(str(input_post), './', dirs_exist_ok=True)
+
+        if ("cal_setting" in prop_param
+                and "overwrite_interaction" in prop_param["cal_setting"]):
+            inter_param = prop_param["cal_setting"]["overwrite_interaction"]
+
+        prop = make_property_instance(prop_param, inter_param)
+        prop.compute(
+            os.path.join(input_all, "result.json"),
+            os.path.join(input_all, "result.out"),
+            input_all,
+        )
+        # remove potential files in each md task
+        cmd = "for kk in task.*; do cd $kk; rm *.pb; cd ..; done"
+        subprocess.call(cmd, shell=True)
+
+        os.chdir(cwd)
+        op_out = OPIO({
+            'output_post': input_all
+        })
+        return op_out

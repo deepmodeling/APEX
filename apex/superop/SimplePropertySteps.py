@@ -36,9 +36,10 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
+from apex import LOCAL_PATH
 
 
-class SimplePropertyFlow(Steps):
+class SimplePropertySteps(Steps):
     def __int__(
         self,
         name: str,
@@ -58,13 +59,13 @@ class SimplePropertyFlow(Steps):
 
         self._input_parameters = {
             "flow_id": InputParameter(type=str, value=""),
+            "path_to_prop": InputParameter(type=str),
             "prop_param": InputParameter(type=dict),
             "inter_param": InputParameter(type=dict),
             "do_refine": InputParameter(type=bool)
         }
         self._input_artifacts = {
-            "path_to_work": InputArtifact(type=Path),
-            "path_to_equi": InputArtifact(type=Path)
+            "input_work_dir": InputArtifact(type=Path)
         }
         self._output_parameters = {}
         self._output_artifacts = {
@@ -140,11 +141,11 @@ class SimplePropertyFlow(Steps):
         make = Step(
             name="prop-make",
             template=PythonOPTemplate(make_op, image=make_image, command=["python3"]),
-            artifacts={"path_to_work": self.inputs.artifacts["path_to_work"],
-                       "path_to_equi": self.inputs.artifacts["path_to_equi"]},
+            artifacts={"input_work_dir": self.inputs.artifacts["input_work_dir"]},
             parameters={"prop_param": self.inputs.parameters["prop_param"],
                         "inter_param": self.inputs.parameters["inter_param"],
-                        "do_refine": self.inputs.parameters["do_refine"]},
+                        "do_refine": self.inputs.parameters["do_refine"],
+                        "path_to_prop": self.inputs.parameters["path_to_prop"]},
             key=self.step_keys["make"]
         )
         self.add(make)
@@ -243,7 +244,9 @@ class SimplePropertyFlow(Steps):
                            "input_all": make.outputs.artifacts["output_work_path"]},
                 parameters={"prop_param": self.inputs.parameters["prop_param"],
                             "inter_param": self.inputs.parameters["inter_param"],
-                            "task_names": make.outputs.parameters["task_names"]},
+                            "task_names": make.outputs.parameters["task_names"],
+                            "path_to_prop": self.inputs.parameters["path_to_prop"],
+                            "local_path": LOCAL_PATH},
                 key=self.step_keys["post"]
             )
         elif calculator == 'lammps':
@@ -258,7 +261,9 @@ class SimplePropertyFlow(Steps):
                            "input_all": make.outputs.artifacts["output_work_path"]},
                 parameters={"prop_param": self.inputs.parameters["prop_param"],
                             "inter_param": self.inputs.parameters["inter_param"],
-                            "task_names": make.outputs.parameters["task_names"]},
+                            "task_names": make.outputs.parameters["task_names"],
+                            "path_to_prop": self.inputs.parameters["path_to_prop"],
+                            "local_path": LOCAL_PATH},
                 key=self.step_keys["post"]
             )
             self.add(post)
