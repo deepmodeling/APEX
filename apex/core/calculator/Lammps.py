@@ -4,15 +4,15 @@ import logging
 
 from monty.serialization import dumpfn, loadfn
 
-import apex.calculator.lib.lammps as lammps
+import apex.core.calculator.lib.lammps as lammps
 #from dpgen import dlog
-from apex.calculator.lib.lammps import (
+from apex.core.calculator.lib.lammps import (
     inter_deepmd,
     inter_eam_alloy,
     inter_eam_fs,
     inter_meam,
 )
-from apex.calculator.Task import Task
+from apex.core.calculator.Task import Task
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

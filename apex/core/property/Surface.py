@@ -9,8 +9,8 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import generate_all_slabs
 
-import apex.calculator.lib.abacus as abacus
-import apex.calculator.lib.vasp as vasp
+import apex.core.calculator.lib.abacus as abacus
+import apex.core.calculator.lib.vasp as vasp
 from apex.core.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro

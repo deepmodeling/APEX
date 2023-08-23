@@ -3,7 +3,7 @@ import os
 import numpy as np
 from dpdata.abacus.scf import get_cell, get_coords, get_nele_from_stru
 
-from apex.calculator.lib import vasp
+from apex.core.calculator.lib import vasp
 from dflow.python import upload_packages
 from dargs.dargs import Argument
 upload_packages.append(__file__)

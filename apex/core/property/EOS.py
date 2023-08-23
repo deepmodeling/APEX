@@ -6,8 +6,8 @@ import re
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 
-import apex.calculator.lib.abacus as abacus
-import apex.calculator.lib.vasp as vasp
+import apex.core.calculator.lib.abacus as abacus
+import apex.core.calculator.lib.vasp as vasp
 import apex.core.calculator.lib.abacus_scf as abacus_scf
 from apex.core.Property import Property
 from apex.core.refine import make_refine

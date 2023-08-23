@@ -1,7 +1,7 @@
 import glob
 import os
 
-from apex.calculator.calculator import make_calculator
+from apex.core.calculator.calculator import make_calculator
 from apex.core.property import Elastic
 from apex.core.property import EOS
 from apex.core.property import Gamma

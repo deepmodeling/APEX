@@ -12,13 +12,13 @@
          "skip":         false,
          "vol_start":    0.6,
          "vol_end":      1.4,
-         "vol_step":     0.1,
+         "vol_step":     0.4,
 	 "cal_setting":  {"etol": 0,
                          "ftol": 1e-10}
         },
         {
          "type":         "elastic",
-	 "skip":         false,
+	 "skip":         true,
          "norm_deform":  1e-2,
          "shear_deform": 1e-2,
 	 "cal_setting":  {"etol": 0,
@@ -35,12 +35,12 @@
 	{
          "type":         "interstitial",
          "skip":         true,
-         "supercell":   [1, 1, 1],
+         "supercell":   [2, 2, 2],
          "insert_ele":  ["Mo"]
         },
 	{
          "type":             "vacancy",
-         "skip":         true,
+         "skip":         false,
          "supercell":        [2, 2, 2]
         },
 	{

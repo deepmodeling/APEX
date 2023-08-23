@@ -40,7 +40,7 @@ from apex import LOCAL_PATH
 
 
 class SimplePropertySteps(Steps):
-    def __int__(
+    def __init__(
         self,
         name: str,
         make_op: Type[OP],
@@ -99,7 +99,19 @@ class SimplePropertySteps(Steps):
             [self.inputs.parameters["flow_id"], key]
         )
 
-        self._build()
+        self._build(
+            name,
+            make_op,
+            lmp_run_op,
+            vasp_run_op,
+            abacus_run_op,
+            post_op, make_image,
+            run_image, post_image,
+            run_command,
+            calculator,
+            executor,
+            upload_python_packages
+        )
 
     @property
     def input_parameters(self):

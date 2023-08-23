@@ -36,8 +36,8 @@ class DistributeProps(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            "orig_work_path": Artifact[List[Path]],
-            "dflow_id": List[str],
+            "orig_work_path": Artifact(List[Path]),
+            "flow_id": List[str],
             "path_to_prop": List[str],
             "prop_param": List[dict],
             "inter_param": List[dict],
@@ -51,15 +51,57 @@ class DistributeProps(OP):
             op_in: OPIO,
     ) -> OPIO:
 
-        input_work_dir = OPIO["input_work_dir"]
-        param = OPIO["param"]
+        input_work_dir = op_in["input_work_dir"]
+        param = op_in["param"]
 
+        cwd = Path.cwd()
+        os.chdir(input_work_dir)
+        confs = param["structures"]
+        interaction = param["interaction"]
+        properties = param["properties"]
+
+        conf_dirs = []
+        flow_id_list = []
+        path_to_prop_list = []
+        prop_param_list = []
+        do_refine_list = []
+        for conf in confs:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs.sort()
+        for ii in conf_dirs:
+            for jj in properties:
+                if jj.get('skip', False):
+                    continue
+                if 'init_from_suffix' and 'output_suffix' in jj:
+                    do_refine = True
+                    suffix = jj['output_suffix']
+                elif 'reproduce' in jj and jj['reproduce']:
+                    do_refine = False
+                    suffix = 'reprod'
+                elif 'suffix' in ii and jj['suffix']:
+                    suffix = str(jj['suffix'])
+                else:
+                    do_refine = False
+                    suffix = '00'
+
+                property_type = jj["type"]
+                path_to_prop_list.append(os.path.join(ii, property_type + "_" + suffix))
+                prop_param_list.append(ii)
+                do_refine_list.append(do_refine)
+                flow_id_list.append(ii + '-' + property_type + '-' + suffix)
+
+        nflow = len(path_to_prop_list)
+        orig_work_path_list = [input_work_dir] * nflow
+        inter_param_list = [interaction] * nflow
 
         op_out = OPIO({
-            "orig_work_path": ,
-            "flow_id": ,
-            "njobs": njobs,
-            "task_paths": jobs
+            "orig_work_path": orig_work_path_list,
+            "flow_id": flow_id_list,
+            "path_to_prop": path_to_prop_list,
+            "prop_param": prop_param_list,
+            "inter_param": inter_param_list,
+            "do_refine": do_refine_list,
+            "nflows": nflow
         })
         return op_out
 
@@ -151,8 +193,8 @@ class PropsPost(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_post': Artifact(Path, sub_path=False),
-            'input_all': Artifact(Path, sub_path=False),
+            'input_post': Artifact(Path),
+            'input_all': Artifact(Path),
             'prop_param': dict,
             'inter_param': dict,
             'task_names': List[str],
@@ -163,7 +205,7 @@ class PropsPost(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_post': Artifact(Path, sub_path=False)
+            'output_post': Artifact(Path)
         })
 
     @OP.exec_sign_check
@@ -186,8 +228,8 @@ class PropsPost(OP):
                 shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
                 shutil.rmtree(os.path.join(ii, "backward_dir"))
 
-        os.chdir(str(input_all) + local_path)
-        shutil.copytree(str(input_post), './', dirs_exist_ok=True)
+        os.chdir(str(input_all))
+        shutil.copytree(str(input_post) + local_path, './', dirs_exist_ok=True)
 
         if ("cal_setting" in prop_param
                 and "overwrite_interaction" in prop_param["cal_setting"]):
@@ -208,18 +250,18 @@ class PropsPost(OP):
 
 
         os.chdir(cwd)
-        shutil.copytree(str(input_all) + local_path + path_to_prop,
+        shutil.copytree(str(input_all) + path_to_prop,
                         path_to_prop, dirs_exist_ok=True)
 
         op_out = OPIO({
-            'output_post': Path(abs_path_to_prop)
+            'output_post': Path(path_to_prop)
         })
         return op_out
 
 
 class CollectProps(OP):
     """
-    OP class for analyzing calculation results (post property)
+    OP class for collect property tasks
     """
 
     def __init__(self):
@@ -228,55 +270,18 @@ class CollectProps(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_post': Artifact(Path, sub_path=False),
-            'input_all': Artifact(Path, sub_path=False),
-            'prop_param': dict,
-            'inter_param': dict,
-            'task_names': List[str]
+            'input_all': Artifact(Path),
         })
 
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_post': Artifact(Path, sub_path=False)
+            'output_all': Artifact(Path)
         })
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
-        from apex.core.common_prop import make_property_instance
-
-        input_post = op_in["input_post"]
         input_all = op_in["input_all"]
-        prop_param = op_in["prop_param"]
-        inter_param = op_in["inter_param"]
-        task_names = op_in["task_names"]
-        calculator = inter_param["type"]
-
-        cwd = os.getcwd()
-        if calculator in ['vasp', 'abacus']:
-            os.chdir(str(input_post))
-            for ii in op_in['task_names']:
-                shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
-                shutil.rmtree(os.path.join(ii, "backward_dir"))
-
-        os.chdir(str(input_all))
-        shutil.copytree(str(input_post), './', dirs_exist_ok=True)
-
-        if ("cal_setting" in prop_param
-                and "overwrite_interaction" in prop_param["cal_setting"]):
-            inter_param = prop_param["cal_setting"]["overwrite_interaction"]
-
-        prop = make_property_instance(prop_param, inter_param)
-        prop.compute(
-            os.path.join(input_all, "result.json"),
-            os.path.join(input_all, "result.out"),
-            input_all,
-        )
-        # remove potential files in each md task
-        cmd = "for kk in task.*; do cd $kk; rm *.pb; cd ..; done"
-        subprocess.call(cmd, shell=True)
-
-        os.chdir(cwd)
         op_out = OPIO({
             'output_post': input_all
         })

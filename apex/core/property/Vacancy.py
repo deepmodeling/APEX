@@ -8,7 +8,7 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import VacancyGenerator
 from pymatgen.core.structure import Structure
 
-import apex.calculator.lib.abacus as abacus
+import apex.core.calculator.lib.abacus as abacus
 from apex.core.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro

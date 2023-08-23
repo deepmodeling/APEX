@@ -6,10 +6,10 @@ from monty.serialization import dumpfn
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
-import apex.calculator.lib.vasp as vasp
+import apex.core.calculator.lib.vasp as vasp
 #from dpgen import dlog
-from apex.calculator.Task import Task
-from apex.calculator.lib.vasp import incar_upper
+from apex.core.calculator.Task import Task
+from apex.core.calculator.lib.vasp import incar_upper
 from apex.lib.util import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)

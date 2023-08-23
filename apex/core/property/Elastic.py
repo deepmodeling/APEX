@@ -10,12 +10,12 @@ from pymatgen.analysis.elasticity.stress import Stress
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
-import apex.calculator.lib.abacus as abacus
-import apex.calculator.lib.vasp as vasp
+import apex.core.calculator.lib.abacus as abacus
+import apex.core.calculator.lib.vasp as vasp
 import apex.core.calculator.lib.abacus_scf as abacus_scf
 from apex.core.Property import Property
 from apex.core.refine import make_refine
-from apex.calculator.lib.vasp import incar_upper
+from apex.core.calculator.lib.vasp import incar_upper
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
