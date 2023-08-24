@@ -226,8 +226,8 @@ For most common slip systems in respect to FCC, BCC and HCP crystal structures, 
   | :-------- | ----- | ----- | ---- |
   | $(001)$ | $[100]$ | $[010]$ | $a$ |
   | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\frac{\sqrt{2}}{2}a$ |
-  | $(110)$ | $[\bar{1}11]$ | $[001]$ | $\frac{\sqrt{3}}{2}a$ |
-  | $(110)$ | $[1\bar{1}\bar{1}]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(110)$ | $[\bar{1}11]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
+  | $(110)$ | $[1\bar{1}\bar{1}]$ | $[001]$ | $\frac{\sqrt{3}}{2}a$ |
   | $(112)$ | $[11\bar{1}]$ | $[\bar{1}10]$ | $\frac{\sqrt{3}}{2}a$ |
   | $(112)$ | $[\bar{1}\bar{1}1]$ | $[1\bar{1}0]$ | $\frac{\sqrt{3}}{2}a$ |
   | $(123)$ | $[11\bar{1}]$ | $[\bar{2}10]$ | $\frac{\sqrt{3}}{2}a$ |
@@ -281,7 +281,7 @@ The parameters related to Gamma line calculation are listed below:
       "n_steps":         10
 	}
   ```
-  #### It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.
+  **It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.**
 
 
 ### 3.2. Submittion Command
