@@ -23,12 +23,12 @@ class TestFlow(ABC):
         pass
 
     @staticmethod
-    def assertion(wf, step_name):
+    def assertion(wf, step_name: str, artifacts: str):
         while wf.query_status() in ["Pending", "Running"]:
             time.sleep(4)
         assert (wf.query_status() == 'Succeeded')
         step = wf.query_step(name=step_name)[0]
-        download_artifact(step.outputs.artifacts["output_post"])
+        download_artifact(step.outputs.artifacts[artifacts])
 
     def generate_flow(self):
         if self.flow_type == 'relax':
@@ -37,7 +37,7 @@ class TestFlow(ABC):
             wf.add(self.relaxcal)
             wf.add(self.relaxpost)
             wf.submit()
-            self.assertion(wf, 'Relaxpost')
+            self.assertion(wf, step_name='Relaxpost', artifacts='retrieve_path')
 
         elif self.flow_type == 'props':
             wf = Workflow(name='properties')
@@ -45,7 +45,7 @@ class TestFlow(ABC):
             wf.add(self.propscal)
             wf.add(self.collectProps)
             wf.submit()
-            self.assertion(wf, 'PropsCollector')
+            self.assertion(wf, step_name='PropsCollector', artifacts='retrieve_path')
 
         elif self.flow_type == 'joint':
             wf = Workflow(name='relax-props')
@@ -56,7 +56,7 @@ class TestFlow(ABC):
             wf.add(self.propscal)
             wf.add(self.collectProps)
             wf.submit()
-            self.assertion(wf, 'PropsCollector')
+            self.assertion(wf, step_name='PropsCollector', artifacts='retrieve_path')
 
 
 

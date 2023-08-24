@@ -29,7 +29,7 @@ class DistributeProps(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            "input_work_dir": Artifact(Path),
+            "input_work_path": Artifact(Path),
             "param": Artifact(Path)
         })
 
@@ -50,12 +50,11 @@ class DistributeProps(OP):
             self,
             op_in: OPIO,
     ) -> OPIO:
-
-        input_work_dir = op_in["input_work_dir"]
-        param = op_in["param"]
+        input_work_path = op_in["input_work_path"]
+        param = loadfn(op_in["param"])
 
         cwd = Path.cwd()
-        os.chdir(input_work_dir)
+        os.chdir(input_work_path)
         confs = param["structures"]
         interaction = param["interaction"]
         properties = param["properties"]
@@ -86,12 +85,12 @@ class DistributeProps(OP):
 
                 property_type = jj["type"]
                 path_to_prop_list.append(os.path.join(ii, property_type + "_" + suffix))
-                prop_param_list.append(ii)
+                prop_param_list.append(jj)
                 do_refine_list.append(do_refine)
                 flow_id_list.append(ii + '-' + property_type + '-' + suffix)
 
         nflow = len(path_to_prop_list)
-        orig_work_path_list = [input_work_dir] * nflow
+        orig_work_path_list = [input_work_path] * nflow
         inter_param_list = [interaction] * nflow
 
         op_out = OPIO({
@@ -116,7 +115,7 @@ class PropsMake(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_work_dir': Artifact(Path),
+            'input_work_path': Artifact(Path),
             'path_to_prop': str,
             'prop_param': dict,
             'inter_param': dict,
@@ -250,11 +249,13 @@ class PropsPost(OP):
 
 
         os.chdir(cwd)
-        shutil.copytree(str(input_all) + path_to_prop,
-                        path_to_prop, dirs_exist_ok=True)
+        out_path = Path(cwd) / 'retrieve_pool'
+        os.mkdir(out_path)
+        shutil.copytree(input_all / path_to_prop,
+                        out_path / path_to_prop, dirs_exist_ok=True)
 
         op_out = OPIO({
-            'output_post': Path(path_to_prop)
+            'output_post': out_path
         })
         return op_out
 
@@ -271,18 +272,30 @@ class CollectProps(OP):
     def get_input_sign(cls):
         return OPIOSign({
             'input_all': Artifact(Path),
+            'param': Artifact(Path)
         })
 
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_all': Artifact(Path)
+            'retrieve_path': Artifact(List[Path])
         })
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
         input_all = op_in["input_all"]
+
+        param = loadfn(op_in["param"])
+        confs = param["structures"]
+
+        retrieve_conf_list = [conf.split('/')[0] for conf in confs]
+
+        for ii in retrieve_conf_list:
+            shutil.copytree(op_in['input_all'] / 'retrieve_pool' / ii, ii, dirs_exist_ok=True)
+
+        post_path = [Path(ii) for ii in retrieve_conf_list]
+
         op_out = OPIO({
-            'output_post': input_all
+            'retrieve_path': post_path
         })
         return op_out

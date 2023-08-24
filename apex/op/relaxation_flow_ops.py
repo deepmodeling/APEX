@@ -55,7 +55,6 @@ class RelaxMake(OP):
         structures = loadfn(param_argv)["structures"]
         inter_parameter = loadfn(param_argv)["interaction"]
         parameter = loadfn(param_argv)["relaxation"]
-        calculator = inter_parameter["type"]
 
         make_equi(structures, inter_parameter, parameter)
 
@@ -98,8 +97,8 @@ class RelaxPost(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_post': Artifact(Path, sub_path=False),
-            'input_all': Artifact(Path, sub_path=False),
+            'input_post': Artifact(Path),
+            'input_all': Artifact(Path),
             'param': Artifact(Path),
             'path': str
         })
@@ -107,8 +106,8 @@ class RelaxPost(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_post': Artifact(List[Path], sub_path=False),
-            'output_all': Artifact(Path, sub_path=False)
+            'retrieve_path': Artifact(List[Path]),
+            'output_all': Artifact(Path)
         })
 
     @OP.exec_sign_check
@@ -116,8 +115,8 @@ class RelaxPost(OP):
         from apex.core.common_equi import post_equi
 
         cwd = os.getcwd()
-        os.chdir(str(op_in['input_all']) + op_in['path'])
-        shutil.copytree(str(op_in['input_post']), './', dirs_exist_ok=True)
+        os.chdir(str(op_in['input_all']))
+        shutil.copytree(str(op_in['input_post']) + op_in['path'], './', dirs_exist_ok=True)
 
         param_argv = op_in['param']
         inter_param = loadfn(param_argv)["interaction"]
@@ -134,22 +133,25 @@ class RelaxPost(OP):
             conf_dirs.sort()
 
             for ii in conf_dirs:
-                os.chdir(os.path.join(ii, 'relaxation/relax_task'))
                 cmd = 'rm *.pb'
+                os.chdir(ii)
                 subprocess.call(cmd, shell=True)
-                os.chdir("../../../../")
+                os.chdir(op_in['input_all'])
+                os.chdir(os.path.join(ii, 'relaxation/relax_task'))
+                subprocess.call(cmd, shell=True)
+                os.chdir(op_in['input_all'])
 
 
         os.chdir(cwd)
         for ii in copy_dir_list:
-            shutil.copytree(str(op_in['input_all']) + op_in['path'] + f'/{ii}',
+            shutil.copytree(str(op_in['input_all']) + f'/{ii}',
                             f'./{ii}', dirs_exist_ok = True)
 
         post_path = [Path(ii) for ii in copy_dir_list]
 
         op_out = OPIO({
-            'output_post': post_path,
-            'output_all': Path(str(op_in['input_all']) + op_in['path'])
+            'retrieve_path': post_path,
+            'output_all': op_in['input_all']
         })
         return op_out
 

@@ -75,6 +75,9 @@ class Lammps(Task):
                 if not os.path.abspath(link_lib) == self.model[0]:
                     os.remove(model_lib)
                     os.symlink(os.path.relpath(self.model[0]), model_lib)
+            elif os.path.isfile(model_lib):
+                os.remove(model_lib)
+                os.symlink(os.path.relpath(self.model[0]), model_lib)
             else:
                 os.symlink(os.path.relpath(self.model[0]), model_lib)
 
@@ -83,6 +86,9 @@ class Lammps(Task):
                 if not os.path.abspath(link_file) == self.model[1]:
                     os.remove(model_file)
                     os.symlink(os.path.relpath(self.model[1]), model_file)
+            elif os.path.isfile(model_lib):
+                os.remove(model_lib)
+                os.symlink(os.path.relpath(self.model[1]), model_file)
             else:
                 os.symlink(os.path.relpath(self.model[1]), model_file)
             os.chdir(output_dir)
@@ -107,6 +113,9 @@ class Lammps(Task):
                 if not os.path.abspath(link_file) == self.model:
                     os.remove(model_file)
                     os.symlink(os.path.relpath(self.model), model_file)
+            elif os.path.isfile(model_file):
+                os.remove(model_file)
+                os.symlink(os.path.relpath(self.model), model_file)
             else:
                 os.symlink(os.path.relpath(self.model), model_file)
             os.chdir(output_dir)

@@ -65,7 +65,7 @@ class SimplePropertySteps(Steps):
             "do_refine": InputParameter(type=bool)
         }
         self._input_artifacts = {
-            "input_work_dir": InputArtifact(type=Path)
+            "input_work_path": InputArtifact(type=Path)
         }
         self._output_parameters = {}
         self._output_artifacts = {
@@ -88,15 +88,15 @@ class SimplePropertySteps(Steps):
         self.step_keys = {}
         key = "make"
         self.step_keys[key] = '--'.join(
-            [self.inputs.parameters["flow_id"], key]
+            [str(self.inputs.parameters["flow_id"]), key]
         )
         key = "run"
         self.step_keys[key] = '--'.join(
-            [self.inputs.parameters["flow_id"], key + "-{{item}}"]
+            [str(self.inputs.parameters["flow_id"]), key + "-{{item}}"]
         )
         key = "post"
         self.step_keys[key] = '--'.join(
-            [self.inputs.parameters["flow_id"], key]
+            [str(self.inputs.parameters["flow_id"]), key]
         )
 
         self._build(
@@ -153,7 +153,7 @@ class SimplePropertySteps(Steps):
         make = Step(
             name="prop-make",
             template=PythonOPTemplate(make_op, image=make_image, command=["python3"]),
-            artifacts={"input_work_dir": self.inputs.artifacts["input_work_dir"]},
+            artifacts={"input_work_path": self.inputs.artifacts["input_work_path"]},
             parameters={"prop_param": self.inputs.parameters["prop_param"],
                         "inter_param": self.inputs.parameters["inter_param"],
                         "do_refine": self.inputs.parameters["do_refine"],

@@ -2,9 +2,9 @@ import glob
 import os
 
 from apex.core.calculator.calculator import make_calculator
-from apex.core.property import Elastic
-from apex.core.property import EOS
-from apex.core.property import Gamma
+from apex.core.property.Elastic import Elastic
+from apex.core.property.EOS import EOS
+from apex.core.property.Gamma import Gamma
 from apex.core.property.Interstitial import Interstitial
 from apex.core.lib.utils import create_path
 from apex.core.property.Surface import Surface

@@ -137,7 +137,7 @@ class LAMMPSFlow(TestFlow):
             distributeProps = Step(
                 name="Distributor",
                 template=PythonOPTemplate(DistributeProps, image=self.apex_image_name, command=["python3"]),
-                artifacts={"input_work_dir": relaxpost.outputs.artifacts["output_all"],
+                artifacts={"input_work_path": relaxpost.outputs.artifacts["output_all"],
                            "param": upload_artifact(self.props_param)},
                 key="distributor"
             )
@@ -145,7 +145,7 @@ class LAMMPSFlow(TestFlow):
             distributeProps = Step(
                 name="PropsDistributor",
                 template=PythonOPTemplate(DistributeProps, image=self.apex_image_name, command=["python3"]),
-                artifacts={"input_work_dir": cwd,
+                artifacts={"input_work_path": upload_artifact(work_dir),
                            "param": upload_artifact(self.props_param)},
                 key="distributor"
             )
@@ -179,11 +179,11 @@ class LAMMPSFlow(TestFlow):
                     "inter_param",
                     "do_refine"
                 ],
-                input_artifact=["input_work_dir"],
+                input_artifact=["input_work_path"],
                 output_artifact=["output_post"],
             ),
             artifacts={
-                "input_work_dir": distributeProps.outputs.artifacts["orig_work_path"]
+                "input_work_path": distributeProps.outputs.artifacts["orig_work_path"]
             },
             parameters={
                 "flow_id": distributeProps.outputs.parameters["flow_id"],
@@ -200,7 +200,8 @@ class LAMMPSFlow(TestFlow):
         collectProps = Step(
             name="PropsCollector",
             template=PythonOPTemplate(CollectProps, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input_all": propscal.outputs.artifacts["output_post"]},
+            artifacts={"input_all": propscal.outputs.artifacts["output_post"],
+                       "param": upload_artifact(self.props_param)},
             key="collector"
         )
         self.collectProps = collectProps
