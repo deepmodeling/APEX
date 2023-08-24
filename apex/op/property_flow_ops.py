@@ -271,6 +271,7 @@ class CollectProps(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
+            'input_post': Artifact(Path),
             'input_all': Artifact(Path),
             'param': Artifact(Path)
         })
@@ -283,19 +284,22 @@ class CollectProps(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
+        input_post = op_in["input_post"]
         input_all = op_in["input_all"]
-
         param = loadfn(op_in["param"])
         confs = param["structures"]
+        print(glob.glob(str(input_all / "confs/std-bcc/*")))
+        print(glob.glob(str(input_post / "retrieve_pool/confs/std-bcc/*")))
 
         retrieve_conf_list = [conf.split('/')[0] for conf in confs]
+        shutil.copytree(input_post / 'retrieve_pool', input_all, dirs_exist_ok=True)
 
         for ii in retrieve_conf_list:
-            shutil.copytree(op_in['input_all'] / 'retrieve_pool' / ii, ii, dirs_exist_ok=True)
+            shutil.copytree(input_all / ii, ii, dirs_exist_ok=True)
 
-        post_path = [Path(ii) for ii in retrieve_conf_list]
+        retrieve_path = [Path(ii) for ii in retrieve_conf_list]
 
         op_out = OPIO({
-            'retrieve_path': post_path
+            'retrieve_path': retrieve_path
         })
         return op_out

@@ -134,18 +134,20 @@ class LAMMPSFlow(TestFlow):
         self.relaxpost = relaxpost
 
         if self.flow_type == 'joint':
+            input_work_path = relaxpost.outputs.artifacts["output_all"]
             distributeProps = Step(
                 name="Distributor",
                 template=PythonOPTemplate(DistributeProps, image=self.apex_image_name, command=["python3"]),
-                artifacts={"input_work_path": relaxpost.outputs.artifacts["output_all"],
+                artifacts={"input_work_path": input_work_path,
                            "param": upload_artifact(self.props_param)},
                 key="distributor"
             )
         else:
+            input_work_path = upload_artifact(work_dir)
             distributeProps = Step(
                 name="PropsDistributor",
                 template=PythonOPTemplate(DistributeProps, image=self.apex_image_name, command=["python3"]),
-                artifacts={"input_work_path": upload_artifact(work_dir),
+                artifacts={"input_work_path": input_work_path,
                            "param": upload_artifact(self.props_param)},
                 key="distributor"
             )
@@ -200,7 +202,8 @@ class LAMMPSFlow(TestFlow):
         collectProps = Step(
             name="PropsCollector",
             template=PythonOPTemplate(CollectProps, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input_all": propscal.outputs.artifacts["output_post"],
+            artifacts={"input_all": input_work_path,
+                       "input_post": propscal.outputs.artifacts["output_post"],
                        "param": upload_artifact(self.props_param)},
             key="collector"
         )
