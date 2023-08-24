@@ -288,8 +288,6 @@ class CollectProps(OP):
         input_all = op_in["input_all"]
         param = loadfn(op_in["param"])
         confs = param["structures"]
-        print(glob.glob(str(input_all / "confs/std-bcc/*")))
-        print(glob.glob(str(input_post / "retrieve_pool/confs/std-bcc/*")))
 
         retrieve_conf_list = [conf.split('/')[0] for conf in confs]
         shutil.copytree(input_post / 'retrieve_pool', input_all, dirs_exist_ok=True)
