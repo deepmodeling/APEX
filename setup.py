@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="APEX",
-    version="0.1.0",
+    version="0.1.1",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -15,14 +15,13 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         "pydflow>=1.7.19",
-        "pymatgen>=2023.7.17",
-        'pymatgen-analysis-defects',
+        "pymatgen==2023.8.10",
+        'pymatgen-analysis-defects==2023.8.22',
         "dpdata>=0.2.13",
         "dpdispatcher",
         "matplotlib",
         "seekpath",
         "fpop>=0.0.7",
-        "ase",
         "boto3"
     ],
     classifiers=[

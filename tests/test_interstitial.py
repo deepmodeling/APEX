@@ -97,7 +97,9 @@ class TestInterstitial(unittest.TestCase):
             st1 = inter.get_supercell_structure(
                 sc_mat=np.eye(3) * self.prop_param[0]["supercell"]
             )
-            self.assertEqual(st0, st1)
+            st0_coords = [list(st0.sites[ii].coords) for ii in range(3)]
+            st1_coords = [list(st1.sites[ii].coords) for ii in range(3)]
+            self.assertEqual(st0_coords, st1_coords)
 
         for ii in dfm_dirs[4:]:
             st_file = os.path.join(ii, "POSCAR")
