@@ -281,7 +281,7 @@ The parameters related to Gamma line calculation are listed below:
       "n_steps":         10
 	}
   ```
-  #### It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.
+  **It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.**
 
 
 ### 3.2. Submittion Command
