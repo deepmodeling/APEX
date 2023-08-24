@@ -7,9 +7,6 @@ import unittest
 
 import dpdata
 import numpy as np
-from ase.lattice.cubic import BodyCenteredCubic as bcc
-from ase.lattice.cubic import FaceCenteredCubic as fcc
-from ase.lattice.hexagonal import HexagonalClosedPacked as hcp
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
