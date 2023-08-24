@@ -146,7 +146,7 @@ class Lammps(Task):
             with open(self.in_lammps, "r") as fin:
                 fc = fin.read()
         # user input in.lammps for apex calculation
-        if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
+        elif "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]) and not task_type == "relaxation":
             with open(os.path.abspath(cal_setting["input_prop"]), "r") as fin:
                 fc = fin.read()
 
