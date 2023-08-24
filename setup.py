@@ -15,14 +15,13 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         "pydflow>=1.7.19",
-        "pymatgen>=2023.7.17",
-        'pymatgen-analysis-defects',
+        "pymatgen==2023.8.10",
+        'pymatgen-analysis-defects==2023.8.22',
         "dpdata>=0.2.13",
         "dpdispatcher",
         "matplotlib",
         "seekpath",
         "fpop>=0.0.7",
-        "ase",
         "boto3"
     ],
     classifiers=[

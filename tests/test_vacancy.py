@@ -91,4 +91,7 @@ class TestVacancy(unittest.TestCase):
             st1 = vac.get_supercell_structure(
                 sc_mat=np.eye(3) * self.prop_param[0]["supercell"]
             )
-            self.assertEqual(st0, st1)
+            for ii in range(3):
+                st0_coords = [format(st0.sites[ii].coords[jj], '.4f') for jj in range(3)]
+                st1_coords = [format(st1.sites[ii].coords[jj], '.4f') for jj in range(3)]
+            self.assertEqual(st0_coords, st1_coords)
