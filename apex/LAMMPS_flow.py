@@ -20,6 +20,7 @@ from apex.op.property_ops import (
 )
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.superop.SimplePropertySteps import SimplePropertySteps
+from apex.superop.RelaxationFlow import RelaxationFlow
 from apex.TestFlow import TestFlow
 
 
@@ -93,49 +94,35 @@ class LAMMPSFlow(TestFlow):
         cwd = os.getcwd()
         work_dir = Path(cwd)
 
-        relaxmake = Step(
-            name="Relaxmake",
-            template=PythonOPTemplate(RelaxMake,
-                                      image=self.apex_image_name,
-                                      command=["python3"]),
-            artifacts={"input": upload_artifact(work_dir),
-                       "param": upload_artifact(self.relax_param)},
-            key="lammps-relaxmake"
-        )
-        self.relaxmake = relaxmake
-
-        relax = PythonOPTemplate(RunLAMMPS,
-                                 slices=Slices("{{item}}",
-                                               input_artifact=["input_lammps"],
-                                               output_artifact=["backward_dir"]),
-                                 image=self.dpmd_image_name, command=["python3"])
-
-        relaxcal = Step(
-            name="RelaxLAMMPS-Cal",
-            template=relax,
-            artifacts={"input_lammps": relaxmake.outputs.artifacts["task_paths"]},
-            parameters={"run_command": self.lammps_run_command},
-            with_param=argo_range(relaxmake.outputs.parameters["njobs"]),
-            key="lammps-relaxcal-{{item}}",
+        relaxation_flow = RelaxationFlow(
+            name='relaxation-flow',
+            make_op=RelaxMake,
+            run_op=RunLAMMPS,
+            post_op=RelaxPost,
+            make_image=self.apex_image_name,
+            run_image=self.dpmd_image_name,
+            post_image=self.apex_image_name,
+            run_command=self.lammps_run_command,
+            calculator="lammps",
             executor=self.executor,
+            upload_python_packages=self.upload_python_packages
         )
-        self.relaxcal = relaxcal
 
-        relaxpost = Step(
-            name="Relaxpost",
-            template=PythonOPTemplate(RelaxPost,
-                                      image=self.apex_image_name,
-                                      command=["python3"]),
-            artifacts={"input_post": relaxcal.outputs.artifacts["backward_dir"],
-                       "input_all": relaxmake.outputs.artifacts["output"],
-                       "param": upload_artifact(self.relax_param)},
-            parameters={"path": work_dir},
-            key="lammps-relaxpost"
+        relax = Step(
+            name='relaxation-cal',
+            template=relaxation_flow,
+            artifacts={
+                "input_work_path": upload_artifact(work_dir),
+                "parameter": upload_artifact(self.relax_param)
+            },
+            parameters={"flow_id": "relaxflow"},
+            key="relaxcal"
         )
-        self.relaxpost = relaxpost
+        self.relax = relax
+
 
         if self.flow_type == 'joint':
-            input_work_path = relaxpost.outputs.artifacts["output_all"]
+            input_work_path = relax.outputs.artifacts["output_all"]
             distributeProps = Step(
                 name="Distributor",
                 template=PythonOPTemplate(DistributeProps,

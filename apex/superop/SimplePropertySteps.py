@@ -51,7 +51,6 @@ class SimplePropertySteps(Steps):
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
-
         self._input_parameters = {
             "flow_id": InputParameter(type=str, value=""),
             "path_to_prop": InputParameter(type=str),

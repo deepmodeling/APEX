@@ -137,7 +137,8 @@ class ABACUSFlow(TestFlow):
         relaxpost = Step(
             name="Relaxpost",
             template=PythonOPTemplate(RelaxPostFp, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"], "input_all": self.relaxmake.outputs.artifacts["output"],
+            artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"],
+                       "input_all": self.relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
             parameters={"path": work_dir},
             key="abacus-relaxpost"
