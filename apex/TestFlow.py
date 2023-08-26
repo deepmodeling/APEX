@@ -33,26 +33,22 @@ class TestFlow(ABC):
     def generate_flow(self):
         if self.flow_type == 'relax':
             wf = Workflow(name='relaxation')
-            wf.add(self.relax)
+            wf.add(self.relaxation)
             wf.submit()
-            self.assertion(wf, step_name='Relaxpost', artifacts='retrieve_path')
+            self.assertion(wf, step_name='relaxation-flow', artifacts='retrieve_path')
 
         elif self.flow_type == 'props':
             wf = Workflow(name='properties')
-            wf.add(self.distributeProps)
-            wf.add(self.propscal)
-            wf.add(self.collectProps)
+            wf.add(self.property)
             wf.submit()
-            self.assertion(wf, step_name='PropsCollector', artifacts='retrieve_path')
+            self.assertion(wf, step_name='property-flow', artifacts='retrieve_path')
 
         elif self.flow_type == 'joint':
             wf = Workflow(name='relax-props')
-            wf.add(self.relax)
-            wf.add(self.distributeProps)
-            wf.add(self.propscal)
-            wf.add(self.collectProps)
+            wf.add(self.relaxation)
+            wf.add(self.property)
             wf.submit()
-            self.assertion(wf, step_name='PropsCollector', artifacts='retrieve_path')
+            self.assertion(wf, step_name='property-flow', artifacts='retrieve_path')
 
 
 

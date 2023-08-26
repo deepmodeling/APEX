@@ -19,7 +19,7 @@ from apex.op.property_ops import (
     PropsPost
 )
 from apex.op.RunLAMMPS import RunLAMMPS
-from apex.superop.SimplePropertySteps import SimplePropertySteps
+from apex.superop.PropertyFlow import PropertyFlow
 from apex.superop.RelaxationFlow import RelaxationFlow
 from apex.TestFlow import TestFlow
 
@@ -108,8 +108,8 @@ class LAMMPSFlow(TestFlow):
             upload_python_packages=self.upload_python_packages
         )
 
-        relax = Step(
-            name='relaxation-cal',
+        relaxation = Step(
+            name='relaxation-flow',
             template=relaxation_flow,
             artifacts={
                 "input_work_path": upload_artifact(work_dir),
@@ -118,85 +118,37 @@ class LAMMPSFlow(TestFlow):
             parameters={"flow_id": "relaxflow"},
             key="relaxcal"
         )
-        self.relax = relax
+        self.relaxation = relaxation
 
-
-        if self.flow_type == 'joint':
-            input_work_path = relax.outputs.artifacts["output_all"]
-            distributeProps = Step(
-                name="Distributor",
-                template=PythonOPTemplate(DistributeProps,
-                                          image=self.apex_image_name,
-                                          command=["python3"]),
-                artifacts={"input_work_path": input_work_path,
-                           "param": upload_artifact(self.props_param)},
-                key="distributor"
-            )
-        else:
+        if self.flow_type == 'props':
             input_work_path = upload_artifact(work_dir)
-            distributeProps = Step(
-                name="PropsDistributor",
-                template=PythonOPTemplate(DistributeProps,
-                                          image=self.apex_image_name,
-                                          command=["python3"]),
-                artifacts={"input_work_path": input_work_path,
-                           "param": upload_artifact(self.props_param)},
-                key="distributor"
+        elif self.flow_type == 'joint':
+            input_work_path = relaxation.outputs.artifacts["output_all"]
+
+        try:
+            property_flow = PropertyFlow(
+                name='property-flow',
+                make_op=PropsMake,
+                run_op=RunLAMMPS,
+                post_op=PropsPost,
+                make_image=self.apex_image_name,
+                run_image=self.dpmd_image_name,
+                post_image=self.apex_image_name,
+                run_command=self.lammps_run_command,
+                calculator="lammps",
+                executor=self.executor,
+                upload_python_packages=self.upload_python_packages
             )
-        self.distributeProps = distributeProps
-
-        simple_property_steps = SimplePropertySteps(
-            name='simple-property-flow',
-            make_op=PropsMake,
-            run_op=RunLAMMPS,
-            post_op=PropsPost,
-            make_image=self.apex_image_name,
-            run_image=self.dpmd_image_name,
-            post_image=self.apex_image_name,
-            run_command=self.lammps_run_command,
-            calculator="lammps",
-            executor=self.executor,
-            upload_python_packages=self.upload_python_packages
-        )
-
-        propscal = Step(
-            name="Prop-Cal",
-            template=simple_property_steps,
-            slices=Slices(
-                slices="{{item}}",
-                input_parameter=[
-                    "flow_id",
-                    "path_to_prop",
-                    "prop_param",
-                    "inter_param",
-                    "do_refine"
-                ],
-                input_artifact=["input_work_path"],
-                output_artifact=["output_post"],
-            ),
-            artifacts={
-                "input_work_path": distributeProps.outputs.artifacts["orig_work_path"]
-            },
-            parameters={
-                "flow_id": distributeProps.outputs.parameters["flow_id"],
-                "path_to_prop": distributeProps.outputs.parameters["path_to_prop"],
-                "prop_param": distributeProps.outputs.parameters["prop_param"],
-                "inter_param": distributeProps.outputs.parameters["inter_param"],
-                "do_refine": distributeProps.outputs.parameters["do_refine"]
-            },
-            with_param=argo_range(distributeProps.outputs.parameters["nflows"]),
-            key="propscal-{{item}}"
-        )
-        self.propscal = propscal
-
-        collectProps = Step(
-            name="PropsCollector",
-            template=PythonOPTemplate(CollectProps,
-                                      image=self.apex_image_name,
-                                      command=["python3"]),
-            artifacts={"input_all": input_work_path,
-                       "input_post": propscal.outputs.artifacts["output_post"],
-                       "param": upload_artifact(self.props_param)},
-            key="collector"
-        )
-        self.collectProps = collectProps
+            property = Step(
+                name='property-flow',
+                template=property_flow,
+                artifacts={
+                    "input_work_path": input_work_path,
+                    "parameter": upload_artifact(self.props_param)
+                },
+                parameters={"flow_id": "propertyflow"},
+                key="propertycal"
+            )
+            self.property = property
+        except UnboundLocalError:
+            pass
