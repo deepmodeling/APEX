@@ -82,9 +82,9 @@ def run_flow(args):
     if flow_type == 'relax':
         print('Submitting relaxation workflow...')
     elif flow_type == 'props':
-        print('Submitting core test workflow...')
+        print('Submitting property test workflow...')
     else:
-        print('Submitting relaxation & core test joint workflow...')
+        print('Submitting relaxation & property test joint workflow...')
 
     tf.init_steps()
     tf.generate_flow()

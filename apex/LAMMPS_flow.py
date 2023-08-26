@@ -1,3 +1,6 @@
+import os
+from monty.serialization import loadfn
+from pathlib import Path
 from dflow import (
     Step,
     argo_range,
@@ -7,14 +10,9 @@ from dflow.python import (
     PythonOPTemplate,
     Slices
 )
-import os
-from monty.serialization import loadfn
 from dflow.plugins.dispatcher import DispatcherExecutor, update_dict
-from dflow.python import upload_packages
-from fpop.vasp import RunVasp
-from fpop.abacus import RunAbacus
-from apex.op.relaxation_flow_ops import RelaxMake, RelaxPost
-from apex.op.property_flow_ops import (
+from apex.op.relaxation_ops import RelaxMake, RelaxPost
+from apex.op.property_ops import (
     DistributeProps,
     CollectProps,
     PropsMake,
@@ -23,8 +21,6 @@ from apex.op.property_flow_ops import (
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.TestFlow import TestFlow
-
-upload_packages.append(__file__)
 
 
 class LAMMPSFlow(TestFlow):
@@ -95,11 +91,13 @@ class LAMMPSFlow(TestFlow):
 
     def init_steps(self):
         cwd = os.getcwd()
-        work_dir = cwd
+        work_dir = Path(cwd)
 
         relaxmake = Step(
             name="Relaxmake",
-            template=PythonOPTemplate(RelaxMake, image=self.apex_image_name, command=["python3"]),
+            template=PythonOPTemplate(RelaxMake,
+                                      image=self.apex_image_name,
+                                      command=["python3"]),
             artifacts={"input": upload_artifact(work_dir),
                        "param": upload_artifact(self.relax_param)},
             key="lammps-relaxmake"
@@ -107,8 +105,9 @@ class LAMMPSFlow(TestFlow):
         self.relaxmake = relaxmake
 
         relax = PythonOPTemplate(RunLAMMPS,
-                                 slices=Slices("{{item}}", input_artifact=["input_lammps"],
-                                               output_artifact=["output_lammps"]),
+                                 slices=Slices("{{item}}",
+                                               input_artifact=["input_lammps"],
+                                               output_artifact=["backward_dir"]),
                                  image=self.dpmd_image_name, command=["python3"])
 
         relaxcal = Step(
@@ -124,11 +123,13 @@ class LAMMPSFlow(TestFlow):
 
         relaxpost = Step(
             name="Relaxpost",
-            template=PythonOPTemplate(RelaxPost, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input_post": relaxcal.outputs.artifacts["output_lammps"],
+            template=PythonOPTemplate(RelaxPost,
+                                      image=self.apex_image_name,
+                                      command=["python3"]),
+            artifacts={"input_post": relaxcal.outputs.artifacts["backward_dir"],
                        "input_all": relaxmake.outputs.artifacts["output"],
                        "param": upload_artifact(self.relax_param)},
-            parameters={"path": cwd},
+            parameters={"path": work_dir},
             key="lammps-relaxpost"
         )
         self.relaxpost = relaxpost
@@ -137,7 +138,9 @@ class LAMMPSFlow(TestFlow):
             input_work_path = relaxpost.outputs.artifacts["output_all"]
             distributeProps = Step(
                 name="Distributor",
-                template=PythonOPTemplate(DistributeProps, image=self.apex_image_name, command=["python3"]),
+                template=PythonOPTemplate(DistributeProps,
+                                          image=self.apex_image_name,
+                                          command=["python3"]),
                 artifacts={"input_work_path": input_work_path,
                            "param": upload_artifact(self.props_param)},
                 key="distributor"
@@ -146,7 +149,9 @@ class LAMMPSFlow(TestFlow):
             input_work_path = upload_artifact(work_dir)
             distributeProps = Step(
                 name="PropsDistributor",
-                template=PythonOPTemplate(DistributeProps, image=self.apex_image_name, command=["python3"]),
+                template=PythonOPTemplate(DistributeProps,
+                                          image=self.apex_image_name,
+                                          command=["python3"]),
                 artifacts={"input_work_path": input_work_path,
                            "param": upload_artifact(self.props_param)},
                 key="distributor"
@@ -156,9 +161,7 @@ class LAMMPSFlow(TestFlow):
         simple_property_steps = SimplePropertySteps(
             name='simple-property-flow',
             make_op=PropsMake,
-            lmp_run_op=RunLAMMPS,
-            vasp_run_op=RunVasp,
-            abacus_run_op=RunAbacus,
+            run_op=RunLAMMPS,
             post_op=PropsPost,
             make_image=self.apex_image_name,
             run_image=self.dpmd_image_name,
@@ -201,7 +204,9 @@ class LAMMPSFlow(TestFlow):
 
         collectProps = Step(
             name="PropsCollector",
-            template=PythonOPTemplate(CollectProps, image=self.apex_image_name, command=["python3"]),
+            template=PythonOPTemplate(CollectProps,
+                                      image=self.apex_image_name,
+                                      command=["python3"]),
             artifacts={"input_all": input_work_path,
                        "input_post": propscal.outputs.artifacts["output_post"],
                        "param": upload_artifact(self.props_param)},

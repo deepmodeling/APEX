@@ -149,6 +149,7 @@ class PropsMake(OP):
         os.chdir(input_work_path)
         abs_path_to_prop = input_work_path / path_to_prop
         conf_path = abs_path_to_prop.parent
+        prop_name = abs_path_to_prop.name
         path_to_equi = conf_path / "relaxation" / "relax_task"
         prop = make_property_instance(prop_param, inter_param)
         task_list = prop.make_confs(abs_path_to_prop, path_to_equi, do_refine)
@@ -163,7 +164,8 @@ class PropsMake(OP):
         )  # generate same KPOINTS file for elastic when doing VASP
 
         task_list.sort()
-        task_list_str = task_list
+        os.chdir(input_work_path)
+        task_list_str = glob.glob(path_to_prop + '/' + 'task.*')
 
         all_jobs = task_list
         njobs = len(all_jobs)
@@ -226,9 +228,11 @@ class PropsPost(OP):
             for ii in task_names:
                 shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
                 shutil.rmtree(os.path.join(ii, "backward_dir"))
-
-        os.chdir(str(input_all))
-        shutil.copytree(str(input_post) + local_path, './', dirs_exist_ok=True)
+            os.chdir(str(input_all))
+            shutil.copytree(str(input_post), './', dirs_exist_ok=True)
+        else:
+            os.chdir(str(input_all))
+            shutil.copytree(str(input_post) + local_path, './', dirs_exist_ok=True)
 
         if ("cal_setting" in prop_param
                 and "overwrite_interaction" in prop_param["cal_setting"]):

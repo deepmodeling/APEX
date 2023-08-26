@@ -114,24 +114,25 @@ class RelaxPost(OP):
     def execute(self, op_in: OPIO) -> OPIO:
         from apex.core.common_equi import post_equi
 
-        cwd = os.getcwd()
-        os.chdir(str(op_in['input_all']))
-        shutil.copytree(str(op_in['input_post']) + op_in['path'], './', dirs_exist_ok=True)
-
         param_argv = op_in['param']
         inter_param = loadfn(param_argv)["interaction"]
         calculator = inter_param["type"]
         conf_list = loadfn(param_argv)["structures"]
         copy_dir_list = [conf.split('/')[0] for conf in conf_list]
-        post_equi(conf_list, inter_param)
 
-        # remove potential files inside md tasks
-        if not calculator in ['vasp', 'abacus']:
+        cwd = os.getcwd()
+        os.chdir(str(op_in['input_all']))
+        if calculator in ['vasp', 'abacus']:
+            shutil.copytree(str(op_in['input_post']), './', dirs_exist_ok=True)
+            post_equi(conf_list, inter_param)
+        else:
+            shutil.copytree(str(op_in['input_post']) + op_in['path'],
+                            './', dirs_exist_ok=True)
+            post_equi(conf_list, inter_param)
             conf_dirs = []
             for conf in conf_list:
                 conf_dirs.extend(glob.glob(conf))
             conf_dirs.sort()
-
             for ii in conf_dirs:
                 cmd = 'rm *.pb'
                 os.chdir(ii)
@@ -140,7 +141,6 @@ class RelaxPost(OP):
                 os.chdir(os.path.join(ii, 'relaxation/relax_task'))
                 subprocess.call(cmd, shell=True)
                 os.chdir(op_in['input_all'])
-
 
         os.chdir(cwd)
         for ii in copy_dir_list:

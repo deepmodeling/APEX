@@ -1,7 +1,4 @@
 import os
-from copy import (
-    deepcopy,
-)
 from pathlib import (
     Path,
 )
@@ -44,9 +41,7 @@ class SimplePropertySteps(Steps):
         self,
         name: str,
         make_op: Type[OP],
-        lmp_run_op: Type[OP],
-        vasp_run_op: Type[OP],
-        abacus_run_op: Type[OP],
+        run_op: Type[OP],
         post_op: Type[OP],
         make_image: str,
         run_image: str,
@@ -102,11 +97,11 @@ class SimplePropertySteps(Steps):
         self._build(
             name,
             make_op,
-            lmp_run_op,
-            vasp_run_op,
-            abacus_run_op,
-            post_op, make_image,
-            run_image, post_image,
+            run_op,
+            post_op,
+            make_image,
+            run_image,
+            post_image,
             run_command,
             calculator,
             executor,
@@ -137,9 +132,7 @@ class SimplePropertySteps(Steps):
         self,
         name: str,
         make_op: Type[OP],
-        lmp_run_op: Type[OP],
-        vasp_run_op: Type[OP],
-        abacus_run_op: Type[OP],
+        run_op: Type[OP],
         post_op: Type[OP],
         make_image: str,
         run_image: str,
@@ -163,21 +156,21 @@ class SimplePropertySteps(Steps):
         self.add(make)
 
         # Step for property run
+        run_fp = PythonOPTemplate(
+            run_op,
+            slices=Slices(
+                "{{item}}",
+                input_parameter=["task_name"],
+                input_artifact=["task_path"],
+                output_artifact=["backward_dir"]
+            ),
+            python_packages=upload_python_packages,
+            image=run_image
+        )
         if calculator == 'vasp':
-            run = PythonOPTemplate(
-                vasp_run_op,
-                slices=Slices(
-                    "{{item}}",
-                    input_parameter=["task_name"],
-                    input_artifact=["task_path"],
-                    output_artifact=["backward_dir"]
-                ),
-                python_packages=upload_python_packages,
-                image=run_image
-            )
             runcal = Step(
                 name="PropsVASP-Cal",
-                template=run,
+                template=run_fp,
                 parameters={
                     "run_image_config": {"command": run_command},
                     "task_name": make.outputs.parameters["task_names"],
@@ -191,20 +184,9 @@ class SimplePropertySteps(Steps):
                 executor=executor,
             )
         elif calculator == 'abacus':
-            run = PythonOPTemplate(
-                abacus_run_op,
-                slices=Slices(
-                    "{{item}}",
-                    input_parameter=["task_name"],
-                    input_artifact=["task_path"],
-                    output_artifact=["backward_dir"]
-                ),
-                python_packages=upload_python_packages,
-                image=run_image
-            )
             runcal = Step(
                 name="PropsABACUS-Cal",
-                template=run,
+                template=run_fp,
                 parameters={
                     "run_image_config": {"command": run_command},
                     "task_name": make.outputs.parameters["task_names"],
@@ -220,19 +202,19 @@ class SimplePropertySteps(Steps):
                 executor=executor,
             )
         elif calculator == 'lammps':
-            run = PythonOPTemplate(
-                lmp_run_op,
+            run_lmp = PythonOPTemplate(
+                run_op,
                 slices=Slices(
                     "{{item}}",
                     input_artifact=["input_lammps"],
-                    output_artifact=["output_lammps"]
+                    output_artifact=["backward_dir"]
                 ),
                 image=run_image,
                 command=["python3"]
             )
             runcal = Step(
                 name="PropsLAMMPS-Cal",
-                template=run,
+                template=run_lmp,
                 artifacts={"input_lammps": make.outputs.artifacts["task_paths"]},
                 parameters={"run_command": run_command},
                 with_param=argo_range(make.outputs.parameters["njobs"]),
@@ -244,45 +226,22 @@ class SimplePropertySteps(Steps):
         self.add(runcal)
 
         # Step for property post
-        if calculator in ['vasp', 'abacus']:
-            post = Step(
-                name="Props-post",
-                template=PythonOPTemplate(
-                    post_op,
-                    image=post_image,
-                    command=["python3"]
-                ),
-                artifacts={"input_post": runcal.outputs.artifacts["backward_dir"],
-                           "input_all": make.outputs.artifacts["output_work_path"]},
-                parameters={"prop_param": self.inputs.parameters["prop_param"],
-                            "inter_param": self.inputs.parameters["inter_param"],
-                            "task_names": make.outputs.parameters["task_names"],
-                            "path_to_prop": self.inputs.parameters["path_to_prop"],
-                            "local_path": LOCAL_PATH},
-                key=self.step_keys["post"]
-            )
-        elif calculator == 'lammps':
-            post = Step(
-                name="Props-post",
-                template=PythonOPTemplate(
-                    post_op,
-                    image=post_image,
-                    command=["python3"]
-                ),
-                artifacts={"input_post": runcal.outputs.artifacts["output_lammps"],
-                           "input_all": make.outputs.artifacts["output_work_path"]},
-                parameters={"prop_param": self.inputs.parameters["prop_param"],
-                            "inter_param": self.inputs.parameters["inter_param"],
-                            "task_names": make.outputs.parameters["task_names"],
-                            "path_to_prop": self.inputs.parameters["path_to_prop"],
-                            "local_path": LOCAL_PATH},
-                key=self.step_keys["post"]
-            )
-            self.add(post)
+        post = Step(
+            name="Props-post",
+            template=PythonOPTemplate(
+                post_op,
+                image=post_image,
+                command=["python3"]
+            ),
+            artifacts={"input_post": runcal.outputs.artifacts["backward_dir"],
+                       "input_all": make.outputs.artifacts["output_work_path"]},
+            parameters={"prop_param": self.inputs.parameters["prop_param"],
+                        "inter_param": self.inputs.parameters["inter_param"],
+                        "task_names": make.outputs.parameters["task_names"],
+                        "path_to_prop": self.inputs.parameters["path_to_prop"],
+                        "local_path": LOCAL_PATH},
+            key=self.step_keys["post"]
+        )
+        self.add(post)
 
-            self.outputs.artifacts["output_post"]._from = post.outputs.artifacts["output_post"]
-
-
-
-
-
+        self.outputs.artifacts["output_post"]._from = post.outputs.artifacts["output_post"]

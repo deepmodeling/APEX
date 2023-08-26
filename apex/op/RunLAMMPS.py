@@ -28,7 +28,7 @@ class RunLAMMPS(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_lammps': Artifact(Path, sub_path=False)
+            'backward_dir': Artifact(Path, sub_path=False)
         })
 
     @OP.exec_sign_check
@@ -44,6 +44,6 @@ class RunLAMMPS(OP):
 
         os.chdir(cwd)
         op_out = OPIO({
-            "output_lammps": op_in["input_lammps"]
+            "backward_dir": op_in["input_lammps"]
         })
         return op_out
