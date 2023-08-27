@@ -5,7 +5,6 @@ from pathlib import (
 from typing import (
     List,
     Optional,
-    Set,
     Type,
 )
 from dflow import (
@@ -13,29 +12,19 @@ from dflow import (
     InputParameter,
     Inputs,
     OutputArtifact,
-    OutputParameter,
     Outputs,
     Step,
     Steps,
-    Workflow,
-    argo_len,
     argo_range,
-    argo_sequence,
-    download_artifact,
-    upload_artifact,
 )
 from dflow.python import (
     OP,
-    OPIO,
-    Artifact,
-    OPIOSign,
     PythonOPTemplate,
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
 from apex.op.property_ops import DistributeProps, CollectProps
 from apex.superop.SimplePropertySteps import SimplePropertySteps
-from apex import LOCAL_PATH
 
 
 class PropertyFlow(Steps):

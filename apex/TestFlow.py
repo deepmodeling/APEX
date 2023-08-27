@@ -1,5 +1,6 @@
 import time
 from abc import ABC, abstractmethod
+from typing import Literal
 from dflow import download_artifact, Workflow
 
 
@@ -7,7 +8,12 @@ class TestFlow(ABC):
     """
     Constructor
     """
-    def __init__(self, flow_type, relax_param, props_param):
+    def __init__(
+            self,
+            flow_type: Literal['relax', 'props', 'joint'],
+            relax_param,
+            props_param
+    ):
         self.flow_type = flow_type
         self.relax_param = relax_param
         self.props_param = props_param
@@ -17,8 +23,8 @@ class TestFlow(ABC):
         """
         Define workflow steps for apex.
         IMPORTANT: total six steps are required to be defined as attributes in this method,
-        and should be named strictly by self.relaxmake; self.relaxcal; self.relaxpost;
-        self.propsmake; self.propscal; self.propspost.
+        and should be named strictly by self.relaxation for relaxation workflow and
+        self.property for property test workflow respectively.
         """
         pass
 
@@ -35,20 +41,20 @@ class TestFlow(ABC):
             wf = Workflow(name='relaxation')
             wf.add(self.relaxation)
             wf.submit()
-            self.assertion(wf, step_name='relaxation-flow', artifacts='retrieve_path')
+            self.assertion(wf, step_name='relaxation-cal', artifacts='retrieve_path')
 
         elif self.flow_type == 'props':
-            wf = Workflow(name='properties')
+            wf = Workflow(name='property')
             wf.add(self.property)
             wf.submit()
-            self.assertion(wf, step_name='property-flow', artifacts='retrieve_path')
+            self.assertion(wf, step_name='property-cal', artifacts='retrieve_path')
 
         elif self.flow_type == 'joint':
-            wf = Workflow(name='relax-props')
+            wf = Workflow(name='relax-prop')
             wf.add(self.relaxation)
             wf.add(self.property)
             wf.submit()
-            self.assertion(wf, step_name='property-flow', artifacts='retrieve_path')
+            self.assertion(wf, step_name='property-cal', artifacts='retrieve_path')
 
 
 

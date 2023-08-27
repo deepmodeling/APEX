@@ -1,23 +1,14 @@
 import os
 from monty.serialization import loadfn
+from typing import Literal
 from pathlib import Path
 from dflow import (
     Step,
-    argo_range,
     upload_artifact
-)
-from dflow.python import (
-    PythonOPTemplate,
-    Slices
 )
 from dflow.plugins.dispatcher import DispatcherExecutor, update_dict
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
-from apex.op.property_ops import (
-    DistributeProps,
-    CollectProps,
-    PropsMake,
-    PropsPost
-)
+from apex.op.property_ops import PropsMake, PropsPost
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.superop.PropertyFlow import PropertyFlow
 from apex.superop.RelaxationFlow import RelaxationFlow
@@ -109,14 +100,14 @@ class LAMMPSFlow(TestFlow):
         )
 
         relaxation = Step(
-            name='relaxation-flow',
+            name='relaxation-cal',
             template=relaxation_flow,
             artifacts={
                 "input_work_path": upload_artifact(work_dir),
                 "parameter": upload_artifact(self.relax_param)
             },
             parameters={"flow_id": "relaxflow"},
-            key="relaxcal"
+            key="relaxationcal"
         )
         self.relaxation = relaxation
 
@@ -140,7 +131,7 @@ class LAMMPSFlow(TestFlow):
                 upload_python_packages=self.upload_python_packages
             )
             property = Step(
-                name='property-flow',
+                name='property-cal',
                 template=property_flow,
                 artifacts={
                     "input_work_path": input_work_path,
