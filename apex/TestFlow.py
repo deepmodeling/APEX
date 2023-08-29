@@ -1,6 +1,7 @@
+import os
 import time
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import Literal, Optional
 from dflow import download_artifact, Workflow
 
 
@@ -9,10 +10,10 @@ class TestFlow(ABC):
     Constructor
     """
     def __init__(
-            self,
-            flow_type: Literal['relax', 'props', 'joint'],
-            relax_param,
-            props_param
+        self,
+        flow_type: Literal['relax', 'props', 'joint'],
+        relax_param: Optional[os.PathLike] = None,
+        props_param: Optional[os.PathLike] = None
     ):
         self.flow_type = flow_type
         self.relax_param = relax_param
@@ -22,7 +23,7 @@ class TestFlow(ABC):
     def init_steps(self):
         """
         Define workflow steps for apex.
-        IMPORTANT: total six steps are required to be defined as attributes in this method,
+        IMPORTANT: two steps are required to be defined as attributes in this method,
         and should be named strictly by self.relaxation for relaxation workflow and
         self.property for property test workflow respectively.
         """

@@ -28,7 +28,6 @@ else:
 import argparse
 from apex.VASP_flow import VASPFlow
 from apex.LAMMPS_flow import LAMMPSFlow
-from apex.ABACUS_flow import ABACUSFlow
 from apex.lib.utils import judge_flow
 from apex.lib.utils import check_args_ss
 from apex.core.common_equi import (make_equi, post_equi)
