@@ -29,7 +29,7 @@ class RelaxMake(OP):
     def get_input_sign(cls):
         return OPIOSign({
             'input': Artifact(Path),
-            'param': Artifact(Path)
+            'param': dict
         })
 
     @classmethod
@@ -52,9 +52,9 @@ class RelaxMake(OP):
         os.chdir(op_in["input"])
         work_d = os.getcwd()
         param_argv = op_in["param"]
-        structures = loadfn(param_argv)["structures"]
-        inter_parameter = loadfn(param_argv)["interaction"]
-        parameter = loadfn(param_argv)["relaxation"]
+        structures = param_argv["structures"]
+        inter_parameter = param_argv["interaction"]
+        parameter = param_argv["relaxation"]
 
         make_equi(structures, inter_parameter, parameter)
 
@@ -99,7 +99,7 @@ class RelaxPost(OP):
         return OPIOSign({
             'input_post': Artifact(Path),
             'input_all': Artifact(Path),
-            'param': Artifact(Path),
+            'param': dict,
             'path': str
         })
 
@@ -115,9 +115,9 @@ class RelaxPost(OP):
         from apex.core.common_equi import post_equi
 
         param_argv = op_in['param']
-        inter_param = loadfn(param_argv)["interaction"]
+        inter_param = param_argv["interaction"]
         calculator = inter_param["type"]
-        conf_list = loadfn(param_argv)["structures"]
+        conf_list = param_argv["structures"]
         copy_dir_list = [conf.split('/')[0] for conf in conf_list]
 
         cwd = os.getcwd()

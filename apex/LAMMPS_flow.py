@@ -84,6 +84,15 @@ class LAMMPSFlow(TestFlow):
         cwd = os.getcwd()
         work_dir = Path(cwd)
 
+        try:
+            relax_param = loadfn(self.relax_param)
+        except:
+            relax_param = {}
+        try:
+            prop_param = loadfn(self.props_param)
+        except:
+            prop_param = {}
+
         relaxation_flow = RelaxationFlow(
             name='relaxation-flow',
             make_op=RelaxMake,
@@ -102,10 +111,12 @@ class LAMMPSFlow(TestFlow):
             name='relaxation-cal',
             template=relaxation_flow,
             artifacts={
-                "input_work_path": upload_artifact(work_dir),
-                "parameter": upload_artifact(self.relax_param)
+                "input_work_path": upload_artifact(work_dir)
             },
-            parameters={"flow_id": "relaxflow"},
+            parameters={
+                "flow_id": "relaxflow",
+                "parameter": relax_param
+            },
             key="relaxationcal"
         )
         self.relaxation = relaxation
@@ -133,10 +144,12 @@ class LAMMPSFlow(TestFlow):
                 name='property-cal',
                 template=property_flow,
                 artifacts={
-                    "input_work_path": input_work_path,
-                    "parameter": upload_artifact(self.props_param)
+                    "input_work_path": input_work_path
                 },
-                parameters={"flow_id": "propertyflow"},
+                parameters={
+                    "flow_id": "propertyflow",
+                    "parameter": prop_param
+                },
                 key="propertycal"
             )
             self.property = property

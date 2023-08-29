@@ -66,7 +66,8 @@ def parse_args():
 def run_flow(args):
     args = parse_args()
 
-    task_type, flow_type, relax_param, props_param = judge_flow(args)
+    (task_type, flow_type,
+     relax_param, props_param) = judge_flow(args)
 
     if task_type == 'abacus':
         print('Simulation via ABACUS')

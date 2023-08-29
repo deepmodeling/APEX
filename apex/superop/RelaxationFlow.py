@@ -46,11 +46,11 @@ class RelaxationFlow(Steps):
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
         self._input_parameters = {
-            "flow_id": InputParameter(type=str, value="")
+            "flow_id": InputParameter(type=str, value=""),
+            "parameter": InputParameter(type=dict)
         }
         self._input_artifacts = {
             "input_work_path": InputArtifact(type=Path),
-            "parameter": InputArtifact(type=Path)
         }
         self._output_parameters = {}
         self._output_artifacts = {
@@ -138,8 +138,8 @@ class RelaxationFlow(Steps):
             template=PythonOPTemplate(make_op,
                                       image=make_image,
                                       command=["python3"]),
-            artifacts={"input": self.inputs.artifacts["input_work_path"],
-                       "param": self.inputs.artifacts["parameter"]},
+            artifacts={"input": self.inputs.artifacts["input_work_path"]},
+            parameters={"param": self.inputs.parameters["parameter"]},
             key=self.step_keys["make"]
         )
         self.add(make)
@@ -163,7 +163,8 @@ class RelaxationFlow(Steps):
                 parameters={
                     "run_image_config": {"command": run_command},
                     "task_name": make.outputs.parameters["task_names"],
-                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR"]
+                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR"],
+                    "backward_dir_name": "relax_task"
                 },
                 artifacts={
                     "task_path": make.outputs.artifacts["task_paths"]
@@ -180,7 +181,8 @@ class RelaxationFlow(Steps):
                     "run_image_config": {"command": run_command},
                     "task_name": make.outputs.parameters["task_names"],
                     "backward_list": ["OUT.ABACUS", "log"],
-                    "log_name": "log"
+                    "log_name": "log",
+                    "backward_dir_name": "relax_task"
                 },
                 artifacts={
                     "task_path": make.outputs.artifacts["task_paths"],
@@ -220,14 +222,16 @@ class RelaxationFlow(Steps):
                                       image=post_image,
                                       command=["python3"]),
             artifacts={"input_post": runcal.outputs.artifacts["backward_dir"],
-                       "input_all": make.outputs.artifacts["output"],
-                       "param": self.inputs.artifacts["parameter"]},
-            parameters={"path": LOCAL_PATH},
+                       "input_all": make.outputs.artifacts["output"]},
+            parameters={"param": self.inputs.parameters["parameter"],
+                        "path": LOCAL_PATH},
             key=self.step_keys["post"]
         )
         self.add(post)
 
-        self.outputs.artifacts["output_all"]._from = post.outputs.artifacts["output_all"]
-        self.outputs.artifacts["retrieve_path"]._from = post.outputs.artifacts["retrieve_path"]
+        self.outputs.artifacts["output_all"]._from \
+            = post.outputs.artifacts["output_all"]
+        self.outputs.artifacts["retrieve_path"]._from \
+            = post.outputs.artifacts["retrieve_path"]
 
 

@@ -235,4 +235,5 @@ class SimplePropertySteps(Steps):
         )
         self.add(post)
 
-        self.outputs.artifacts["output_post"]._from = post.outputs.artifacts["output_post"]
+        self.outputs.artifacts["output_post"]._from \
+            = post.outputs.artifacts["output_post"]

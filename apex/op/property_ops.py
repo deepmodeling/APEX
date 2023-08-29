@@ -30,7 +30,7 @@ class DistributeProps(OP):
     def get_input_sign(cls):
         return OPIOSign({
             "input_work_path": Artifact(Path),
-            "param": Artifact(Path)
+            "param": dict
         })
 
     @classmethod
@@ -51,7 +51,7 @@ class DistributeProps(OP):
             op_in: OPIO,
     ) -> OPIO:
         input_work_path = op_in["input_work_path"]
-        param = loadfn(op_in["param"])
+        param = op_in["param"]
 
         cwd = Path.cwd()
         os.chdir(input_work_path)
@@ -277,7 +277,7 @@ class CollectProps(OP):
         return OPIOSign({
             'input_post': Artifact(Path),
             'input_all': Artifact(Path),
-            'param': Artifact(Path)
+            'param': dict
         })
 
     @classmethod
@@ -290,7 +290,7 @@ class CollectProps(OP):
     def execute(self, op_in: OPIO) -> OPIO:
         input_post = op_in["input_post"]
         input_all = op_in["input_all"]
-        param = loadfn(op_in["param"])
+        param = op_in["param"]
         confs = param["structures"]
 
         retrieve_conf_list = [conf.split('/')[0] for conf in confs]

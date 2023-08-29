@@ -44,11 +44,11 @@ class PropertyFlow(Steps):
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
         self._input_parameters = {
-            "flow_id": InputParameter(type=str, value="")
+            "flow_id": InputParameter(type=str, value=""),
+            "parameter": InputParameter(type=dict)
         }
         self._input_artifacts = {
-            "input_work_path": InputArtifact(type=Path),
-            "parameter": InputArtifact(type=Path)
+            "input_work_path": InputArtifact(type=Path)
         }
         self._output_parameters = {
 
@@ -137,8 +137,8 @@ class PropertyFlow(Steps):
             template=PythonOPTemplate(DistributeProps,
                                       image=make_image,
                                       command=["python3"]),
-            artifacts={"input_work_path": self.inputs.artifacts["input_work_path"],
-                       "param": self.inputs.artifacts["parameter"]},
+            artifacts={"input_work_path": self.inputs.artifacts["input_work_path"]},
+            parameters={"param": self.inputs.parameters["parameter"]},
             key="distributor"
         )
         self.add(distributor)
@@ -193,10 +193,11 @@ class PropertyFlow(Steps):
                                       image=make_image,
                                       command=["python3"]),
             artifacts={"input_all": self.inputs.artifacts["input_work_path"],
-                       "input_post": propscal.outputs.artifacts["output_post"],
-                       "param": self.inputs.artifacts["parameter"]},
+                       "input_post": propscal.outputs.artifacts["output_post"]},
+            parameters={"param": self.inputs.parameters["parameter"]},
             key="collector"
         )
         self.add(collector)
 
-        self.outputs.artifacts["retrieve_path"]._from = collector.outputs.artifacts["retrieve_path"]
+        self.outputs.artifacts["retrieve_path"]._from \
+            = collector.outputs.artifacts["retrieve_path"]

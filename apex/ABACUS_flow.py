@@ -1,26 +1,22 @@
-from dflow import (
-    Step,
-    argo_range,
-    argo_len,
-    upload_artifact
-)
-from dflow.python import (
-    PythonOPTemplate,
-    Slices,
-)
 import os
 from monty.serialization import loadfn
+from pathlib import Path
+import fpop
+from fpop.abacus import RunAbacus
+from dflow import (
+    Step,
+    upload_artifact
+)
 from dflow.python import upload_packages
 from dflow.plugins.dispatcher import DispatcherExecutor, update_dict
-import fpop
-from apex.fp_OPs import (
-    RelaxMakeFp,
-    RelaxPostFp,
-    PropsMakeFp,
-    PropsPostFp
+from apex.op.relaxation_ops import RelaxMake, RelaxPost
+from apex.op.property_ops import (
+    PropsMake,
+    PropsPost
 )
+from apex.superop.RelaxationFlow import RelaxationFlow
+from apex.superop.PropertyFlow import PropertyFlow
 from apex.TestFlow import TestFlow
-from fpop.abacus import RunAbacus
 
 upload_packages.append(__file__)
 upload_python_packages=list(fpop.__path__)
@@ -94,109 +90,76 @@ class ABACUSFlow(TestFlow):
 
     def init_steps(self):
         cwd = os.getcwd()
-        work_dir = cwd
+        work_dir = Path(cwd)
 
-        relaxmake = Step(
-            name="Relaxmake",
-            template=PythonOPTemplate(RelaxMakeFp, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input": upload_artifact(work_dir),
-                       "param": upload_artifact(self.relax_param)},
-            key="abacus-relaxmake"
-        )
-        self.relaxmake = relaxmake
+        try:
+            relax_param = loadfn(self.relax_param)
+        except:
+            relax_param = {}
+        try:
+            prop_param = loadfn(self.props_param)
+        except:
+            prop_param = {}
 
-        relax = PythonOPTemplate(RunAbacus,
-                                 slices=Slices("{{item}}",
-                                               input_parameter=["task_name"],
-                                               input_artifact=["task_path"],
-                                               output_artifact=["backward_dir"]),
-                                 python_packages=self.upload_python_packages,
-                                 image=self.abacus_image_name
-                                 )
-
-        relaxcal = Step(
-            name="RelaxABACUS-Cal",
-            template=relax,
-            parameters={
-                "run_image_config": {"command": self.abacus_run_command},
-                "task_name": relaxmake.outputs.parameters["task_names"],
-                "backward_list": ["OUT.ABACUS","log"],
-                "backward_dir_name": "relax_task",
-                "log_name": "log"
-            },
-            artifacts={
-                "task_path": relaxmake.outputs.artifacts["task_paths"],
-                "optional_artifact": upload_artifact({"pp_orb": "./"})
-            },
-            with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
-            key="abacus-relaxcal-{{item}}",
+        relaxation_flow = RelaxationFlow(
+            name='relaxation-flow',
+            make_op=RelaxMake,
+            run_op=RunAbacus,
+            post_op=RelaxPost,
+            make_image=self.apex_image_name,
+            run_image=self.abacus_image_name,
+            post_image=self.apex_image_name,
+            run_command=self.abacus_run_command,
+            calculator="abacus",
             executor=self.executor,
+            upload_python_packages=self.upload_python_packages
         )
-        self.relaxcal = relaxcal
 
-        relaxpost = Step(
-            name="Relaxpost",
-            template=PythonOPTemplate(RelaxPostFp, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"],
-                       "input_all": self.relaxmake.outputs.artifacts["output"],
-                       "param": upload_artifact(self.relax_param)},
-            parameters={"path": work_dir},
-            key="abacus-relaxpost"
-        )
-        self.relaxpost = relaxpost
-
-        if self.flow_type == 'joint':
-            propsmake = Step(
-                name="Propsmake",
-                template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
-                artifacts={"input": relaxpost.outputs.artifacts["output_all"],
-                           "param": upload_artifact(self.props_param)},
-                key="abacus-propsmake"
-            )
-        else:
-            propsmake = Step(
-                name="Propsmake",
-                template=PythonOPTemplate(PropsMakeFp, image=self.apex_image_name, command=["python3"]),
-                artifacts={"input": upload_artifact(work_dir),
-                           "param": upload_artifact(self.props_param)},
-                key="abacus-propsmake"
-            )
-        self.propsmake = propsmake
-
-        props = PythonOPTemplate(RunAbacus,
-                                 slices=Slices("{{item}}",
-                                               input_parameter=["task_name"],
-                                               input_artifact=["task_path"],
-                                               output_artifact=["backward_dir"]),
-                                 python_packages=self.upload_python_packages,
-                                 image=self.abacus_image_name
-                                 )
-
-        propscal = Step(
-            name="PropsABACUS-Cal",
-            template=props,
-            parameters={
-                "run_image_config": {"command": self.abacus_run_command},
-                "task_name": propsmake.outputs.parameters["task_names"],
-                "backward_list": ["OUT.ABACUS","log"],
-                "log_name": "log"
-            },
+        relaxation = Step(
+            name='relaxation-cal',
+            template=relaxation_flow,
             artifacts={
-                "task_path": propsmake.outputs.artifacts["task_paths"],
-                "optional_artifact": upload_artifact({"pp_orb": "./"})
+                "input_work_path": upload_artifact(work_dir)
             },
-            with_param=argo_range(argo_len(propsmake.outputs.parameters["task_names"])),
-            key="abacus-propscal-{{item}}",
-            executor=self.executor,
+            parameters={
+                "flow_id": "relaxflow",
+                "parameter": relax_param
+            },
+            key="relaxationcal"
         )
-        self.propscal = propscal
+        self.relaxation = relaxation
 
-        propspost = Step(
-            name="Propspost",
-            template=PythonOPTemplate(PropsPostFp, image=self.apex_image_name, command=["python3"]),
-            artifacts={"input_post": propscal.outputs.artifacts["backward_dir"], "input_all": self.propsmake.outputs.artifacts["output"],
-                       "param": upload_artifact(self.props_param)},
-            parameters={"path": work_dir, "task_names": propsmake.outputs.parameters["task_names"]},
-            key="abacus-propspost"
-        )
-        self.propspost = propspost
+        if self.flow_type == 'props':
+            input_work_path = upload_artifact(work_dir)
+        elif self.flow_type == 'joint':
+            input_work_path = relaxation.outputs.artifacts["output_all"]
+
+        try:
+            property_flow = PropertyFlow(
+                name='property-flow',
+                make_op=PropsMake,
+                run_op=RunAbacus,
+                post_op=PropsPost,
+                make_image=self.apex_image_name,
+                run_image=self.abacus_image_name,
+                post_image=self.apex_image_name,
+                run_command=self.abacus_run_command,
+                calculator="abaucs",
+                executor=self.executor,
+                upload_python_packages=self.upload_python_packages
+            )
+            property = Step(
+                name='property-cal',
+                template=property_flow,
+                artifacts={
+                    "input_work_path": input_work_path
+                },
+                parameters={
+                    "flow_id": "propertyflow",
+                    "parameter": prop_param
+                },
+                key="propertycal"
+            )
+            self.property = property
+        except UnboundLocalError:
+            pass

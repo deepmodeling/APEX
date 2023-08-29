@@ -5,24 +5,17 @@ import fpop
 from fpop.vasp import RunVasp
 from dflow import (
     Step,
-    argo_range,
-    argo_len,
     upload_artifact
-)
-from dflow.python import (
-    PythonOPTemplate,
-    Slices,
 )
 from dflow.python import upload_packages
 from dflow.plugins.dispatcher import DispatcherExecutor, update_dict
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import (
-    DistributeProps,
-    CollectProps,
     PropsMake,
     PropsPost
 )
-from apex.superop.SimplePropertySteps import SimplePropertySteps
+from apex.superop.RelaxationFlow import RelaxationFlow
+from apex.superop.PropertyFlow import PropertyFlow
 from apex.TestFlow import TestFlow
 
 upload_packages.append(__file__)
@@ -99,86 +92,20 @@ class VASPFlow(TestFlow):
         cwd = os.getcwd()
         work_dir = Path(cwd)
 
-        relaxmake = Step(
-            name="Relaxmake",
-            template=PythonOPTemplate(RelaxMake,
-                                      image=self.apex_image_name,
-                                      command=["python3"]),
-            artifacts={"input": upload_artifact(work_dir),
-                       "param": upload_artifact(self.relax_param)},
-            key="vasp-relaxmake"
-        )
-        self.relaxmake = relaxmake
+        try:
+            relax_param = loadfn(self.relax_param)
+        except:
+            relax_param = {}
+        try:
+            prop_param = loadfn(self.props_param)
+        except:
+            prop_param = {}
 
-        relax = PythonOPTemplate(RunVasp,
-                                 slices=Slices("{{item}}",
-                                               input_parameter=["task_name"],
-                                               input_artifact=["task_path"],
-                                               output_artifact=["backward_dir"]),
-                                 python_packages=self.upload_python_packages,
-                                 image=self.vasp_image_name
-                                 )
-
-        relaxcal = Step(
-            name="RelaxVASP-Cal",
-            template=relax,
-            parameters={
-                "run_image_config": {"command": self.vasp_run_command},
-                "task_name": relaxmake.outputs.parameters["task_names"],
-                "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR"],
-                "backward_dir_name": "relax_task"
-            },
-            artifacts={
-                "task_path": relaxmake.outputs.artifacts["task_paths"]
-            },
-            with_param=argo_range(argo_len(relaxmake.outputs.parameters["task_names"])),
-            key="vasp-relaxcal-{{item}}",
-            executor=self.executor,
-        )
-        self.relaxcal = relaxcal
-
-        relaxpost = Step(
-            name="Relaxpost",
-            template=PythonOPTemplate(RelaxPost,
-                                      image=self.apex_image_name,
-                                      command=["python3"]),
-            artifacts={"input_post": self.relaxcal.outputs.artifacts["backward_dir"],
-                       "input_all": self.relaxmake.outputs.artifacts["output"],
-                       "param": upload_artifact(self.relax_param)},
-            parameters={"path": work_dir},
-            key="vasp-relaxpost"
-        )
-        self.relaxpost = relaxpost
-
-        if self.flow_type == 'joint':
-            input_work_path = relaxpost.outputs.artifacts["output_all"]
-            distributeProps = Step(
-                name="Distributor",
-                template=PythonOPTemplate(DistributeProps,
-                                          image=self.apex_image_name,
-                                          command=["python3"]),
-                artifacts={"input_work_path": input_work_path,
-                           "param": upload_artifact(self.props_param)},
-                key="distributor"
-            )
-        else:
-            input_work_path = upload_artifact(work_dir)
-            distributeProps = Step(
-                name="PropsDistributor",
-                template=PythonOPTemplate(DistributeProps,
-                                          image=self.apex_image_name,
-                                          command=["python3"]),
-                artifacts={"input_work_path": input_work_path,
-                           "param": upload_artifact(self.props_param)},
-                key="distributor"
-            )
-        self.distributeProps = distributeProps
-
-        simple_property_steps = SimplePropertySteps(
-            name='simple-property-flow',
-            make_op=PropsMake,
+        relaxation_flow = RelaxationFlow(
+            name='relaxation-flow',
+            make_op=RelaxMake,
             run_op=RunVasp,
-            post_op=PropsPost,
+            post_op=RelaxPost,
             make_image=self.apex_image_name,
             run_image=self.vasp_image_name,
             post_image=self.apex_image_name,
@@ -188,44 +115,52 @@ class VASPFlow(TestFlow):
             upload_python_packages=self.upload_python_packages
         )
 
-        propscal = Step(
-            name="Prop-Cal",
-            template=simple_property_steps,
-            slices=Slices(
-                slices="{{item}}",
-                input_parameter=[
-                    "flow_id",
-                    "path_to_prop",
-                    "prop_param",
-                    "inter_param",
-                    "do_refine"
-                ],
-                input_artifact=["input_work_path"],
-                output_artifact=["output_post"],
-            ),
+        relaxation = Step(
+            name='relaxation-cal',
+            template=relaxation_flow,
             artifacts={
-                "input_work_path": distributeProps.outputs.artifacts["orig_work_path"]
+                "input_work_path": upload_artifact(work_dir)
             },
             parameters={
-                "flow_id": distributeProps.outputs.parameters["flow_id"],
-                "path_to_prop": distributeProps.outputs.parameters["path_to_prop"],
-                "prop_param": distributeProps.outputs.parameters["prop_param"],
-                "inter_param": distributeProps.outputs.parameters["inter_param"],
-                "do_refine": distributeProps.outputs.parameters["do_refine"]
+                "flow_id": "relaxflow",
+                "parameter": relax_param
             },
-            with_param=argo_range(distributeProps.outputs.parameters["nflows"]),
-            key="propscal-{{item}}"
+            key="relaxationcal"
         )
-        self.propscal = propscal
+        self.relaxation = relaxation
 
-        collectProps = Step(
-            name="PropsCollector",
-            template=PythonOPTemplate(CollectProps,
-                                      image=self.apex_image_name,
-                                      command=["python3"]),
-            artifacts={"input_all": input_work_path,
-                       "input_post": propscal.outputs.artifacts["output_post"],
-                       "param": upload_artifact(self.props_param)},
-            key="collector"
-        )
-        self.collectProps = collectProps
+
+        if self.flow_type == 'props':
+            input_work_path = upload_artifact(work_dir)
+        elif self.flow_type == 'joint':
+            input_work_path = relaxation.outputs.artifacts["output_all"]
+
+        try:
+            property_flow = PropertyFlow(
+                name='property-flow',
+                make_op=PropsMake,
+                run_op=RunVasp,
+                post_op=PropsPost,
+                make_image=self.apex_image_name,
+                run_image=self.vasp_image_name,
+                post_image=self.apex_image_name,
+                run_command=self.vasp_run_command,
+                calculator="vasp",
+                executor=self.executor,
+                upload_python_packages=self.upload_python_packages
+            )
+            property = Step(
+                name='property-cal',
+                template=property_flow,
+                artifacts={
+                    "input_work_path": input_work_path
+                },
+                parameters={
+                    "flow_id": "propertyflow",
+                    "parameter": prop_param
+                },
+                key="propertycal"
+            )
+            self.property = property
+        except UnboundLocalError:
+            pass

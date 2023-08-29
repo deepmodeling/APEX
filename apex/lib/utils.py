@@ -42,7 +42,7 @@ def identify_json(file: str) -> str:
         task_type = 'vasp'
     elif interaction_type == 'abacus':
         task_type = 'abacus'
-    elif interaction_type == 'deepmd' or interaction_type == 'eam_alloy':
+    elif interaction_type in ['deepmd', 'eam_alloy']:
         task_type = 'lammps'
     else:
         raise RuntimeError(f'Unsupported interaction type: {interaction_type}')
