@@ -100,7 +100,7 @@ class RelaxPost(OP):
             'input_post': Artifact(Path),
             'input_all': Artifact(Path),
             'param': dict,
-            'path': str
+            'path': os.PathLike
         })
 
     @classmethod
@@ -121,13 +121,13 @@ class RelaxPost(OP):
         copy_dir_list = [conf.split('/')[0] for conf in conf_list]
 
         cwd = os.getcwd()
-        os.chdir(str(op_in['input_all']))
+        os.chdir(op_in['input_all'])
         if calculator in ['vasp', 'abacus']:
-            shutil.copytree(str(op_in['input_post']), './', dirs_exist_ok=True)
+            shutil.copytree(op_in['input_post'], './', dirs_exist_ok=True)
             post_equi(conf_list, inter_param)
         else:
-            shutil.copytree(str(op_in['input_post']) + op_in['path'],
-                            './', dirs_exist_ok=True)
+            src_path = str(op_in['input_post']) + str(op_in['path'])
+            shutil.copytree(src_path, './', dirs_exist_ok=True)
             post_equi(conf_list, inter_param)
             conf_dirs = []
             for conf in conf_list:
@@ -144,8 +144,8 @@ class RelaxPost(OP):
 
         os.chdir(cwd)
         for ii in copy_dir_list:
-            shutil.copytree(str(op_in['input_all']) + f'/{ii}',
-                            f'./{ii}', dirs_exist_ok = True)
+            src_path = str(op_in['input_all']) + f'/{ii}'
+            shutil.copytree(src_path, f'/{ii}', dirs_exist_ok=True)
 
         post_path = [Path(ii) for ii in copy_dir_list]
 

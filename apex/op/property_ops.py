@@ -1,6 +1,6 @@
 import os, glob, pathlib, shutil, subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Union
 from dflow.python import (
     OP,
     OPIO,
@@ -199,7 +199,7 @@ class PropsPost(OP):
             'prop_param': dict,
             'inter_param': dict,
             'task_names': List[str],
-            'local_path': str,
+            'local_path': os.PathLike,
             'path_to_prop': str
         })
 
@@ -224,15 +224,16 @@ class PropsPost(OP):
 
         cwd = os.getcwd()
         if calculator in ['vasp', 'abacus']:
-            os.chdir(str(input_post))
+            os.chdir(input_post)
             for ii in task_names:
                 shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
                 shutil.rmtree(os.path.join(ii, "backward_dir"))
-            os.chdir(str(input_all))
-            shutil.copytree(str(input_post), './', dirs_exist_ok=True)
+            os.chdir(input_all)
+            shutil.copytree(input_post, './', dirs_exist_ok=True)
         else:
-            os.chdir(str(input_all))
-            shutil.copytree(str(input_post) + local_path, './', dirs_exist_ok=True)
+            os.chdir(input_all)
+            src_path = str(input_post) + str(local_path)
+            shutil.copytree(src_path, './', dirs_exist_ok=True)
 
         if ("cal_setting" in prop_param
                 and "overwrite_interaction" in prop_param["cal_setting"]):

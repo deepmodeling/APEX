@@ -26,7 +26,6 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
-from apex import LOCAL_PATH
 
 
 class RelaxationFlow(Steps):
@@ -42,6 +41,7 @@ class RelaxationFlow(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        local_path: str,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -95,6 +95,7 @@ class RelaxationFlow(Steps):
             post_image,
             run_command,
             calculator,
+            local_path,
             executor,
             upload_python_packages
         )
@@ -130,6 +131,7 @@ class RelaxationFlow(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        local_path: str,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -224,7 +226,7 @@ class RelaxationFlow(Steps):
             artifacts={"input_post": runcal.outputs.artifacts["backward_dir"],
                        "input_all": make.outputs.artifacts["output"]},
             parameters={"param": self.inputs.parameters["parameter"],
-                        "path": LOCAL_PATH},
+                        "path": local_path},
             key=self.step_keys["post"]
         )
         self.add(post)

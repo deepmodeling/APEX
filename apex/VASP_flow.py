@@ -111,6 +111,7 @@ class VASPFlow(TestFlow):
             post_image=self.apex_image_name,
             run_command=self.vasp_run_command,
             calculator="vasp",
+            local_path=work_dir,
             executor=self.executor,
             upload_python_packages=self.upload_python_packages
         )
@@ -146,6 +147,7 @@ class VASPFlow(TestFlow):
                 post_image=self.apex_image_name,
                 run_command=self.vasp_run_command,
                 calculator="vasp",
+                local_path=work_dir,
                 executor=self.executor,
                 upload_python_packages=self.upload_python_packages
             )

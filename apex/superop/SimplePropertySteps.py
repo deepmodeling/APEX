@@ -25,7 +25,6 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
-from apex import LOCAL_PATH
 
 
 class SimplePropertySteps(Steps):
@@ -40,6 +39,7 @@ class SimplePropertySteps(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        local_path: str,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -95,6 +95,7 @@ class SimplePropertySteps(Steps):
             post_image,
             run_command,
             calculator,
+            local_path,
             executor,
             upload_python_packages
         )
@@ -130,6 +131,7 @@ class SimplePropertySteps(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        local_path: str,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -230,7 +232,7 @@ class SimplePropertySteps(Steps):
                         "inter_param": self.inputs.parameters["inter_param"],
                         "task_names": make.outputs.parameters["task_names"],
                         "path_to_prop": self.inputs.parameters["path_to_prop"],
-                        "local_path": LOCAL_PATH},
+                        "local_path": local_path},
             key=self.step_keys["post"]
         )
         self.add(post)
