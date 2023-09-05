@@ -100,7 +100,7 @@ class RelaxPost(OP):
             'input_post': Artifact(Path),
             'input_all': Artifact(Path),
             'param': dict,
-            'path': os.PathLike
+            'path': str
         })
 
     @classmethod

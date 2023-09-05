@@ -199,7 +199,7 @@ class PropsPost(OP):
             'prop_param': dict,
             'inter_param': dict,
             'task_names': List[str],
-            'local_path': os.PathLike,
+            'local_path': str,
             'path_to_prop': str
         })
 

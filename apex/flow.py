@@ -31,7 +31,7 @@ def check_submit(function):
     def wrapper(*args, **kwargs):
         # check input parameter and convert to dict
         parameter = kwargs['parameter']
-        if isinstance(parameter, os.PathLike):
+        if isinstance(parameter, os.PathLike) or isinstance(parameter, str):
             kwargs['parameter'] = loadfn(parameter)
         elif isinstance(parameter, dict):
             pass
@@ -40,7 +40,7 @@ def check_submit(function):
                             f'Should be either a dictionary or a Pathlike type.')
         # check input work direction
         work_path = kwargs['work_path']
-        if not isinstance(work_path, os.PathLike):
+        if not (isinstance(work_path, os.PathLike) or isinstance(work_path, str)):
             raise TypeError(f'Wrong type of indication for work_path: {type(work_path)}. '
                             f'Should be a Pathlike type.')
         function(*args, **kwargs)
@@ -87,7 +87,7 @@ class FlowFactory:
     def _set_relax_flow(
             self,
             input_work_dir: dflow.common.S3Artifact,
-            local_path: os.PathLike,
+            local_path: Union[os.PathLike, str],
             relax_parameter: dict
     ) -> Step:
         relaxation_flow = RelaxationFlow(
@@ -121,7 +121,7 @@ class FlowFactory:
     def _set_props_flow(
             self,
             input_work_dir: dflow.common.S3Artifact,
-            local_path: os.PathLike,
+            local_path: Union[os.PathLike, str],
             props_parameter: dict
     ) -> Step:
         property_flow = PropertyFlow(
@@ -167,7 +167,7 @@ class FlowFactory:
         wf.add(relaxation)
         wf.submit()
         self.assertion(wf, step_name='relaxation-cal',
-                       artifacts='retrieve_path')
+                       artifacts_key='retrieve_path')
 
     @check_submit
     def submit_props(
@@ -184,7 +184,7 @@ class FlowFactory:
         wf.add(property)
         wf.submit()
         self.assertion(wf, step_name='property-cal',
-                       artifacts='retrieve_path')
+                       artifacts_key='retrieve_path')
 
     @check_submit
     def submit_joint(
@@ -208,5 +208,5 @@ class FlowFactory:
         wf.add(property)
         wf.submit()
         self.assertion(wf, step_name='property-cal',
-                       artifacts='retrieve_path')
+                       artifacts_key='retrieve_path')
 

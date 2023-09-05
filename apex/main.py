@@ -87,7 +87,7 @@ def main():
     if args.cmd == 'submit':
         submit_workflow(
             parameter=args.parameter,
-            config=args.config,
+            config_file=args.config,
             specify=args.specify,
             is_debug=args.debug
         )

@@ -33,6 +33,7 @@ class Config:
 
         # bohrium config
         self._bohrium_config = config_data.get("bohrium_config", None)
+        self._phone = config_data.get("phone", None)
         self._email = config_data.get("email", None)
         self._password = config_data.get("password", None)
         self._program_id = config_data.get("program_id", None)
@@ -137,8 +138,9 @@ class Config:
     def bohrium_config(self):
         bohrium_config = {
             "username": self._email,
+            "phone": self._phone,
             "password": self._password,
-            "program_id": self._program_id,
+            "program_id": self._program_id
         }
         if self._bohrium_config:
             update_dict(bohrium_config, self._bohrium_config)
@@ -187,6 +189,11 @@ class Config:
         for kk in dflow_s3_config_data.keys():
             s3_config[kk] = dflow_s3_config_data[kk]
 
+    @staticmethod
+    def config_bohrium(bohrium_config_data: dict) -> None:
+        for kk in bohrium_config_data.keys():
+            bohrium.config[kk] = bohrium_config_data[kk]
+
     def get_executor(
             self,
             dispatcher_config: dict
@@ -197,7 +204,8 @@ class Config:
             # get arguments for instantiation of the DispatcherExecutor
             sig = inspect.signature(DispatcherExecutor.__init__)
             # pop out 'self'
-            defined_parameters = list(sig.parameters.keys()).pop(0)
+            defined_parameters = list(sig.parameters.keys())
+            defined_parameters.pop(0)
             # filter the dispatcher_config
             filtered_parameters = {
                 k: v for k, v in dispatcher_config.items() if k in defined_parameters

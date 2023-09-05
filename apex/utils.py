@@ -69,6 +69,8 @@ def sepline(ch="-", sp="-", screen=False):
 
 
 def update_dict(d1: dict, d2: dict) -> None:
+    if d2 is None:
+        return None
     for k, v in d2.items():
         if isinstance(v, dict) and k in d1 and isinstance(d1[k], dict):
             update_dict(d1[k], v)

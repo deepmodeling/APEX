@@ -16,8 +16,8 @@ def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
     # identify type of flow and input parameter file
     num_args = len(parameter)
     if num_args == 1:
-        task, run_op = get_task_type(parameter[0])
-        flow = get_flow_type(parameter[0])
+        task, run_op = get_task_type(loadfn(parameter[0]))
+        flow = get_flow_type(loadfn(parameter[0]))
         task_type = task
         if flow == 'relax':
             flow_type = 'relax'
@@ -46,10 +46,10 @@ def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
             props_param = parameter[0]
 
     elif num_args == 2:
-        task1, run_op1 = get_task_type(parameter[0])
-        flow1 = get_flow_type(parameter[0])
-        task2, run_op2 = get_task_type(parameter[1])
-        flow2 = get_flow_type(parameter[1])
+        task1, run_op1 = get_task_type(loadfn(parameter[0]))
+        flow1 = get_flow_type(loadfn(parameter[0]))
+        task2, run_op2 = get_task_type(loadfn(parameter[1]))
+        flow2 = get_flow_type(loadfn(parameter[1]))
         if not flow1 == flow2:
             if specify == 'relax':
                 flow_type = 'relax'
@@ -95,6 +95,7 @@ def submit_workflow(parameter,
     # config dflow_config and s3_config
     wf_config = Config(global_config)
     wf_config.config_dflow(wf_config.dflow_config)
+    wf_config.config_bohrium(wf_config.bohrium_config)
     wf_config.config_s3(wf_config.dflow_s3_config)
     # set debug mode
     if is_debug:
@@ -104,6 +105,7 @@ def submit_workflow(parameter,
     # judge basic flow info from user indicated parameter files
     (run_op, calculator, flow_type,
      relax_param, props_param) = judge_flow(parameter, specify)
+
     make_image = wf_config.basic_config["apex_image_name"]
     run_image = wf_config.basic_config[f"{calculator}_image_name"]
     run_command = wf_config.basic_config[f"{calculator}_run_command"]
@@ -116,6 +118,7 @@ def submit_workflow(parameter,
         run_image=run_image,
         post_image=post_image,
         run_command=run_command,
+        calculator=calculator,
         run_op=run_op,
         executor=executor,
         upload_python_packages=upload_python_packages
