@@ -10,7 +10,7 @@ from dflow.python import (
 )
 try:
     from monty.serialization import loadfn
-    from apex.lib.utils import return_prop_list
+    from apex.utils import return_prop_list
     from apex.core.common_equi import (make_equi, post_equi)
 except:
     pass

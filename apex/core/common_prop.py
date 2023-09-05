@@ -9,7 +9,7 @@ from apex.core.property.Interstitial import Interstitial
 from apex.core.lib.utils import create_path
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
-from apex.lib.util import sepline
+from apex.utils import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

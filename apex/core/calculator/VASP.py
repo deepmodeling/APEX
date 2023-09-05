@@ -10,7 +10,7 @@ import apex.core.calculator.lib.vasp as vasp
 #from dpgen import dlog
 from apex.core.calculator.Task import Task
 from apex.core.calculator.lib.vasp import incar_upper
-from apex.lib.util import sepline
+from apex.utils import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

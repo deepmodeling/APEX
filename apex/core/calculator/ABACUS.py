@@ -8,7 +8,7 @@ import apex.core.calculator.lib.abacus as abacus
 import apex.core.calculator.lib.abacus_scf as abacus_scf
 #from dpgen import dlog
 from apex.core.calculator.Task import Task
-from apex.lib.util import sepline
+from apex.utils import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

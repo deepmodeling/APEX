@@ -1,6 +1,6 @@
 import os, glob, pathlib, shutil, subprocess
 from pathlib import Path
-from typing import List, Union
+from typing import List
 from dflow.python import (
     OP,
     OPIO,
@@ -10,7 +10,7 @@ from dflow.python import (
 )
 try:
     from monty.serialization import loadfn
-    from apex.lib.utils import return_prop_list
+    from apex.utils import return_prop_list
     from apex.core.common_prop import make_property_instance
 except:
     pass
