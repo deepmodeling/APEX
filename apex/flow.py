@@ -1,8 +1,6 @@
 import os
 import time
-from abc import ABC, abstractmethod
 from typing import (
-    Literal,
     Optional,
     Type,
     Union,
@@ -16,33 +14,23 @@ from dflow import (
     download_artifact,
     Workflow
 )
-from dflow.python.op import Artifact, OP
+from dflow.python.op import OP
 from dflow.plugins.dispatcher import DispatcherExecutor
-from fpop.vasp import RunVasp
-from fpop.abacus import RunAbacus
 from apex.superop.RelaxationFlow import RelaxationFlow
 from apex.superop.PropertyFlow import PropertyFlow
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
-from apex.op.RunLAMMPS import RunLAMMPS
 
 
-def check_submit(function):
+def json2dict(function):
     def wrapper(*args, **kwargs):
-        # check input parameter and convert to dict
-        parameter = kwargs['parameter']
-        if isinstance(parameter, os.PathLike) or isinstance(parameter, str):
-            kwargs['parameter'] = loadfn(parameter)
-        elif isinstance(parameter, dict):
-            pass
-        else:
-            raise TypeError(f'Wrong type input for parameter: {type(parameter)}. '
-                            f'Should be either a dictionary or a Pathlike type.')
-        # check input work direction
-        work_path = kwargs['work_path']
-        if not (isinstance(work_path, os.PathLike) or isinstance(work_path, str)):
-            raise TypeError(f'Wrong type of indication for work_path: {type(work_path)}. '
-                            f'Should be a Pathlike type.')
+        # check input parameter and try to convert to dict if is json file
+        for k, v in kwargs.items():
+            if isinstance(v, os.PathLike) or isinstance(v, str):
+                try:
+                    kwargs[k] = loadfn(v)
+                except Exception:
+                    pass
         function(*args, **kwargs)
     return wrapper
 
@@ -87,7 +75,6 @@ class FlowFactory:
     def _set_relax_flow(
             self,
             input_work_dir: dflow.common.S3Artifact,
-            local_path: Union[os.PathLike, str],
             relax_parameter: dict
     ) -> Step:
         relaxation_flow = RelaxationFlow(
@@ -100,7 +87,6 @@ class FlowFactory:
             post_image=self.post_image,
             run_command=self.run_command,
             calculator=self.calculator,
-            local_path=local_path,
             executor=self.executor,
             upload_python_packages=self.upload_python_packages
         )
@@ -121,7 +107,6 @@ class FlowFactory:
     def _set_props_flow(
             self,
             input_work_dir: dflow.common.S3Artifact,
-            local_path: Union[os.PathLike, str],
             props_parameter: dict
     ) -> Step:
         property_flow = PropertyFlow(
@@ -134,7 +119,6 @@ class FlowFactory:
             post_image=self.post_image,
             run_command=self.run_command,
             calculator=self.calculator,
-            local_path=local_path,
             executor=self.executor,
             upload_python_packages=self.upload_python_packages
         )
@@ -152,56 +136,52 @@ class FlowFactory:
         )
         return property
 
-    @check_submit
+    @json2dict
     def submit_relax(
             self,
             work_path: Union[os.PathLike, str],
-            parameter: Union[os.PathLike, str, dict]
+            relax_parameter: dict
     ):
         wf = Workflow(name='relaxation')
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(work_path),
-            local_path=work_path,
-            relax_parameter=parameter
+            relax_parameter=relax_parameter
         )
         wf.add(relaxation)
         wf.submit()
         self.assertion(wf, step_name='relaxation-cal',
                        artifacts_key='retrieve_path')
 
-    @check_submit
+    @json2dict
     def submit_props(
             self,
             work_path: Union[os.PathLike, str],
-            parameter: Union[os.PathLike, str, dict]
+            props_parameter: dict
     ):
         wf = Workflow(name='property')
         property = self._set_props_flow(
             input_work_dir=upload_artifact(work_path),
-            local_path=work_path,
-            props_parameter=parameter
+            props_parameter=props_parameter
         )
         wf.add(property)
         wf.submit()
         self.assertion(wf, step_name='property-cal',
                        artifacts_key='retrieve_path')
 
-    @check_submit
+    @json2dict
     def submit_joint(
             self,
             work_path: Union[os.PathLike, str],
-            relax_parameter: Union[os.PathLike, str, dict],
-            props_parameter: Union[os.PathLike, str, dict],
+            relax_parameter: dict,
+            props_parameter: dict
     ):
-        wf = Workflow(name='joint(relax+props)')
+        wf = Workflow(name='joint')
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(work_path),
-            local_path=work_path,
             relax_parameter=relax_parameter
         )
         property = self._set_props_flow(
             input_work_dir=relaxation.outputs.artifacts["output_all"],
-            local_path=work_path,
             props_parameter=props_parameter
         )
         wf.add(relaxation)

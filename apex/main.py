@@ -47,7 +47,7 @@ def parse_args():
     parser_submit.add_argument(
         '-s', "--specify",
         choices=['relax', 'props', 'joint'],
-        help="Specify type of workflow to submit: (relax, props, joint)"
+        help="Specify type of workflow to submit: (relax | props | joint)"
     )
 
     ##########################################
@@ -67,7 +67,7 @@ def parse_args():
         choices=['make_relax', 'post_relax',
                  'make_props', 'post_props'],
         help="Specify step name to be tested: "
-             "(make_relax, post_relax, make_props, post_props)"
+             "(make_relax | post_relax | make_props | post_props)"
     )
 
     parsed_args = parser.parse_args()

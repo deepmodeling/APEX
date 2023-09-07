@@ -12,6 +12,7 @@ try:
     from monty.serialization import loadfn
     from apex.utils import return_prop_list
     from apex.core.common_prop import make_property_instance
+    from .utils import recursive_search
 except:
     pass
 
@@ -199,7 +200,6 @@ class PropsPost(OP):
             'prop_param': dict,
             'inter_param': dict,
             'task_names': List[str],
-            'local_path': str,
             'path_to_prop': str
         })
 
@@ -218,11 +218,18 @@ class PropsPost(OP):
         prop_param = op_in["prop_param"]
         inter_param = op_in["inter_param"]
         task_names = op_in["task_names"]
-        local_path = op_in["local_path"]
         path_to_prop = op_in["path_to_prop"]
         calculator = inter_param["type"]
 
         cwd = os.getcwd()
+        # find path of finished tasks
+        os.chdir(op_in['input_post'])
+        copy_dir_list = [path_to_prop.split('/')[0]]
+        if not recursive_search(copy_dir_list):
+            raise RuntimeError(f'Fail to find input work path after slices!')
+        else:
+            src_path = os.getcwd()
+
         if calculator in ['vasp', 'abacus']:
             os.chdir(input_post)
             for ii in task_names:
@@ -232,7 +239,7 @@ class PropsPost(OP):
             shutil.copytree(input_post, './', dirs_exist_ok=True)
         else:
             os.chdir(input_all)
-            src_path = str(input_post) + str(local_path)
+            #src_path = str(input_post) + str(local_path)
             shutil.copytree(src_path, './', dirs_exist_ok=True)
 
         if ("cal_setting" in prop_param

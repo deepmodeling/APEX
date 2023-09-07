@@ -16,7 +16,7 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
 
-logging.basicConfig(filename='apex_gen.log', filemode='w', level=logging.DEBUG)
+#logging.basicConfig(filename='apex_gen.log', filemode='w', level=logging.DEBUG)
 
 
 def make_equi(confs, inter_param, relax_param):

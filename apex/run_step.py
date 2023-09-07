@@ -7,9 +7,11 @@ upload_packages.append(__file__)
 
 
 def run_step(parameter, step):
+    # TODO: add local run step mode
     print('-------Singel step local debug mode--------')
+    param_dict = loadfn(parameter[0])
     # check input args
-    json_type = get_task_type(parameter)[1]
+    json_type = get_task_type(param_dict)
     mismatch1 = step in ['make_relax', 'post_relax'] and json_type == 'props'
     mismatch2 = step in ['make_post', 'post_props'] and json_type == 'relax'
     if mismatch1 or mismatch2:
@@ -17,11 +19,10 @@ def run_step(parameter, step):
             f'mismatched indication step with type of json provided: {json_type}'
         )
 
-    param_argv = parameter
-    structures = loadfn(param_argv)["structures"]
-    inter_parameter = loadfn(param_argv)["interaction"]
+    structures = param_dict["structures"]
+    inter_parameter = param_dict["interaction"]
     if step in ['make_relax', 'post_relax']:
-        param = loadfn(param_argv)["relaxation"]
+        param = param_dict["relaxation"]
         if step == 'make_relax':
             print('Making relaxation tasks locally...')
             make_equi(structures, inter_parameter, param)
@@ -29,7 +30,7 @@ def run_step(parameter, step):
             print('Posting relaxation results locally...')
             post_equi(structures, inter_parameter)
     else:
-        param = loadfn(param_argv)["properties"]
+        param = param_dict["properties"]
         if step == 'make_props':
             print('Making properties tasks locally...')
             make_property(structures, inter_parameter, param)

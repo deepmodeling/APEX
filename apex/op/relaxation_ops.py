@@ -12,6 +12,7 @@ try:
     from monty.serialization import loadfn
     from apex.utils import return_prop_list
     from apex.core.common_equi import (make_equi, post_equi)
+    from .utils import recursive_search
 except:
     pass
 
@@ -99,8 +100,7 @@ class RelaxPost(OP):
         return OPIOSign({
             'input_post': Artifact(Path),
             'input_all': Artifact(Path),
-            'param': dict,
-            'path': str
+            'param': dict
         })
 
     @classmethod
@@ -121,12 +121,19 @@ class RelaxPost(OP):
         copy_dir_list = [conf.split('/')[0] for conf in conf_list]
 
         cwd = os.getcwd()
+        # find path of finished tasks
+        os.chdir(op_in['input_post'])
+        if not recursive_search(copy_dir_list):
+            raise RuntimeError(f'Fail to find input work path after slices!')
+        else:
+            src_path = os.getcwd()
+
         os.chdir(op_in['input_all'])
         if calculator in ['vasp', 'abacus']:
             shutil.copytree(op_in['input_post'], './', dirs_exist_ok=True)
             post_equi(conf_list, inter_param)
         else:
-            src_path = str(op_in['input_post']) + str(op_in['path'])
+            # src_path = str(input_post) + str(local_path)
             shutil.copytree(src_path, './', dirs_exist_ok=True)
             post_equi(conf_list, inter_param)
             conf_dirs = []

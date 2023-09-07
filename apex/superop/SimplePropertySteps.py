@@ -39,7 +39,6 @@ class SimplePropertySteps(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
-        local_path: str,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -95,7 +94,6 @@ class SimplePropertySteps(Steps):
             post_image,
             run_command,
             calculator,
-            local_path,
             executor,
             upload_python_packages
         )
@@ -131,7 +129,6 @@ class SimplePropertySteps(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
-        local_path: str,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -149,6 +146,7 @@ class SimplePropertySteps(Steps):
         self.add(make)
 
         # Step for property run
+        # TODO: expose the tasks slice range setting to the user side
         run_fp = PythonOPTemplate(
             run_op,
             slices=Slices(
@@ -226,13 +224,16 @@ class SimplePropertySteps(Steps):
                 image=post_image,
                 command=["python3"]
             ),
-            artifacts={"input_post": runcal.outputs.artifacts["backward_dir"],
-                       "input_all": make.outputs.artifacts["output_work_path"]},
-            parameters={"prop_param": self.inputs.parameters["prop_param"],
-                        "inter_param": self.inputs.parameters["inter_param"],
-                        "task_names": make.outputs.parameters["task_names"],
-                        "path_to_prop": self.inputs.parameters["path_to_prop"],
-                        "local_path": local_path},
+            artifacts={
+                "input_post": runcal.outputs.artifacts["backward_dir"],
+                "input_all": make.outputs.artifacts["output_work_path"]
+            },
+            parameters={
+                "prop_param": self.inputs.parameters["prop_param"],
+                "inter_param": self.inputs.parameters["inter_param"],
+                "task_names": make.outputs.parameters["task_names"],
+                "path_to_prop": self.inputs.parameters["path_to_prop"]
+            },
             key=self.step_keys["post"]
         )
         self.add(post)

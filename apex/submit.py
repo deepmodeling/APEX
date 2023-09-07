@@ -127,16 +127,16 @@ def submit_workflow(parameter,
     if flow_type == 'relax':
         flow_factory.submit_relax(
             work_path=os.getcwd(),
-            parameter=relax_param
+            relax_parameter=relax_param
         )
     elif flow_type == 'props':
         flow_factory.submit_props(
             work_path=os.getcwd(),
-            parameter=props_param
+            props_parameter=props_param
         )
     elif flow_type == 'joint':
         flow_factory.submit_joint(
             work_path=os.getcwd(),
-            props_param=props_param,
-            relax_param=relax_param
+            props_parameter=props_param,
+            relax_parameter=relax_param
         )
