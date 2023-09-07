@@ -1,11 +1,9 @@
-import os
+import glob
 from typing import Type
+from multiprocessing import Pool
 from dflow import config, s3_config
 from dflow.python import upload_packages, OP
 from monty.serialization import loadfn
-from fpop.vasp import RunVasp
-from fpop.abacus import RunAbacus
-from apex.op.RunLAMMPS import RunLAMMPS
 from apex.utils import get_task_type, get_flow_type
 from .config import Config
 from .flow import FlowFactory
@@ -81,8 +79,38 @@ def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
     return run_op, task_type, flow_type, relax_param, props_param
 
 
+def submit(flow,
+           flow_type,
+           work_dir,
+           relax_param,
+           props_param,
+           conf=config,
+           s3_conf=s3_config):
+    # reset dflow global config
+    config.update(conf)
+    s3_config.update(s3_conf)
+
+    if flow_type == 'relax':
+        flow.submit_relax(
+            work_dir=work_dir,
+            relax_parameter=relax_param
+        )
+    elif flow_type == 'props':
+        flow.submit_props(
+            work_dir=work_dir,
+            props_parameter=props_param
+        )
+    elif flow_type == 'joint':
+        flow.submit_joint(
+            work_dir=work_dir,
+            props_parameter=props_param,
+            relax_parameter=relax_param
+        )
+
+
 def submit_workflow(parameter,
                     config_file,
+                    work_dir,
                     specify,
                     is_debug=False):
     try:
@@ -105,7 +133,8 @@ def submit_workflow(parameter,
     # judge basic flow info from user indicated parameter files
     (run_op, calculator, flow_type,
      relax_param, props_param) = judge_flow(parameter, specify)
-
+    print(f'Running APEX calculation via {calculator}')
+    print(f'Submitting {flow_type} workflow...')
     make_image = wf_config.basic_config["apex_image_name"]
     run_image = wf_config.basic_config[f"{calculator}_image_name"]
     run_command = wf_config.basic_config[f"{calculator}_run_command"]
@@ -113,7 +142,7 @@ def submit_workflow(parameter,
     executor = wf_config.get_executor(wf_config.dispatcher_config)
     upload_python_packages = wf_config.basic_config["upload_python_packages"]
     
-    flow_factory = FlowFactory(
+    flow = FlowFactory(
         make_image=make_image,
         run_image=run_image,
         post_image=post_image,
@@ -123,20 +152,18 @@ def submit_workflow(parameter,
         executor=executor,
         upload_python_packages=upload_python_packages
     )
-
-    if flow_type == 'relax':
-        flow_factory.submit_relax(
-            work_path=os.getcwd(),
-            relax_parameter=relax_param
-        )
-    elif flow_type == 'props':
-        flow_factory.submit_props(
-            work_path=os.getcwd(),
-            props_parameter=props_param
-        )
-    elif flow_type == 'joint':
-        flow_factory.submit_joint(
-            work_path=os.getcwd(),
-            props_parameter=props_param,
-            relax_parameter=relax_param
-        )
+    # submit the workflows
+    work_dir_list = glob.glob(work_dir)
+    if len(work_dir_list) > 1:
+        n_processes = len(work_dir_list)
+        pool = Pool(processes=n_processes)
+        print(f'submitting via {n_processes} processes...')
+        for ii in work_dir_list:
+            res = pool.apply_async(
+                submit,
+                (flow, flow_type, ii, relax_param, props_param, config, s3_config)
+            )
+        pool.close()
+        pool.join()
+    elif len(work_dir_list) == 1:
+        submit(flow, flow_type, work_dir_list[0], relax_param, props_param)

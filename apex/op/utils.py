@@ -12,10 +12,9 @@ def recursive_search(directories, path='.'):
     ]
 
     # check if target work direction is found
-    for directory in directories:
-        if directory in directories_in_path:
-            os.chdir(path)
-            return path
+    if set(directories) <= set(directories_in_path):
+        os.chdir(path)
+        return path
 
     # recursive search in next direction
     if len(directories_in_path) == 1:

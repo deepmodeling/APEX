@@ -98,7 +98,7 @@ class RelaxPost(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_post': Artifact(Path),
+            'input_post': Artifact(Path, sub_path=False),
             'input_all': Artifact(Path),
             'param': dict
         })
@@ -123,6 +123,8 @@ class RelaxPost(OP):
         cwd = os.getcwd()
         # find path of finished tasks
         os.chdir(op_in['input_post'])
+        print(copy_dir_list)
+        print(os.listdir('.'))
         if not recursive_search(copy_dir_list):
             raise RuntimeError(f'Fail to find input work path after slices!')
         else:

@@ -39,6 +39,14 @@ def parse_args():
         default='./global.json',
         help="The json file to config workflow",
     )
+
+    parser_submit.add_argument(
+        "-w", "--work",
+        type=str, nargs='?',
+        default='.',
+        help="Working directory to be submitted",
+    )
+
     parser_submit.add_argument(
         "-d", "--debug",
         action="store_true",
@@ -88,6 +96,7 @@ def main():
         submit_workflow(
             parameter=args.parameter,
             config_file=args.config,
+            work_dir=args.work,
             specify=args.specify,
             is_debug=args.debug
         )
@@ -101,4 +110,3 @@ def main():
         raise RuntimeError(
             f"unknown command {args.command}\n{parser.print_help()}"
         )
-

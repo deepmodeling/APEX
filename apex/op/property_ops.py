@@ -24,6 +24,8 @@ class DistributeProps(OP):
     OP class for distribution
     of individual property test steps
     """
+    # TODO: 1, support multitest of same type of property within one workflow
+    # TODO: 2, add API for complex property test superOP
     def __init__(self):
         pass
 
@@ -195,7 +197,7 @@ class PropsPost(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_post': Artifact(Path),
+            'input_post': Artifact(Path, sub_path=False),
             'input_all': Artifact(Path),
             'prop_param': dict,
             'inter_param': dict,

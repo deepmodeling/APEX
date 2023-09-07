@@ -65,12 +65,20 @@ class FlowFactory:
         self.upload_python_packages = upload_python_packages
 
     @staticmethod
-    def assertion(wf, step_name: str, artifacts_key: str):
+    def download(
+            wf,
+            step_name: str,
+            artifacts_key: str,
+            work_dir: Union[os.PathLike, str] = '.'
+    ):
         while wf.query_status() in ["Pending", "Running"]:
             time.sleep(4)
         assert (wf.query_status() == 'Succeeded')
         step = wf.query_step(name=step_name)[0]
-        download_artifact(step.outputs.artifacts[artifacts_key])
+        download_artifact(
+            step.outputs.artifacts[artifacts_key],
+            path=work_dir
+        )
 
     def _set_relax_flow(
             self,
@@ -139,45 +147,51 @@ class FlowFactory:
     @json2dict
     def submit_relax(
             self,
-            work_path: Union[os.PathLike, str],
+            work_dir: Union[os.PathLike, str],
             relax_parameter: dict
     ):
         wf = Workflow(name='relaxation')
         relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(work_path),
+            input_work_dir=upload_artifact(work_dir),
             relax_parameter=relax_parameter
         )
         wf.add(relaxation)
         wf.submit()
-        self.assertion(wf, step_name='relaxation-cal',
-                       artifacts_key='retrieve_path')
+        self.download(
+            wf, step_name='relaxation-cal',
+            artifacts_key='retrieve_path',
+            work_dir=work_dir
+        )
 
     @json2dict
     def submit_props(
             self,
-            work_path: Union[os.PathLike, str],
+            work_dir: Union[os.PathLike, str],
             props_parameter: dict
     ):
         wf = Workflow(name='property')
         property = self._set_props_flow(
-            input_work_dir=upload_artifact(work_path),
+            input_work_dir=upload_artifact(work_dir),
             props_parameter=props_parameter
         )
         wf.add(property)
         wf.submit()
-        self.assertion(wf, step_name='property-cal',
-                       artifacts_key='retrieve_path')
+        self.download(
+            wf, step_name='property-cal',
+            artifacts_key='retrieve_path',
+            work_dir=work_dir
+        )
 
     @json2dict
     def submit_joint(
             self,
-            work_path: Union[os.PathLike, str],
+            work_dir: Union[os.PathLike, str],
             relax_parameter: dict,
             props_parameter: dict
     ):
         wf = Workflow(name='joint')
         relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(work_path),
+            input_work_dir=upload_artifact(work_dir),
             relax_parameter=relax_parameter
         )
         property = self._set_props_flow(
@@ -187,6 +201,9 @@ class FlowFactory:
         wf.add(relaxation)
         wf.add(property)
         wf.submit()
-        self.assertion(wf, step_name='property-cal',
-                       artifacts_key='retrieve_path')
+        self.download(
+            wf, step_name='property-cal',
+            artifacts_key='retrieve_path',
+            work_dir=work_dir
+        )
 
