@@ -1,5 +1,6 @@
 import glob
 import os
+from multiprocessing import Pool
 
 from apex.core.calculator.calculator import make_calculator
 from apex.core.property.Elastic import Elastic
@@ -7,6 +8,8 @@ from apex.core.property.EOS import EOS
 from apex.core.property.Gamma import Gamma
 from apex.core.property.Interstitial import Interstitial
 from apex.core.lib.utils import create_path
+from apex.core.lib.util import collect_task
+from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.utils import sepline
@@ -90,6 +93,118 @@ def make_property(confs, inter_param, property_list):
             prop.post_process(
                 task_list
             )  # generate same KPOINTS file for elastic when doing VASP
+
+
+def worker(
+    work_path,
+    all_task,
+    forward_common_files,
+    forward_files,
+    backward_files,
+    mdata,
+    inter_type,
+):
+    run_tasks = [os.path.basename(ii) for ii in all_task]
+    machine = mdata.get("machine", None)
+    resources = mdata.get("resources", None)
+    command = mdata.get("command", None)
+    group_size = mdata.get("group_size", 1)
+    submission = make_submission(
+        mdata_machine=machine,
+        mdata_resources=resources,
+        commands=[command],
+        work_path=work_path,
+        run_tasks=run_tasks,
+        group_size=group_size,
+        forward_common_files=forward_common_files,
+        forward_files=forward_files,
+        backward_files=backward_files,
+        outlog="outlog",
+        errlog="errlog",
+    )
+    submission.run_submission()
+
+
+def run_property(confs, inter_param, property_list, mdata):
+    # find all POSCARs and their name like mp-xxx
+    # ...
+    # conf_dirs = glob.glob(confs)
+    # conf_dirs.sort()
+    processes = len(property_list)
+    pool = Pool(processes=processes)
+    print("Submit job via %d processes" % processes)
+    conf_dirs = []
+    for conf in confs:
+        conf_dirs.extend(glob.glob(conf))
+    conf_dirs.sort()
+    task_list = []
+    work_path_list = []
+    multiple_ret = []
+    for ii in conf_dirs:
+        sepline(ch=ii, screen=True)
+        for jj in property_list:
+            # determine the suffix: from scratch or refine
+            # ...
+            if jj.get("skip", False):
+                continue
+            if "init_from_suffix" and "output_suffix" in jj:
+                suffix = jj["output_suffix"]
+            elif "reproduce" in jj and jj["reproduce"]:
+                suffix = "reprod"
+            else:
+                suffix = "00"
+
+            property_type = jj["type"]
+            path_to_work = os.path.abspath(
+                os.path.join(ii, property_type + "_" + suffix)
+            )
+
+            work_path_list.append(path_to_work)
+            tmp_task_list = glob.glob(os.path.join(path_to_work, "task.[0-9]*[0-9]"))
+            tmp_task_list.sort()
+            task_list.append(tmp_task_list)
+
+            inter_param_prop = inter_param
+            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
+                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+
+            # dispatch the tasks
+            # POSCAR here is useless
+            virtual_calculator = make_calculator(inter_param_prop, "POSCAR")
+            forward_files = virtual_calculator.forward_files(property_type)
+            forward_common_files = virtual_calculator.forward_common_files(
+                property_type
+            )
+            backward_files = virtual_calculator.backward_files(property_type)
+            #    backward_files += logs
+            # ...
+            inter_type = inter_param_prop["type"]
+            work_path = path_to_work
+            all_task = tmp_task_list
+            run_tasks = collect_task(all_task, inter_type)
+            if len(run_tasks) == 0:
+                continue
+            else:
+                ret = pool.apply_async(
+                    worker,
+                    (
+                        work_path,
+                        all_task,
+                        forward_common_files,
+                        forward_files,
+                        backward_files,
+                        mdata,
+                        inter_type,
+                    ),
+                )
+                multiple_ret.append(ret)
+    pool.close()
+    pool.join()
+    for ii in range(len(multiple_ret)):
+        if not multiple_ret[ii].successful():
+            print("ERROR:", multiple_ret[ii].get())
+            raise RuntimeError("Job %d is not successful!" % ii)
+    print("%d jobs are finished" % len(multiple_ret))
 
 
 def post_property(confs, inter_param, property_list):

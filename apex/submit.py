@@ -5,7 +5,7 @@ from dflow import config, s3_config
 from dflow.python import upload_packages, OP
 from monty.serialization import loadfn
 from apex.utils import get_task_type, get_flow_type
-from .config import Config
+from .config import Configer
 from .flow import FlowFactory
 upload_packages.append(__file__)
 
@@ -114,14 +114,14 @@ def submit_workflow(parameter,
                     specify,
                     is_debug=False):
     try:
-        global_config = loadfn(config_file)
+        config_dict = loadfn(config_file)
     except FileNotFoundError:
         FileNotFoundError(
             'Please prepare global.json under current work direction '
             'or use optional argument: -c to indicate a specific json file.'
         )
     # config dflow_config and s3_config
-    wf_config = Config(global_config)
+    wf_config = Configer(config_dict)
     wf_config.config_dflow(wf_config.dflow_config)
     wf_config.config_bohrium(wf_config.bohrium_config)
     wf_config.config_s3(wf_config.dflow_s3_config)

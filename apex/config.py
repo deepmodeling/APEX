@@ -1,6 +1,4 @@
 import inspect
-from typing import Type
-from monty.serialization import loadfn
 from dflow import config, s3_config
 from dflow.python import upload_packages
 from dflow.plugins import bohrium
@@ -10,7 +8,7 @@ from apex.utils import update_dict
 upload_packages.append(__file__)
 
 
-class Config:
+class Configer:
     """
     The class config basic APEX workflow from input dict
     """

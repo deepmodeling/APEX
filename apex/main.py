@@ -72,10 +72,19 @@ def parse_args():
     parser_test.add_argument(
         "step",
         type=str,
-        choices=['make_relax', 'post_relax',
-                 'make_props', 'post_props'],
+        choices=[
+            'make_relax', 'run_relax', 'post_relax',
+            'make_props', 'run_props', 'post_props'
+        ],
         help="Specify step name to be tested: "
-             "(make_relax | post_relax | make_props | post_props)"
+             "(make_relax | run_relax | post_relax |"
+             " make_props | run_props | post_props)"
+    )
+    parser_submit.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
     )
 
     parsed_args = parser.parse_args()
@@ -104,6 +113,7 @@ def main():
     elif args.cmd == 'test':
         run_step(
             parameter=args.parameter,
+            config_file=args.config,
             step=args.step
         )
     else:

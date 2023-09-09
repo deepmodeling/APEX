@@ -2,15 +2,13 @@ import glob
 import os
 import shutil
 import logging
-from multiprocessing import Pool
 from monty.serialization import dumpfn
-from packaging.version import Version
-import dpdata
 import apex.core.calculator.lib.abacus as abacus
 import apex.core.lib.crys as crys
 import apex.core.lib.util as util
 from apex.core.calculator.calculator import make_calculator
 from apex.core.lib.utils import create_path
+from apex.core.lib.dispatcher import make_submission
 from apex.core.mpdb import get_structure
 from dflow.python import upload_packages
 upload_packages.append(__file__)
@@ -140,6 +138,56 @@ def make_equi(confs, inter_param, relax_param):
         inter = make_calculator(inter_param, poscar)
         inter.make_potential_files(ii)
         inter.make_input_file(ii, "relaxation", relax_param)
+
+
+def run_equi(confs, inter_param, mdata):
+    # find all POSCARs and their name like mp-xxx
+    # ...
+    conf_dirs = []
+    for conf in confs:
+        conf_dirs.extend(glob.glob(conf))
+    conf_dirs.sort()
+
+    processes = len(conf_dirs)
+
+    # generate a list of task names like mp-xxx/relaxation/relax_task
+    # ...
+    work_path_list = []
+    for ii in conf_dirs:
+        work_path_list.append(os.path.join(ii, "relaxation"))
+    all_task = []
+    for ii in work_path_list:
+        all_task.append(os.path.join(ii, "relax_task"))
+    run_tasks = all_task
+
+    # dispatch the tasks
+    # POSCAR here is useless
+    virtual_calculator = make_calculator(inter_param, "POSCAR")
+    forward_files = virtual_calculator.forward_files()
+    forward_common_files = virtual_calculator.forward_common_files()
+    backward_files = virtual_calculator.backward_files()
+    #    backward_files += logs
+    machine = mdata.get("machine", None)
+    resources = mdata.get("resources", None)
+    command = mdata.get("command", None)
+    group_size = mdata.get("group_size", 1)
+    work_path = os.getcwd()
+    print("%s --> Runing... " % (work_path))
+
+    submission = make_submission(
+        mdata_machine=machine,
+        mdata_resources=resources,
+        commands=[command],
+        work_path=work_path,
+        run_tasks=run_tasks,
+        group_size=group_size,
+        forward_common_files=forward_common_files,
+        forward_files=forward_files,
+        backward_files=backward_files,
+        outlog="outlog",
+        errlog="errlog",
+    )
+    submission.run_submission()
 
 
 def post_equi(confs, inter_param):
