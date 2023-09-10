@@ -285,7 +285,7 @@ class CollectProps(OP):
     @classmethod
     def get_input_sign(cls):
         return OPIOSign({
-            'input_post': Artifact(Path),
+            'input_post': Artifact(Path, sub_path=False),
             'input_all': Artifact(Path),
             'param': dict
         })
@@ -298,13 +298,17 @@ class CollectProps(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
+        cwd = os.getcwd()
         input_post = op_in["input_post"]
         input_all = op_in["input_all"]
         param = op_in["param"]
         confs = param["structures"]
-
         retrieve_conf_list = [conf.split('/')[0] for conf in confs]
-        shutil.copytree(input_post / 'retrieve_pool', input_all, dirs_exist_ok=True)
+        os.chdir(input_post)
+        pool_path = recursive_search(['retrieve_pool'])
+        if not pool_path:
+            raise RuntimeError('retrieve_pool not found')
+        shutil.copytree('retrieve_pool', input_all, dirs_exist_ok=True)
 
         for ii in retrieve_conf_list:
             shutil.copytree(input_all / ii, ii, dirs_exist_ok=True)

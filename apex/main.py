@@ -80,11 +80,11 @@ def parse_args():
              "(make_relax | run_relax | post_relax |"
              " make_props | run_props | post_props)"
     )
-    parser_submit.add_argument(
-        "-c", "--config",
+    parser_test.add_argument(
+        "-m", "--machine",
         type=str, nargs='?',
         default='./global.json',
-        help="The json file to config workflow",
+        help="The json file to config the dpdispatcher",
     )
 
     parsed_args = parser.parse_args()
@@ -113,7 +113,7 @@ def main():
     elif args.cmd == 'test':
         run_step(
             parameter=args.parameter,
-            config_file=args.config,
+            machine_file=args.machine,
             step=args.step
         )
     else:

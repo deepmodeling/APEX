@@ -123,8 +123,6 @@ class RelaxPost(OP):
         cwd = os.getcwd()
         # find path of finished tasks
         os.chdir(op_in['input_post'])
-        print(copy_dir_list)
-        print(os.listdir('.'))
         if not recursive_search(copy_dir_list):
             raise RuntimeError(f'Fail to find input work path after slices!')
         else:
@@ -154,8 +152,8 @@ class RelaxPost(OP):
         os.chdir(cwd)
         for ii in copy_dir_list:
             src_path = str(op_in['input_all']) + f'/{ii}'
-            shutil.copytree(src_path, f'/{ii}', dirs_exist_ok=True)
-
+            print(src_path)
+            shutil.copytree(src_path, f'./{ii}', dirs_exist_ok=True)
         post_path = [Path(ii) for ii in copy_dir_list]
 
         op_out = OPIO({

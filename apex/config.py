@@ -49,6 +49,7 @@ class Configer:
         self._local_root = config_data.get("local_root", '.')
         self._remote_host = config_data.get("remote_host", None)
         self._remote_username = config_data.get("remote_username", None)
+        self._remote_password = config_data.get("remote_password", None)
         self._port = config_data.get("port", None)
         if not (self._context_type or self._machine):
             self.machine_dict = None
@@ -77,10 +78,13 @@ class Configer:
                 "remote_profile": {
                     "hostname": self._remote_host,
                     "username": self._remote_username,
+                    "password": self._remote_password,
                     "port": self._port,
                     "timeout": 10
                 }
             }
+            if self._machine:
+                update_dict(self.machine_dict, self._machine)
         elif self._context_type == "local":
             self.machine_dict = {
                 "batch_type": self._batch_type,
