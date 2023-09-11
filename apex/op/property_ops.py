@@ -80,7 +80,8 @@ class DistributeProps(OP):
                 elif 'reproduce' in jj and jj['reproduce']:
                     do_refine = False
                     suffix = 'reprod'
-                elif 'suffix' in ii and jj['suffix']:
+                elif 'suffix' in jj and jj['suffix']:
+                    do_refine = False
                     suffix = str(jj['suffix'])
                 else:
                     do_refine = False

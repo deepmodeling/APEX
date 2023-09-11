@@ -39,6 +39,8 @@ class SimplePropertySteps(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        group_size: Optional[int] = None,
+        pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -94,6 +96,8 @@ class SimplePropertySteps(Steps):
             post_image,
             run_command,
             calculator,
+            group_size,
+            pool_size,
             executor,
             upload_python_packages
         )
@@ -129,6 +133,8 @@ class SimplePropertySteps(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        group_size: Optional[int] = None,
+        pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -146,18 +152,20 @@ class SimplePropertySteps(Steps):
         self.add(make)
 
         # Step for property run
-        # TODO: expose the tasks slice range setting to the user side
-        run_fp = PythonOPTemplate(
-            run_op,
-            slices=Slices(
-                "{{item}}",
-                input_parameter=["task_name"],
-                input_artifact=["task_path"],
-                output_artifact=["backward_dir"]
-            ),
-            python_packages=upload_python_packages,
-            image=run_image
-        )
+        if calculator in ['vasp', 'abacus']:
+            run_fp = PythonOPTemplate(
+                run_op,
+                slices=Slices(
+                    "{{item}}",
+                    input_parameter=["task_name"],
+                    input_artifact=["task_path"],
+                    output_artifact=["backward_dir"],
+                    group_size=group_size,
+                    pool_size=pool_size
+                ),
+                python_packages=upload_python_packages,
+                image=run_image
+            )
         if calculator == 'vasp':
             runcal = Step(
                 name="PropsVASP-Cal",
@@ -198,7 +206,9 @@ class SimplePropertySteps(Steps):
                 slices=Slices(
                     "{{item}}",
                     input_artifact=["input_lammps"],
-                    output_artifact=["backward_dir"]
+                    output_artifact=["backward_dir"],
+                    group_size=group_size,
+                    pool_size=pool_size
                 ),
                 image=run_image,
                 command=["python3"]

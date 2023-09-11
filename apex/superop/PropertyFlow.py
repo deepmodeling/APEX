@@ -40,6 +40,8 @@ class PropertyFlow(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        group_size: Optional[int] = None,
+        pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -94,6 +96,8 @@ class PropertyFlow(Steps):
             post_image,
             run_command,
             calculator,
+            group_size,
+            pool_size,
             executor,
             upload_python_packages
         )
@@ -129,6 +133,8 @@ class PropertyFlow(Steps):
         post_image: str,
         run_command: str,
         calculator: str,
+        group_size: Optional[int] = None,
+        pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -153,6 +159,8 @@ class PropertyFlow(Steps):
             post_image=post_image,
             run_command=run_command,
             calculator=calculator,
+            group_size=group_size,
+            pool_size=pool_size,
             executor=executor,
             upload_python_packages=upload_python_packages
         )

@@ -4,8 +4,9 @@ from multiprocessing import Pool
 from dflow import config, s3_config
 from dflow.python import upload_packages, OP
 from monty.serialization import loadfn
+import fpop
 from apex.utils import get_task_type, get_flow_type
-from .config import Configer
+from .configer import Configer
 from .flow import FlowFactory
 upload_packages.append(__file__)
 
@@ -111,13 +112,13 @@ def submit(flow,
 def submit_workflow(parameter,
                     config_file,
                     work_dir,
-                    specify,
+                    flow_type,
                     is_debug=False):
     try:
         config_dict = loadfn(config_file)
     except FileNotFoundError:
-        FileNotFoundError(
-            'Please prepare global.json under current work direction '
+        raise FileNotFoundError(
+            'Please prepare config.json under current work direction '
             'or use optional argument: -c to indicate a specific json file.'
         )
     # config dflow_config and s3_config
@@ -129,18 +130,27 @@ def submit_workflow(parameter,
     if is_debug:
         config["mode"] = "debug"
         config["debug_copy_method"] = "copy"
+        config["debug_pool_workers"] = 1
         s3_config["storage_client"] = None
+
     # judge basic flow info from user indicated parameter files
     (run_op, calculator, flow_type,
-     relax_param, props_param) = judge_flow(parameter, specify)
+     relax_param, props_param) = judge_flow(parameter, flow_type)
     print(f'Running APEX calculation via {calculator}')
     print(f'Submitting {flow_type} workflow...')
     make_image = wf_config.basic_config["apex_image_name"]
     run_image = wf_config.basic_config[f"{calculator}_image_name"]
+    if not run_image:
+        run_image = wf_config.basic_config["image_name"]
     run_command = wf_config.basic_config[f"{calculator}_run_command"]
+    if not run_command:
+        run_command = wf_config.basic_config["run_command"]
     post_image = make_image
+    group_size = wf_config.basic_config["group_size"]
+    pool_size = wf_config.basic_config["pool_size"]
     executor = wf_config.get_executor(wf_config.dispatcher_config)
     upload_python_packages = wf_config.basic_config["upload_python_packages"]
+    upload_python_packages.extend(list(fpop.__path__))
     
     flow = FlowFactory(
         make_image=make_image,
@@ -149,6 +159,8 @@ def submit_workflow(parameter,
         run_command=run_command,
         calculator=calculator,
         run_op=run_op,
+        group_size=group_size,
+        pool_size=pool_size,
         executor=executor,
         upload_python_packages=upload_python_packages
     )

@@ -8,6 +8,7 @@ from dpdispatcher import (
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
+
 def make_submission(
     mdata_machine,
     mdata_resources,
@@ -37,8 +38,6 @@ def make_submission(
 
     task_list = []
     for ii in run_tasks:
-        #forward_files = [os.path.join(ii, jj) for jj in forward_files]
-        #backward_files = [os.path.join(ii, jj) for jj in backward_files]
         task = Task(
             command=command,
             task_work_path=ii,

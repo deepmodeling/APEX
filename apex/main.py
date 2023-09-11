@@ -11,7 +11,8 @@ upload_packages.append(__file__)
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="APEX: A scientific workflow for Alloy Properties EXplorer using simulations",
+        description=f"APEX: A scientific workflow for Alloy Properties EXplorer "
+                    f"using simulations (v{__version__})\n",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     subparsers = parser.add_subparsers(title="Valid subcommands", dest="cmd")
@@ -36,7 +37,7 @@ def parse_args():
     parser_submit.add_argument(
         "-c", "--config",
         type=str, nargs='?',
-        default='./global.json',
+        default='./config.json',
         help="The json file to config workflow",
     )
 
@@ -53,7 +54,7 @@ def parse_args():
         help="Run APEX workflow via local debug mode"
     )
     parser_submit.add_argument(
-        '-s', "--specify",
+        '-f', "--flow",
         choices=['relax', 'props', 'joint'],
         help="Specify type of workflow to submit: (relax | props | joint)"
     )
@@ -83,7 +84,7 @@ def parse_args():
     parser_test.add_argument(
         "-m", "--machine",
         type=str, nargs='?',
-        default='./global.json',
+        default='./config.json',
         help="The json file to config the dpdispatcher",
     )
 
@@ -106,7 +107,7 @@ def main():
             parameter=args.parameter,
             config_file=args.config,
             work_dir=args.work,
-            specify=args.specify,
+            flow_type=args.flow,
             is_debug=args.debug
         )
 

@@ -22,6 +22,7 @@ from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
 
 
+
 def json2dict(function):
     def wrapper(*args, **kwargs):
         # check input parameter and try to convert to dict if is json file
@@ -48,6 +49,8 @@ class FlowFactory:
         relax_post_op: Type[OP] = RelaxPost,
         props_make_op: Type[OP] = PropsMake,
         props_post_op: Type[OP] = PropsPost,
+        group_size: Optional[int] = None,
+        pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
@@ -61,6 +64,8 @@ class FlowFactory:
         self.post_image = post_image
         self.run_command = run_command
         self.calculator = calculator
+        self.group_size = group_size
+        self.pool_size = pool_size
         self.executor = executor
         self.upload_python_packages = upload_python_packages
 
@@ -95,6 +100,8 @@ class FlowFactory:
             post_image=self.post_image,
             run_command=self.run_command,
             calculator=self.calculator,
+            group_size=self.group_size,
+            pool_size=self.pool_size,
             executor=self.executor,
             upload_python_packages=self.upload_python_packages
         )
@@ -127,6 +134,8 @@ class FlowFactory:
             post_image=self.post_image,
             run_command=self.run_command,
             calculator=self.calculator,
+            group_size=self.group_size,
+            pool_size=self.pool_size,
             executor=self.executor,
             upload_python_packages=self.upload_python_packages
         )

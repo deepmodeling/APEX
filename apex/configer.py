@@ -102,8 +102,18 @@ class Configer:
             )
 
         # calculator config
+        self._image_name = config_data.get("image_name", None)
+        self._run_command = config_data.get("run_command", None)
         self._apex_image_name = config_data.get("apex_image_name", None)
-        self._upload_python_packages = config_data.get("upload_python_packages", None)
+        self._group_size = config_data.get("group_size", None)
+        self._pool_size = config_data.get("pool_size", None)
+        self._upload_python_packages = config_data.get("upload_python_packages", [])
+        if self._group_size and not self._pool_size:
+            self._pool_size = 1
+        if self._upload_python_packages and not isinstance(self._upload_python_packages, list):
+            raise TypeError(
+                "Value of 'upload_python_packages' must be a list!"
+            )
         # lammps
         self._lammps_image_name = config_data.get("lammps_image_name", None)
         self._lammps_run_command = config_data.get("lammps_run_command", None)
@@ -164,7 +174,11 @@ class Configer:
     @property
     def basic_config(self):
         basic_config = {
+            "image_name": self._image_name,
+            "run_command": self._run_command,
             "apex_image_name": self._apex_image_name,
+            "group_size": self._group_size,
+            "pool_size": self._pool_size,
             "upload_python_packages": self._upload_python_packages,
             "lammps_image_name": self._lammps_image_name,
             "lammps_run_command": self._lammps_run_command,

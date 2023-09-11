@@ -12,7 +12,7 @@ from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
-from apex.utils import sepline
+from apex.utils import sepline, get_task_type
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -60,6 +60,9 @@ def make_property(confs, inter_param, property_list):
             elif "reproduce" in jj and jj["reproduce"]:
                 do_refine = False
                 suffix = "reprod"
+            elif 'suffix' in jj and jj['suffix']:
+                do_refine = False
+                suffix = str(jj['suffix'])
             else:
                 do_refine = False
                 suffix = "00"
@@ -103,11 +106,14 @@ def worker(
     backward_files,
     mdata,
     inter_type,
+    task_type,
 ):
     run_tasks = [os.path.basename(ii) for ii in all_task]
     machine = mdata.get("machine", None)
     resources = mdata.get("resources", None)
-    command = mdata.get("command", None)
+    command = mdata.get(f"{task_type}_run_command", None)
+    if not command:
+        command = mdata.get("run_command", None)
     group_size = mdata.get("group_size", 1)
     submission = make_submission(
         mdata_machine=machine,
@@ -151,6 +157,8 @@ def run_property(confs, inter_param, property_list, mdata):
                 suffix = jj["output_suffix"]
             elif "reproduce" in jj and jj["reproduce"]:
                 suffix = "reprod"
+            elif 'suffix' in jj and jj['suffix']:
+                suffix = str(jj['suffix'])
             else:
                 suffix = "00"
 
@@ -178,6 +186,7 @@ def run_property(confs, inter_param, property_list, mdata):
             backward_files = virtual_calculator.backward_files(property_type)
             #    backward_files += logs
             # ...
+            task_type = get_task_type({"interaction": inter_param})
             inter_type = inter_param_prop["type"]
             work_path = path_to_work
             all_task = tmp_task_list
@@ -195,6 +204,7 @@ def run_property(confs, inter_param, property_list, mdata):
                         backward_files,
                         mdata,
                         inter_type,
+                        task_type
                     ),
                 )
                 multiple_ret.append(ret)
@@ -227,6 +237,8 @@ def post_property(confs, inter_param, property_list):
                 suffix = jj["output_suffix"]
             elif "reproduce" in jj and jj["reproduce"]:
                 suffix = "reprod"
+            elif 'suffix' in jj and jj['suffix']:
+                suffix = str(jj['suffix'])
             else:
                 suffix = "00"
 
