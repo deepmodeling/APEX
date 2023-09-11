@@ -2,6 +2,7 @@ import argparse
 import logging
 from dflow.python import upload_packages
 from apex import (
+    header,
     __version__,
 )
 from .run_step import run_step
@@ -12,7 +13,8 @@ upload_packages.append(__file__)
 def parse_args():
     parser = argparse.ArgumentParser(
         description=f"APEX: A scientific workflow for Alloy Properties EXplorer "
-                    f"using simulations (v{__version__})\n",
+                    f"using simulations (v{__version__})\n"
+                    f"Type 'apex -h' for help.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     subparsers = parser.add_subparsers(title="Valid subcommands", dest="cmd")
@@ -101,7 +103,7 @@ def main():
     logging.basicConfig(level=logging.INFO)
     # parse args
     parser, args = parse_args()
-
+    header()
     if args.cmd == 'submit':
         submit_workflow(
             parameter=args.parameter,

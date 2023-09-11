@@ -87,7 +87,7 @@ def submit(flow,
            props_param,
            conf=config,
            s3_conf=s3_config):
-    # reset dflow global config
+    # reset dflow global config for sub-processes
     config.update(conf)
     s3_config.update(s3_conf)
 
