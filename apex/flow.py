@@ -79,6 +79,8 @@ class FlowFactory:
         while wf.query_status() in ["Pending", "Running"]:
             time.sleep(4)
         assert (wf.query_status() == 'Succeeded')
+        print(f'Workflow {wf.name} is finished')
+        print('Retrieving finished tasks to local...')
         step = wf.query_step(name=step_name)[0]
         download_artifact(
             step.outputs.artifacts[artifacts_key],
