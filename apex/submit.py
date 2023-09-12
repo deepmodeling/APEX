@@ -118,7 +118,7 @@ def submit_workflow(parameter,
         config_dict = loadfn(config_file)
     except FileNotFoundError:
         raise FileNotFoundError(
-            'Please prepare config.json under current work direction '
+            'Please prepare global.json under current work direction '
             'or use optional argument: -c to indicate a specific json file.'
         )
     # config dflow_config and s3_config

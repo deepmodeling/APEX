@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 __package__ = "tests"
 
 from apex.core.calculator.VASP import VASP
-from apex.calculator.lib.vasp import incar_upper
+from apex.core.calculator.lib.vasp import incar_upper
 
 
 class TestVASP(unittest.TestCase):

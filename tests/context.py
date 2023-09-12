@@ -1,8 +1,7 @@
 import os
 import sys
-
+from apex.core.calculator.lib.vasp import *
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from apex.calculator.lib.vasp import *
 
 
 def setUpModule():

@@ -9,10 +9,10 @@ from pymatgen.core import Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.io.vasp import Incar
 
+from apex.core.property.Surface import Surface
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-
-from apex.core.property.Surface import Surface
 
 
 class TestSurface(unittest.TestCase):

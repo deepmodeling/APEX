@@ -201,8 +201,8 @@ class Elastic(Property):
             KPOINTS = "KPOINTS"
 
         cwd = os.getcwd()
-        poscar_start = os.path.abspath(os.path.join(task_list[0], "../..", POSCAR))
-        os.chdir(os.path.join(task_list[0], "../.."))
+        poscar_start = os.path.abspath(os.path.join(task_list[0], "..", POSCAR))
+        os.chdir(os.path.join(task_list[0], ".."))
         if os.path.isfile(os.path.join(task_list[0], INCAR)):
             if self.inter_param["type"] == "abacus":
                 input_aba = abacus_scf.get_abacus_input_parameters("INPUT")
@@ -230,7 +230,7 @@ class Elastic(Property):
 
             os.chdir(cwd)
             kpoints_universal = os.path.abspath(
-                os.path.join(task_list[0], "../..", KPOINTS)
+                os.path.join(task_list[0], "..", KPOINTS)
             )
             for ii in task_list:
                 if os.path.isfile(os.path.join(ii, KPOINTS)):

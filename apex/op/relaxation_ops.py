@@ -18,6 +18,7 @@ except:
 
 upload_packages.append(__file__)
 
+
 class RelaxMake(OP):
     """
     OP class for making calculation tasks

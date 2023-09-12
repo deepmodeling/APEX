@@ -39,7 +39,7 @@ def parse_args():
     parser_submit.add_argument(
         "-c", "--config",
         type=str, nargs='?',
-        default='./config.json',
+        default='./global.json',
         help="The json file to config workflow",
     )
 
@@ -86,7 +86,7 @@ def parse_args():
     parser_test.add_argument(
         "-m", "--machine",
         type=str, nargs='?',
-        default='./config.json',
+        default='./global.json',
         help="The json file to config the dpdispatcher",
     )
 

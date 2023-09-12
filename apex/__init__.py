@@ -26,5 +26,6 @@ def header():
     header_str += "   AAA         AAA    PPP           EEE           XXX   XXX\n"
     header_str += "  AAA           AAA   PPP           EEEEEEEEEE  XXX       XXX\n"
     header_str += "---------------------------------------------------------------\n"
-
+    header_str += f"==>> Alloy Property Explorer using Simulation (v{__version__})\n"
+    header_str += "Running log:\n"
     print(header_str)
