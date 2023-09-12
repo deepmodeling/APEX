@@ -83,6 +83,11 @@ class Interstitial(Property):
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         self.path_to_work = os.path.abspath(path_to_work)
+        if os.path.exists(path_to_work):
+            print("%s already exists" % path_to_work)
+            # dlog.warning("%s already exists" % path_to_work)
+        else:
+            os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
 
         if "start_confs_path" in self.parameter and os.path.exists(
@@ -409,7 +414,7 @@ class Interstitial(Property):
 
     def post_process(self, task_list):
         if True:
-            fin1 = open(os.path.join(task_list[0], "../..", "element.out"), "r")
+            fin1 = open(os.path.join(task_list[0], "..", "element.out"), "r")
             for ii in task_list:
                 conf = os.path.join(ii, "conf.lmp")
                 inter = os.path.join(ii, "inter.json")
