@@ -27,5 +27,5 @@ def header():
     header_str += "  AAA           AAA   PPP           EEEEEEEEEE  XXX       XXX\n"
     header_str += "---------------------------------------------------------------\n"
     header_str += f"==>> Alloy Property Explorer using Simulation (v{__version__})\n"
-    header_str += "Checking input files...\n"
+    header_str += "Checking input files..."
     print(header_str)
