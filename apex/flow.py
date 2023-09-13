@@ -22,7 +22,6 @@ from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
 
 
-
 def json2dict(function):
     def wrapper(*args, **kwargs):
         # check input parameter and try to convert to dict if is json file
@@ -79,7 +78,7 @@ class FlowFactory:
         while wf.query_status() in ["Pending", "Running"]:
             time.sleep(4)
         assert (wf.query_status() == 'Succeeded')
-        print(f'Workflow is finished (ID: {wf.id}, UID: {wf.uid})')
+        print(f'Workflow finished (ID: {wf.id}, UID: {wf.uid})')
         print('Retrieving finished tasks to local...')
         step = wf.query_step(name=step_name)[0]
         download_artifact(
