@@ -16,7 +16,7 @@ import apex.core.calculator.lib.vasp as vasp
 from apex.core.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
-from apex.core.Structure import StructureInfo
+from apex.core.structure import StructureInfo
 from apex.core.lib.slab_orientation import SlabSlipSystem
 from apex.core.lib.trans_tools import trans_mat_basis
 from apex.core.lib.trans_tools import (plane_miller_bravais_to_miller,

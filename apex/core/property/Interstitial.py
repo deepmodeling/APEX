@@ -15,7 +15,7 @@ import apex.core.calculator.lib.lammps as lammps
 from apex.core.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
-from apex.core.Structure import StructureInfo
+from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
