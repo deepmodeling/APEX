@@ -45,7 +45,7 @@ def parse_args():
 
     parser_submit.add_argument(
         "-w", "--work",
-        type=str, nargs='?',
+        type=str, nargs='+',
         default='.',
         help="Working directory to be submitted",
     )

@@ -2,9 +2,18 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of property-test workflows by utilizing various computational approaches, including support for LAMMPS, VASP, and ABACUS.
 
+## New Features Update (v1.0.0)
+* Decouple property calculation into individual sub-workflow for convenience of further custom of complex property function
+* Support one-click parallel submission of multiple workflows
+* Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
+* Allow user to adjust concurrency for task submission via `group_size` and `pool_size`
+* Allow user to custom `suffix` of property calculation directory so that multi test with same property templete but different settings can be run within one workflow
+* Refactored and optimized the command line interaction
+
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer using simulations](#apex-alloy-property-explorer-using-simulations)
+  - [New Features Update (v1.0.0)](#new-features-update-v100)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
@@ -30,11 +39,11 @@ The comprehensive architecture of APEX is demonstrated below:
     <p style='font-size:1.0rem; font-weight:none'>Figure 1. APEX schematic diagram</p>
 </div>
 
-APEX consists of three pre-defined **workflows** that users can submit: `relaxation`, `property`, and `joint` workflows. The relaxation and property workflows comprise three sequential **sub-steps**: `Make`, `Run`, and `Post`. The `joint` workflow essentially combines the `relaxation` and `property` workflows into a comprehensive workflow.
+APEX consists of three types of pre-defined **workflow** that users can submit: `relaxation`, `property`, and `joint`. The `relaxation` and `property` sub-workflow comprise three sequential **steps**: `Make`, `Run`, and `Post`, while the `joint` workflow essentially combines the `relaxation` and `property` workflows into a comprehensive workflow.
 
 The `relaxation` process begins with the initial `POSCAR` supplied by the user, which is used to generate crucial data such as the final relaxed structure and its corresponding energy, forces, and virial tensor. This equilibrium state information is essential for input into the `property` workflow, enabling further calculations of alloy properties. Upon completion, the final results are automatically retrieved and downloaded to the original working directory.
 
-In both the `relaxation` and `property` workflows, the `Make` step prepares the corresponding computational tasks. These tasks are then transferred to the `Run` step, which is responsible for task dispatch, calculation monitoring, and retrieval of completed tasks (implemented through the [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) plugin). Upon completion of all tasks, the `Post` step is initiated to gather data and compute the desired property outcomes.
+In both the `relaxation` and `property` workflows, the `Make` step prepares the corresponding computational tasks. These tasks are then transferred to the `Run` step that is responsible for task dispatch, calculation monitoring, and retrieval of completed tasks (implemented through the [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) plugin). Upon completion of all tasks, the `Post` step is initiated to collect data and compute the desired property outcomes.
 
 APEX currently offers computation methods for the following alloy properties:
 

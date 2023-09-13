@@ -165,7 +165,10 @@ def submit_workflow(parameter,
         upload_python_packages=upload_python_packages
     )
     # submit the workflows
-    work_dir_list = glob.glob(work_dir)
+    work_dir_list = []
+    for ii in work_dir:
+        glob_list = glob.glob(ii)
+        work_dir_list.extend(glob_list)
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
         pool = Pool(processes=n_processes)
