@@ -1,5 +1,6 @@
 import glob
 import json
+import logging
 import os
 import re
 
@@ -83,7 +84,7 @@ class EOS(Property):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
             #dlog.warning("%s already exists" % path_to_work)
-            print("%s already exists" % path_to_work)
+            logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
@@ -166,10 +167,11 @@ class EOS(Property):
                     + str(self.vol_step)
                 )
                 if self.vol_abs:
-                    print("treat vol_start and vol_end as absolute volume")
-                    #dlog.info("treat vol_start and vol_end as absolute volume")
+                    logging.info("treat vol_start and vol_end as absolute volume")
+                    #dlog.info("treat vol_start
+                    # and vol_end as absolute volume")
                 else:
-                    print("treat vol_start and vol_end as relative volume")
+                    logging.info("treat vol_start and vol_end as relative volume")
                     #dlog.info("treat vol_start and vol_end as relative volume")
 
                 if self.inter_param["type"] == "abacus":

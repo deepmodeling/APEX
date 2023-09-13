@@ -1,5 +1,6 @@
 import glob
 import json
+import logging
 import os
 import re
 
@@ -81,7 +82,7 @@ class Vacancy(Property):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
             #dlog.warning("%s already exists" % path_to_work)
-            print("%s already exists" % path_to_work)
+            logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)

@@ -14,13 +14,10 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
 
-#logging.basicConfig(filename='apex_gen.log', filemode='w', level=logging.DEBUG)
-
 
 def make_equi(confs, inter_param, relax_param):
     # find all POSCARs and their name like mp-xxx
     # ...
-    #dlog.debug("debug info make equi")
     logging.debug("debug info make equi")
     if "type_map" in inter_param:
         ele_list = [key for key in inter_param["type_map"].keys()]
@@ -80,7 +77,6 @@ def make_equi(confs, inter_param, relax_param):
     # ...
     for ii in conf_dirs:
         crys_type = ii.split("/")[-1]
-        #dlog.debug("crys_type: %s" % crys_type)
         logging.debug("crys_type: %s" % crys_type)
 
         if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):

@@ -1,4 +1,5 @@
 import glob
+import logging
 import os
 import re
 from shutil import copyfile
@@ -56,7 +57,7 @@ class Elastic(Property):
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            print("%s already exists" % path_to_work)
+            logging.warning("%s already exists" % path_to_work)
             #dlog.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)

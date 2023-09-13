@@ -2,18 +2,13 @@ import glob
 import json
 import os
 import re
-import warnings
-from typing import Sequence
+import logging
 
 import dpdata
 import numpy as np
-# from ase.lattice.cubic import SimpleCubic as sc
-# from ase.lattice.cubic import BodyCenteredCubic as bcc
-# from ase.lattice.cubic import FaceCenteredCubic as fcc
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
-# from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.analysis.diffraction.tem import TEMCalculator
 
 import apex.core.calculator.lib.abacus as abacus
@@ -111,8 +106,7 @@ class Gamma(Property):
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            print("%s already exists" % path_to_work)
-            # dlog.warning("%s already exists" % path_to_work)
+            logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
@@ -239,8 +233,7 @@ class Gamma(Property):
                                        f'and slip direction info from input json file!')
 
                 if not self.structure_type in ['bcc', 'fcc', 'hcp']:
-                    warnings.warn(
-                        message=
+                    logging.warning(
                         f'Gamma line function for {self.structure_type} '
                         f'is not fully supported so far.\n'
                         f'You may need to double check the generated slab structures'
@@ -322,8 +315,7 @@ class Gamma(Property):
             (plane_miller, x_miller,
              xy_miller, stored_slip_length) = system[combined_key].values()
         except KeyError:
-            warnings.warn(
-                message=
+            logging.warning(
                 'Warning:\n'
                 'The input slip system is not pre-defined in the Gamma module!\n'
                 'We highly recommend you to double check the slab structure generated'
