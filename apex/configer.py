@@ -47,10 +47,11 @@ class Configer:
         self._context_type = config_data.get("context_type", None)
         self._batch_type = config_data.get("batch_type", None)
         self._local_root = config_data.get("local_root", '.')
+        self._remote_root = config_data.get("remote_root", None)
         self._remote_host = config_data.get("remote_host", None)
         self._remote_username = config_data.get("remote_username", None)
         self._remote_password = config_data.get("remote_password", None)
-        self._port = config_data.get("port", None)
+        self._port = config_data.get("port", 22)
         if not (self._context_type or self._machine):
             self.machine_dict = None
         elif self._context_type == "Bohrium":
@@ -75,6 +76,7 @@ class Configer:
                 "batch_type": self._batch_type,
                 "context_type": self._context_type,
                 "local_root": self._local_root,
+                "remote_root": self._remote_root,
                 "remote_profile": {
                     "hostname": self._remote_host,
                     "username": self._remote_username,
@@ -102,9 +104,9 @@ class Configer:
             )
 
         # calculator config
-        self._image_name = config_data.get("image_name", None)
+        self._run_image_name = config_data.get("run_image_name", None)
         self._run_command = config_data.get("run_command", None)
-        self._apex_image_name = config_data.get("apex_image_name", None)
+        self._apex_image_name = config_data.get("apex_image_name", "zhuoyli/apex_amd64")
         self._group_size = config_data.get("group_size", None)
         self._pool_size = config_data.get("pool_size", None)
         self._upload_python_packages = config_data.get("upload_python_packages", [])
@@ -174,7 +176,7 @@ class Configer:
     @property
     def basic_config(self):
         basic_config = {
-            "image_name": self._image_name,
+            "run_image_name": self._run_image_name,
             "run_command": self._run_command,
             "apex_image_name": self._apex_image_name,
             "group_size": self._group_size,

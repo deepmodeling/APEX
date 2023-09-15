@@ -1,0 +1,15 @@
+{
+    "dflow_host": "https://workflows.deepmodeling.com",
+    "k8s_api_server": "https://workflows.deepmodeling.com",
+    "email": "YOUR@EMAIL",
+    "password": "YOURPASSWD",
+    "program_id": 1234,
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
+    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
+    "group_size": 2,
+    "pool_size": 1,
+    "run_command":"lmp -in in.lammps",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
+    "scass_type":"c8_m31_1 * NVIDIA T4"
+}

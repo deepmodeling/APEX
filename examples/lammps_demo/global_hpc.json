@@ -1,0 +1,29 @@
+{
+    "apex_image_name":"zhuoyli/apex_arm64",
+    "lammps_image_name": "zhuoyli/apex_arm64",
+    "run_command":"lmp -in in.lammps",
+    "group_number": 2,
+    "batch_type": "Slurm",
+    "context_type": "SSHContext",
+    "local_root" : "./",
+    "remote_root": "/hpc/home/hku/zyl/Downloads/remote_tasks",
+    "remote_host": "***.**.**.**",
+    "remote_username": "USERNAME",
+    "remote_password": "PASSWD",
+    "port": 22,
+    "resources":{
+        "number_node": 1,
+        "cpu_per_node": 4,
+        "gpu_per_node": 0,
+        "queue_name": "apex_test",
+        "group_size": 1,
+        "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
+        "custom_flags": [
+	        "#SBATCH --partition=xlong",
+	        "#SBATCH --ntasks=1",
+	        "#SBATCH --mem=10G",
+	        "#SBATCH --nodes=1",
+	        "#SBATCH --time=1-00:00:00"
+        ]
+    }
+}

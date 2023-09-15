@@ -129,8 +129,8 @@ def submit_workflow(parameter,
     # set debug mode
     if is_debug:
         config["mode"] = "debug"
-        config["debug_copy_method"] = "copy"
-        config["debug_pool_workers"] = 1
+        config["debug_copy_method"] = wf_config.basic_config.get("debug_copy_method", "copy")
+        config["debug_pool_workers"] = wf_config.basic_config.get("debug_pool_workers", 1)
         s3_config["storage_client"] = None
 
     # judge basic flow info from user indicated parameter files
@@ -141,7 +141,7 @@ def submit_workflow(parameter,
     make_image = wf_config.basic_config["apex_image_name"]
     run_image = wf_config.basic_config[f"{calculator}_image_name"]
     if not run_image:
-        run_image = wf_config.basic_config["image_name"]
+        run_image = wf_config.basic_config["run_image_name"]
     run_command = wf_config.basic_config[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config["run_command"]

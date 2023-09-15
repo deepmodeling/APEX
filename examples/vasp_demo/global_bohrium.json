@@ -1,16 +1,14 @@
 {
     "dflow_host": "https://workflows.deepmodeling.com",
     "k8s_api_server": "https://workflows.deepmodeling.com",
-    "s3_repo_key": "oss-bohrium",
-    "s3_storage_client": "TiefblueClient",
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
+    "group_size": 2,
     "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
     "vasp_image_name":"registry.dp.tech/dptech/vasp:5.4.4-dflow",
     "vasp_run_command":"bash -c \"source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std \"",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "cpu_scass_type":"c32_m64_cpu",
-    "gpu_scass_type":"c8_m32_1 * NVIDIA V100"
+    "scass_type":"c32_m64_cpu"
 }
