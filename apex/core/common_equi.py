@@ -165,7 +165,7 @@ def run_equi(confs, inter_param, mdata):
     #    backward_files += logs
     machine = mdata.get("machine", None)
     resources = mdata.get("resources", None)
-    command = mdata.get("command", None)
+    command = mdata.get("run_command", None)
     group_size = mdata.get("group_size", 1)
     work_path = os.getcwd()
     print("%s --> Runing... " % (work_path))
