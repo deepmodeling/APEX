@@ -129,7 +129,7 @@ def submit_workflow(parameter,
     wf_config.config_dflow(wf_config.dflow_config)
     wf_config.config_bohrium(wf_config.bohrium_config)
     wf_config.config_s3(wf_config.dflow_s3_config)
-    # set debug mode
+    # set dflow debug mode
     if is_debug:
         tmp_work_dir = tempfile.TemporaryDirectory()
         config["mode"] = "debug"
@@ -187,6 +187,3 @@ def submit_workflow(parameter,
         pool.join()
     elif len(work_dir_list) == 1:
         submit(flow, flow_type, work_dir_list[0], relax_param, props_param)
-
-    print(tmp_work_dir)
-    tmp_work_dir.cleanup()
