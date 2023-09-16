@@ -260,7 +260,6 @@ class PropsPost(OP):
         cmd = "for kk in task.*; do cd $kk; rm *.pb; cd ..; done"
         subprocess.call(cmd, shell=True)
 
-
         os.chdir(cwd)
         out_path = Path(cwd) / 'retrieve_pool'
         os.mkdir(out_path)
@@ -268,7 +267,7 @@ class PropsPost(OP):
                         out_path / path_to_prop, dirs_exist_ok=True)
 
         op_out = OPIO({
-            'output_post': out_path
+            'output_post': abs_path_to_prop
         })
         return op_out
 
@@ -304,11 +303,11 @@ class CollectProps(OP):
         confs = param["structures"]
         retrieve_conf_list = [conf.split('/')[0] for conf in confs]
         os.chdir(input_post)
-        pool_path = recursive_search(['retrieve_pool'])
-        if not pool_path:
-            raise RuntimeError('retrieve_pool not found')
-        os.chdir(pool_path)
-        shutil.copytree('retrieve_pool', input_all, dirs_exist_ok=True)
+
+        src_path = recursive_search(retrieve_conf_list)
+        if not src_path:
+            raise RuntimeError(f'Fail to find input work path after slices!')
+        shutil.copytree(src_path, input_all, dirs_exist_ok=True)
 
         for ii in retrieve_conf_list:
             shutil.copytree(input_all / ii, ii, dirs_exist_ok=True)
