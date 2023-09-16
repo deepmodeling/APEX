@@ -13,8 +13,7 @@ def recursive_search(directories, path='.'):
 
     # check if target work direction is found
     if set(directories) <= set(directories_in_path):
-        os.chdir(path)
-        return path
+        return os.path.abspath(path)
 
     # recursive search in next direction
     if len(directories_in_path) == 1:

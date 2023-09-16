@@ -16,6 +16,7 @@ from dflow import (
     Step,
     Steps,
     argo_range,
+    argo_enumerate
 )
 from dflow.python import (
     OP,
@@ -169,9 +170,8 @@ class PropertyFlow(Steps):
             name="Prop-Cal",
             template=simple_property_steps,
             slices=Slices(
-                slices="{{item}}",
+                slices="{{item.order}}",
                 input_parameter=[
-                    "flow_id",
                     "path_to_prop",
                     "prop_param",
                     "inter_param",
@@ -184,13 +184,13 @@ class PropertyFlow(Steps):
                 "input_work_path": distributor.outputs.artifacts["orig_work_path"]
             },
             parameters={
-                "flow_id": distributor.outputs.parameters["flow_id"],
+                "flow_id": "{{item.value}}",
                 "path_to_prop": distributor.outputs.parameters["path_to_prop"],
                 "prop_param": distributor.outputs.parameters["prop_param"],
                 "inter_param": distributor.outputs.parameters["inter_param"],
                 "do_refine": distributor.outputs.parameters["do_refine"]
             },
-            with_param=argo_range(distributor.outputs.parameters["nflows"]),
+            with_param=argo_enumerate(distributor.outputs.parameters["flow_id"]),
             key="propscal-{{item}}"
         )
         self.add(propscal)

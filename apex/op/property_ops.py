@@ -24,8 +24,7 @@ class DistributeProps(OP):
     OP class for distribution
     of individual property test steps
     """
-    # TODO: 1, support multitest of same type of property within one workflow
-    # TODO: 2, add API for complex property test superOP
+    # TODO: add API for complex property test superOP
     def __init__(self):
         pass
 
@@ -228,10 +227,9 @@ class PropsPost(OP):
         # find path of finished tasks
         os.chdir(op_in['input_post'])
         copy_dir_list = [path_to_prop.split('/')[0]]
-        if not recursive_search(copy_dir_list):
+        src_path = recursive_search(copy_dir_list)
+        if not src_path:
             raise RuntimeError(f'Fail to find input work path after slices!')
-        else:
-            src_path = os.getcwd()
 
         if calculator in ['vasp', 'abacus']:
             os.chdir(input_post)
@@ -309,6 +307,7 @@ class CollectProps(OP):
         pool_path = recursive_search(['retrieve_pool'])
         if not pool_path:
             raise RuntimeError('retrieve_pool not found')
+        os.chdir(pool_path)
         shutil.copytree('retrieve_pool', input_all, dirs_exist_ok=True)
 
         for ii in retrieve_conf_list:

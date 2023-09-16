@@ -134,7 +134,7 @@ def submit_workflow(parameter,
         tmp_work_dir = tempfile.TemporaryDirectory()
         config["mode"] = "debug"
         config["debug_copy_method"] = config_dict.get("debug_copy_method", "copy")
-        config["debug_pool_workers"] = config_dict.get("debug_pool_workers", 1)
+        config["debug_pool_workers"] = config_dict.get("debug_pool_workers", -1)
         config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
         s3_config["storage_client"] = None
 
@@ -187,3 +187,5 @@ def submit_workflow(parameter,
         pool.join()
     elif len(work_dir_list) == 1:
         submit(flow, flow_type, work_dir_list[0], relax_param, props_param)
+
+    print('Completed!')

@@ -124,10 +124,9 @@ class RelaxPost(OP):
         cwd = os.getcwd()
         # find path of finished tasks
         os.chdir(op_in['input_post'])
-        if not recursive_search(copy_dir_list):
+        src_path = recursive_search(copy_dir_list)
+        if not src_path:
             raise RuntimeError(f'Fail to find input work path after slices!')
-        else:
-            src_path = os.getcwd()
 
         os.chdir(op_in['input_all'])
         if calculator in ['vasp', 'abacus']:
