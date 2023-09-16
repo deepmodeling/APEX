@@ -1,5 +1,6 @@
 import glob
 import tempfile
+from pathlib import Path
 from typing import Type
 from multiprocessing import Pool
 from dflow import config, s3_config
@@ -134,7 +135,7 @@ def submit_workflow(parameter,
         config["mode"] = "debug"
         config["debug_copy_method"] = config_dict.get("debug_copy_method", "copy")
         config["debug_pool_workers"] = config_dict.get("debug_pool_workers", 1)
-        config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir)
+        config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
         s3_config["storage_client"] = None
 
     # judge basic flow info from user indicated parameter files
