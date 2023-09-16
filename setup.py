@@ -14,7 +14,7 @@ setuptools.setup(
     url="https://github.com/deepmodeling/APEX.git",
     packages=setuptools.find_packages(),
     install_requires=[
-        "pydflow>=1.7.19",
+        "pydflow>=1.7.83",
         "pymatgen>=2023.8.10",
         'pymatgen-analysis-defects>=2023.8.22',
         "dpdata>=0.2.13",

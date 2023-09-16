@@ -1,4 +1,5 @@
 import glob
+import tempfile
 from typing import Type
 from multiprocessing import Pool
 from dflow import config, s3_config
@@ -8,6 +9,7 @@ import fpop
 from apex.utils import get_task_type, get_flow_type
 from .configer import Configer
 from .flow import FlowFactory
+
 upload_packages.append(__file__)
 
 
@@ -128,9 +130,11 @@ def submit_workflow(parameter,
     wf_config.config_s3(wf_config.dflow_s3_config)
     # set debug mode
     if is_debug:
+        tmp_work_dir = tempfile.TemporaryDirectory()
         config["mode"] = "debug"
-        config["debug_copy_method"] = wf_config.basic_config.get("debug_copy_method", "copy")
-        config["debug_pool_workers"] = wf_config.basic_config.get("debug_pool_workers", 1)
+        config["debug_copy_method"] = config_dict.get("debug_copy_method", "copy")
+        config["debug_pool_workers"] = config_dict.get("debug_pool_workers", 1)
+        config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir)
         s3_config["storage_client"] = None
 
     # judge basic flow info from user indicated parameter files
@@ -151,7 +155,7 @@ def submit_workflow(parameter,
     executor = wf_config.get_executor(wf_config.dispatcher_config)
     upload_python_packages = wf_config.basic_config["upload_python_packages"]
     upload_python_packages.extend(list(fpop.__path__))
-    
+
     flow = FlowFactory(
         make_image=make_image,
         run_image=run_image,
@@ -182,3 +186,6 @@ def submit_workflow(parameter,
         pool.join()
     elif len(work_dir_list) == 1:
         submit(flow, flow_type, work_dir_list[0], relax_param, props_param)
+
+    print(tmp_work_dir)
+    tmp_work_dir.cleanup()
