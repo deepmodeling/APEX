@@ -94,7 +94,8 @@ class Configer:
             self.machine_dict = {
                 "batch_type": self._batch_type,
                 "context_type": self._context_type,
-                "local_root": self._local_root
+                "local_root": self._local_root,
+                "remote_root": self._remote_root
             }
             if self._machine:
                 update_dict(self.machine_dict, self._machine)
