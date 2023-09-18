@@ -54,7 +54,8 @@ class Configer:
         self._port = config_data.get("port", 22)
         if not (self._context_type or self._machine):
             self.machine_dict = None
-        elif self._context_type == "Bohrium":
+        elif self._context_type in ["Bohrium", "bohrium",
+                                    "BohriumContext", "boriumcontext"]:
             self.machine_dict = {
                 "batch_type": self._batch_type,
                 "context_type": self._context_type,
@@ -71,7 +72,8 @@ class Configer:
             }
             if self._machine:
                 update_dict(self.machine_dict, self._machine)
-        elif self._context_type == "SSHContext":
+        elif self._context_type in ["SSHContext", "sshcontext",
+                                    "SSH", "ssh"]:
             self.machine_dict = {
                 "batch_type": self._batch_type,
                 "context_type": self._context_type,
@@ -87,7 +89,8 @@ class Configer:
             }
             if self._machine:
                 update_dict(self.machine_dict, self._machine)
-        elif self._context_type == "local":
+        elif self._context_type in ["LocalContext", "localcontext"
+                                    "Local", "local"]:
             self.machine_dict = {
                 "batch_type": self._batch_type,
                 "context_type": self._context_type,
