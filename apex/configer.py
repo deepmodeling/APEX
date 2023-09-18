@@ -46,6 +46,7 @@ class Configer:
         self._task = config_data.get("task", None)
         self._context_type = config_data.get("context_type", None)
         self._batch_type = config_data.get("batch_type", None)
+        self._clean_asynchronously = config_data.get("clean_asynchronously", True)
         self._local_root = config_data.get("local_root", '.')
         self._remote_root = config_data.get("remote_root", None)
         self._remote_host = config_data.get("remote_host", None)
@@ -79,6 +80,7 @@ class Configer:
                 "context_type": self._context_type,
                 "local_root": self._local_root,
                 "remote_root": self._remote_root,
+                "clean_asynchronously": self._clean_asynchronously,
                 "remote_profile": {
                     "hostname": self._remote_host,
                     "username": self._remote_username,
@@ -95,7 +97,18 @@ class Configer:
                 "batch_type": self._batch_type,
                 "context_type": self._context_type,
                 "local_root": self._local_root,
-                "remote_root": self._remote_root
+                "remote_root": self._remote_root,
+                "clean_asynchronously": self._clean_asynchronously
+            }
+            if self._machine:
+                update_dict(self.machine_dict, self._machine)
+        elif self._context_type in ["LazyLocalContext", "lazylocalcontext"
+                                    "LazyLocal", "lazylocal"]:
+            self.machine_dict = {
+                "batch_type": self._batch_type,
+                "context_type": self._context_type,
+                "local_root": self._local_root,
+                "clean_asynchronously": self._clean_asynchronously
             }
             if self._machine:
                 update_dict(self.machine_dict, self._machine)
