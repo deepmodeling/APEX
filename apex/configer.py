@@ -39,6 +39,8 @@ class Configer:
         # dispachter
         self._dispatcher = config_data.get("dispatcher", None)
         self._dispatcher_image = config_data.get("dispatcher_image", None)
+        self._dispatcher_command = config_data.get("dispatcher_command", None)
+        self._dispatcher_remote_command = config_data.get("dispatcher_remote_command", None)
         self._image_pull_policy = config_data.get("image_pull_policy", "IfNotPresent")
         self._scass_type = config_data.get("scass_type", None)
         self._machine = config_data.get("machine", None)
@@ -184,7 +186,9 @@ class Configer:
             "image_pull_policy": self._image_pull_policy,
             "machine_dict": self.machine_dict,
             "resources_dict": self._resources,
-            "task_dict": self._task
+            "task_dict": self._task,
+            "command": self._dispatcher_command,
+            "remote_command": self._dispatcher_remote_command
         }
         if self._dispatcher:
             update_dict(dispatcher_config, self._dispatcher)
