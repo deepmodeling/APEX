@@ -1,4 +1,4 @@
-{"context_type": "SSHContext",
+{
 "machine": {
     "batch_type": "Slurm",
     "context_type": "SSHContext",

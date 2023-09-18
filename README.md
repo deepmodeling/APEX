@@ -8,7 +8,8 @@
 * Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
 * Allow user to adjust concurrency for task submission via `group_size` and `pool_size`
 * Allow user to custom `suffix` of property calculation directory so that multi test with same property templete but different settings can be run within one workflow
-* Refactored and optimized the command line interaction
+* Refactor and optimize the command line interaction
+* Enhance robustness for a variety of use scenarios, especially for the local debug mode.
 
 ## Table of Contents
 
@@ -98,6 +99,7 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | group_size | Int | 1 | Number of tasks per parallel run group. |
   | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
   | upload_python_package | Optional[List] | None | Extra python packages needed to be used in the container. |
+  | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
 
 * **Dflow config**
   | Key words | Data structure | Default | Description |
@@ -364,7 +366,40 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```shell
    apex test param_relax.json run_relax -m machine.json
    ```
-   where `machine.json` is a JSON file to define dispatch method, which containing `machine`, `resources`, and `task` dictionaries as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html).
+   where `machine.json` is a JSON file to define dispatch method, which containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a [Slurm](https://slurm.schedmd.com) managed remote HPC:
+   ```json
+    {
+      "run_command": "lmp -i in.lammps -v restart 0",
+      "machine": {
+          "batch_type": "Slurm",
+          "context_type": "SSHContext",
+          "local_root" : "./",
+          "remote_root": "/hpc/home/hku/zyl/Downloads/remote_tasks",
+          "remote_profile":{
+              "hostname": "***.**.**.**",
+              "username": "USERNAME",
+              "password": "PASSWD",
+              "port": 22,
+              "timeout": 10
+          }
+      },
+      "resources":{
+          "number_node": 1,
+          "cpu_per_node": 4,
+          "gpu_per_node": 0,
+          "queue_name": "apex_test",
+          "group_size": 1,
+          "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
+          "custom_flags": [
+                "#SBATCH --partition=xlong",
+                "#SBATCH --ntasks=1",
+                "#SBATCH --mem=10G",
+                "#SBATCH --nodes=1",
+                "#SBATCH --time=1-00:00:00"
+          ]
+      }
+    }
+   ```
 3. Finally, as all tasks are finished, post process by
    ```shell
    apex test param_relax.json post_relax
