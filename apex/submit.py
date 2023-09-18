@@ -6,7 +6,7 @@ from multiprocessing import Pool
 from dflow import config, s3_config
 from dflow.python import upload_packages, OP
 from monty.serialization import loadfn
-import fpop
+import fpop, dpdata
 from apex.utils import get_task_type, get_flow_type
 from .configer import Configer
 from .flow import FlowFactory
@@ -155,6 +155,7 @@ def submit_workflow(parameter,
     pool_size = wf_config.basic_config["pool_size"]
     executor = wf_config.get_executor(wf_config.dispatcher_config)
     upload_python_packages = wf_config.basic_config["upload_python_packages"]
+    upload_python_packages.extend(list(dpdata.__path__))
     upload_python_packages.extend(list(fpop.__path__))
 
     flow = FlowFactory(
