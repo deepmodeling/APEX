@@ -39,7 +39,7 @@ class Configer:
         # dispachter
         self._dispatcher = config_data.get("dispatcher", None)
         self._dispatcher_image = config_data.get("dispatcher_image", None)
-        self._dispatcher_command = config_data.get("dispatcher_command", None)
+        self._dispatcher_command = config_data.get("dispatcher_command", "python3")
         self._dispatcher_remote_command = config_data.get("dispatcher_remote_command", None)
         self._image_pull_policy = config_data.get("image_pull_policy", "IfNotPresent")
         self._scass_type = config_data.get("scass_type", None)
