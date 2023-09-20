@@ -30,7 +30,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.8',
-    script=[],
     entry_points={'console_scripts': [
          'apex = apex.__main__:main',
      ]}
