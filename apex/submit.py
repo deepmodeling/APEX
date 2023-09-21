@@ -4,14 +4,15 @@ from pathlib import Path
 from typing import Type
 from multiprocessing import Pool
 from dflow import config, s3_config
-from dflow.python import upload_packages, OP
+from dflow.python import OP, upload_packages
 from monty.serialization import loadfn
 import fpop, dpdata
 from apex.utils import get_task_type, get_flow_type
-from .configer import Configer
+from .config import Config
 from .flow import FlowFactory
 
 upload_packages.append(__file__)
+
 
 
 def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
@@ -125,16 +126,14 @@ def submit_workflow(parameter,
             'or use optional argument: -c to indicate a specific json file.'
         )
     # config dflow_config and s3_config
-    wf_config = Configer(config_dict)
-    wf_config.config_dflow(wf_config.dflow_config)
-    wf_config.config_bohrium(wf_config.bohrium_config)
-    wf_config.config_s3(wf_config.dflow_s3_config)
-    # set dflow debug mode
+    wf_config = Config(**config_dict)
+    wf_config.config_dflow(wf_config.dflow_config_dict)
+    wf_config.config_bohrium(wf_config.bohrium_config_dict)
+    wf_config.config_s3(wf_config.dflow_s3_config_dict)
+    # set pre-defined dflow debug mode settings
     if is_debug:
         tmp_work_dir = tempfile.TemporaryDirectory()
         config["mode"] = "debug"
-        config["debug_copy_method"] = config_dict.get("debug_copy_method", "copy")
-        config["debug_pool_workers"] = config_dict.get("debug_pool_workers", -1)
         config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
         s3_config["storage_client"] = None
 
@@ -143,18 +142,18 @@ def submit_workflow(parameter,
      relax_param, props_param) = judge_flow(parameter, flow_type)
     print(f'Running APEX calculation via {calculator}')
     print(f'Submitting {flow_type} workflow...')
-    make_image = wf_config.basic_config["apex_image_name"]
-    run_image = wf_config.basic_config[f"{calculator}_image_name"]
+    make_image = wf_config.basic_config_dict["apex_image_name"]
+    run_image = wf_config.basic_config_dict[f"{calculator}_image_name"]
     if not run_image:
-        run_image = wf_config.basic_config["run_image_name"]
-    run_command = wf_config.basic_config[f"{calculator}_run_command"]
+        run_image = wf_config.basic_config_dict["run_image_name"]
+    run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
-        run_command = wf_config.basic_config["run_command"]
+        run_command = wf_config.basic_config_dict["run_command"]
     post_image = make_image
-    group_size = wf_config.basic_config["group_size"]
-    pool_size = wf_config.basic_config["pool_size"]
-    executor = wf_config.get_executor(wf_config.dispatcher_config)
-    upload_python_packages = wf_config.basic_config["upload_python_packages"]
+    group_size = wf_config.basic_config_dict["group_size"]
+    pool_size = wf_config.basic_config_dict["pool_size"]
+    executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
+    upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
     upload_python_packages.extend(list(dpdata.__path__))
     upload_python_packages.extend(list(fpop.__path__))
 

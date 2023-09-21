@@ -3,9 +3,7 @@ import warnings
 from monty.serialization import loadfn
 from apex.core.common_equi import (make_equi, run_equi, post_equi)
 from apex.core.common_prop import (make_property, run_property, post_property)
-from dflow.python import upload_packages
 from apex.utils import get_flow_type, return_prop_list
-upload_packages.append(__file__)
 
 
 def run_step(parameter, step, machine_file=None):
