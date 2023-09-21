@@ -114,14 +114,17 @@ class RelaxPost(OP):
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
         from apex.core.common_equi import post_equi
-
+        cwd = os.getcwd()
         param_argv = op_in['param']
         inter_param = param_argv["interaction"]
         calculator = inter_param["type"]
         conf_list = param_argv["structures"]
-        copy_dir_list = [conf.split('/')[0] for conf in conf_list]
+        copy_dir_list_input = [conf.split('/')[0] for conf in conf_list]
+        os.chdir(op_in['input_all'])
+        copy_dir_list = []
+        for ii in copy_dir_list_input:
+            copy_dir_list.extend(glob.glob(ii))
 
-        cwd = os.getcwd()
         # find path of finished tasks
         os.chdir(op_in['input_post'])
         src_path = recursive_search(copy_dir_list)
@@ -152,7 +155,6 @@ class RelaxPost(OP):
         os.chdir(cwd)
         for ii in copy_dir_list:
             src_path = str(op_in['input_all']) + f'/{ii}'
-            print(src_path)
             shutil.copytree(src_path, f'./{ii}', dirs_exist_ok=True)
         post_path = [Path(ii) for ii in copy_dir_list]
 
@@ -161,5 +163,3 @@ class RelaxPost(OP):
             'output_all': op_in['input_all']
         })
         return op_out
-
-

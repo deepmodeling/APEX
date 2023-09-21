@@ -214,7 +214,7 @@ class PropsPost(OP):
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
         from apex.core.common_prop import make_property_instance
-
+        cwd = os.getcwd()
         input_post = op_in["input_post"]
         input_all = op_in["input_all"]
         prop_param = op_in["prop_param"]
@@ -222,11 +222,14 @@ class PropsPost(OP):
         task_names = op_in["task_names"]
         path_to_prop = op_in["path_to_prop"]
         calculator = inter_param["type"]
+        copy_dir_list_input = [path_to_prop.split('/')[0]]
+        os.chdir(input_all)
+        copy_dir_list = []
+        for ii in copy_dir_list_input:
+            copy_dir_list.extend(glob.glob(ii))
 
-        cwd = os.getcwd()
         # find path of finished tasks
         os.chdir(op_in['input_post'])
-        copy_dir_list = [path_to_prop.split('/')[0]]
         src_path = recursive_search(copy_dir_list)
         if not src_path:
             raise RuntimeError(f'Fail to find input work path after slices!')
@@ -301,18 +304,22 @@ class CollectProps(OP):
         input_all = op_in["input_all"]
         param = op_in["param"]
         confs = param["structures"]
-        retrieve_conf_list = [conf.split('/')[0] for conf in confs]
+        copy_dir_list_input = [conf.split('/')[0] for conf in confs]
+        os.chdir(op_in['input_all'])
+        copy_dir_list = []
+        for ii in copy_dir_list_input:
+            copy_dir_list.extend(glob.glob(ii))
         os.chdir(input_post)
 
-        src_path = recursive_search(retrieve_conf_list)
+        src_path = recursive_search(copy_dir_list)
         if not src_path:
             raise RuntimeError(f'Fail to find input work path after slices!')
         shutil.copytree(src_path, input_all, dirs_exist_ok=True)
 
-        for ii in retrieve_conf_list:
+        for ii in copy_dir_list:
             shutil.copytree(input_all / ii, ii, dirs_exist_ok=True)
 
-        retrieve_path = [Path(ii) for ii in retrieve_conf_list]
+        retrieve_path = [Path(ii) for ii in copy_dir_list]
 
         op_out = OPIO({
             'retrieve_path': retrieve_path
