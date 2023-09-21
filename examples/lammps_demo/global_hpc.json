@@ -2,7 +2,7 @@
     "apex_image_name":"zhuoyli/apex_arm64",
     "lammps_image_name": "zhuoyli/apex_arm64",
     "run_command":"lmp -in in.lammps",
-    "group_number": 2,
+    "group_size": 2,
     "batch_type": "Slurm",
     "context_type": "SSHContext",
     "local_root" : "./",
