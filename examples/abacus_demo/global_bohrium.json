@@ -1,0 +1,13 @@
+{
+    "dflow_host": "https://workflows.deepmodeling.com",
+    "k8s_api_server": "https://workflows.deepmodeling.com",
+    "email": "YOUR_EMAIL",
+    "password": "YOUR_PASSWD",
+    "program_id": 1234,
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:1.0.0",
+    "abacus_image_name":"registry.dp.tech/dptech/prod-11461/abacus:phonopy",
+    "abacus_run_command":"ulimit -s unlimited && ulimit -m unlimited && OMP_NUM_THREADS=1 mpirun -np 32 abacus > log",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
+    "scass_type":"c32_m64_cpu"
+}

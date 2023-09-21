@@ -9,15 +9,15 @@ import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-__package__ = "tests"
-
 from pymatgen.io.vasp import Incar
 
-from apex.calculator.calculator import make_calculator
-from apex.property.common_equi import make_equi, post_equi
+from apex.core.calculator.calculator import make_calculator
+from apex.core.common_equi import make_equi, post_equi
 
-from .context import make_kspacing_kpoints, setUpModule
+#from .context import make_kspacing_kpoints, setUpModule
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+__package__ = "tests"
 
 
 class TestEqui(unittest.TestCase):

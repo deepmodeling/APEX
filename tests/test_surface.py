@@ -1,23 +1,18 @@
 import glob
-import json
 import os
 import shutil
 import sys
 import unittest
 
-import dpdata
-import numpy as np
-from monty.serialization import dumpfn, loadfn
+from monty.serialization import loadfn
 from pymatgen.core import Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.io.vasp import Incar
 
+from apex.core.property.Surface import Surface
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-
-from apex.property.Surface import Surface
-
-from .context import make_kspacing_kpoints, setUpModule
 
 
 class TestSurface(unittest.TestCase):

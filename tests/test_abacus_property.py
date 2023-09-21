@@ -7,20 +7,19 @@ import unittest
 import numpy as np
 from monty.serialization import loadfn
 
-from apex.calculator.ABACUS import ABACUS
-from apex.calculator.lib import abacus_scf
+from apex.core.calculator.ABACUS import ABACUS
+from apex.core.calculator.lib import abacus_scf
+
+from apex.core.common_prop import make_property
+from apex.core.property.Elastic import Elastic
+from apex.core.property.EOS import EOS
+from apex.core.property.Gamma import Gamma
+from apex.core.property.Interstitial import Interstitial
+from apex.core.property.Surface import Surface
+from apex.core.property.Vacancy import Vacancy
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-from apex.property.common_prop import make_property
-from apex.property.Elastic import Elastic
-from apex.property.EOS import EOS
-from apex.property.Gamma import Gamma
-from apex.property.Interstitial import Interstitial
-from apex.property.Surface import Surface
-from apex.property.Vacancy import Vacancy
-
-from .context import setUpModule
 
 
 class TestABACUS(unittest.TestCase):
