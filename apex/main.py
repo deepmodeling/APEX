@@ -1,6 +1,5 @@
 import argparse
 import logging
-from dflow.python import upload_packages
 from apex import (
     header,
     __version__,
@@ -8,7 +7,6 @@ from apex import (
 from .run_step import run_step
 from .submit import submit_workflow
 
-upload_packages.append(__file__)
 
 
 def parse_args():
