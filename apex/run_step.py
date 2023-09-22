@@ -1,5 +1,4 @@
 import warnings
-
 from monty.serialization import loadfn
 from apex.core.common_equi import (make_equi, run_equi, post_equi)
 from apex.core.common_prop import (make_property, run_property, post_property)
