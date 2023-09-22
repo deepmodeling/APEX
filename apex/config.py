@@ -17,7 +17,7 @@ class Config:
     k8s_api_server: str = "https://127.0.0.1:2746"
     mode: str = 'default'
     debug_copy_method: str = "copy"
-    debug_pool_workers: int = -1
+    debug_pool_workers: int = 1
     debug_workdir: str = '.'
 
     # dflow s3 config
