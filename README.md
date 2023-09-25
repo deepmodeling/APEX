@@ -2,18 +2,35 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of property-test workflows by utilizing various computational approaches, including support for LAMMPS, VASP, and ABACUS.
 
+## New Features Update (v1.0.0)
+* Decouple property calculations into individual sub-workflow to facilitate the customization of complex property functions
+* Support one-click parallel submission of multiple workflows
+* Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
+* Allow user to adjust concurrency for task submission via `group_size` and `pool_size`
+* Allow user to customize `suffix` of property calculation directory so that multiple tests with identical property templates but different settings can be run within one workflow
+* Refactor and optimize the command line interaction
+* Enhance robustness across diverse use scenarios, especially for the local debug mode
+
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer using simulations](#apex-alloy-property-explorer-using-simulations)
+  - [New Features Update (v1.0.0)](#new-features-update-v100)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
   - [3. User Guide](#3-user-guide)
-    - [3.1. Input Files Preperation](#31-input-files-preperation)
+    - [3.1. Before submission](#31-before-submission)
       - [3.1.1. Global Setting](#311-global-setting)
       - [3.1.2. Calculation Parameters](#312-calculation-parameters)
-        - [3.1.2.1. Gamma Line Settings](#3121-gamma-line-settings)
-    - [3.2. Submittion Command](#32-submittion-command)
+        - [3.1.2.1. EOS](#3121-eos)
+        - [3.1.2.2. Elastic](#3122-elastic)
+        - [3.1.2.3. Surface](#3123-surface)
+        - [3.1.2.4. Vacancy](#3124-vacancy)
+        - [3.1.2.5. Interstitial](#3125-interstitial)
+        - [3.1.2.6. Gamma Line](#3126-gamma-line)
+    - [3.2. Command](#32-command)
+      - [3.2.1. Workflow Submission](#321-workflow-submission)
+      - [3.2.2. Single-Step Test](#322-single-step-test)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
@@ -26,15 +43,15 @@ APEX adopts the functionality of the second-generation alloy properties calculat
 The comprehensive architecture of APEX is demonstrated below:
 
 <div>
-    <img src="./docs/images/apex_demo.png" alt="Fig1" style="zoom: 35%;">
+    <img src="./docs/images/apex_demo_v1.0.png" alt="Fig1" style="zoom: 35%;">
     <p style='font-size:1.0rem; font-weight:none'>Figure 1. APEX schematic diagram</p>
 </div>
 
-APEX consists of three pre-defined **workflows** that users can submit: `relaxation`, `property`, and `joint` workflows. The relaxation and property workflows comprise three sequential **sub-steps**: `Make`, `Run`, and `Post`. The `joint` workflow essentially combines the `relaxation` and `property` workflows into a comprehensive workflow.
+APEX consists of three types of pre-defined **workflow** that users can submit: `relaxation`, `property`, and `joint`. The `relaxation` and `property` sub-workflow comprise three sequential **steps**: `Make`, `Run`, and `Post`, while the `joint` workflow essentially combines the `relaxation` and `property` workflows into a comprehensive workflow.
 
 The `relaxation` process begins with the initial `POSCAR` supplied by the user, which is used to generate crucial data such as the final relaxed structure and its corresponding energy, forces, and virial tensor. This equilibrium state information is essential for input into the `property` workflow, enabling further calculations of alloy properties. Upon completion, the final results are automatically retrieved and downloaded to the original working directory.
 
-In both the `relaxation` and `property` workflows, the `Make` step prepares the corresponding computational tasks. These tasks are then transferred to the `Run` step, which is responsible for task dispatch, calculation monitoring, and retrieval of completed tasks (implemented through the [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) plugin). Upon completion of all tasks, the `Post` step is initiated to gather data and compute the desired property outcomes.
+In both the `relaxation` and `property` workflows, the `Make` step prepares the corresponding computational tasks. These tasks are then transferred to the `Run` step that is responsible for task dispatch, calculation monitoring, and retrieval of completed tasks (implemented through the [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) plugin). Upon completion of all tasks, the `Post` step is initiated to collect data and obtain the desired property results.
 
 APEX currently offers computation methods for the following alloy properties:
 
@@ -50,7 +67,7 @@ Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dyn
 ## 2. Easy Install
 Easy install by
 ```shell
-pip install "git+https://github.com/deepmodeling/APEX.git"
+pip install apex-flow
 ```
 You may also clone the package firstly by
 ```shell
@@ -63,50 +80,63 @@ pip install .
 ```
 ## 3. User Guide
 
-### 3.1. Input Files Preperation
-In APEX, all essential input parameters must be organized in specific JSON files within the **current working directory** before proceeding. There are two distinct types of JSON files that will be discussed in detail.
+### 3.1. Before submission
+In APEX, **three vital elements** need to be prepared before submission of a workflow:
+* **One global JSON file** containing parameters to configure `dflow` and other global settings (default: "./global.json")
+* **Calculation JSON file** containing parameters related to calculation (relaxation and property test)
+* **Work directory** consists of necessary files indicated in above JSON files together with initial structures (default: "./")
+
 
 #### 3.1.1. Global Setting
-The instructions regarding global configuration, [dflow](https://github.com/deepmodeling/dflow), and [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) specific settings must be saved in JSON format within a file named exactly as `global.json`. The table below describes some crucial keywords, classified into three categories:
+The instructions regarding global configuration, [dflow](https://github.com/deepmodeling/dflow), and [DPDispatcher](https://github.com/deepmodeling/dpdispatcher/tree/master) specific settings must be stored in a JSON format file. The table below describes some crucial keywords, classified into three categories:
 
-* **Dflow**
+* **Basic config**
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | apex_image_name | String | zhuoy/apex_amd64 | Image for step other than `run`. One can build this Docker image via prepared [Dockerfile](./docs/Dockerfile) |
+  | run_image_name | String | None | Image of calculator for `run` step. Use `{calculator}_image_name` to indicate corresponding image for higher priority. |
+  | run_command | String | None | Shell command for `run` step. Use `{calculator}_run_command` to indicate corresponding command for higher priority. |
+  | group_size | Int | 1 | Number of tasks per parallel run group. |
+  | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
+  | upload_python_package | Optional[List] | None | Extra python packages needed to be used in the container. |
+  | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
+
+* **Dflow config**
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
   | dflow_host | String | https://127.0.0.1:2746 | Url of dflow server |
   | k8s_api_server | String | https://127.0.0.1:2746 | Url of kubernetes API server |
-  | debug_mode | Boolean | False | Whether to run workflow in local debug mode of the dflow. Following `image_name` must be indicated when `debug_mode` is False |
-  | apex_image_name | String | None | Image address to run `Make` and `Post` steps. One can build this Docker image via prepared [Dockerfile](./docs/Dockerfile)|
-  | dpmd_image_name | String | None | Image address for `Run` step using LAMMPS |
-  | vasp_image_name | String | None | Image address for `Run` step using VASP |
-  | abacus_image_name | String | None | Image address for `Run` step using ABACUS |
-  | lammps_run_command | String | None | Command for `Run` step using LAMMPS|
-  | vasp_run_command | String | None | Command for `Run` step using VASP|
-  | abacus_run_command | String | None | Command for `Run` step using ABACUS|
+  | dflow_config | Optional[Dict] | None | Specify more detailed dflow config in a nested dictionary with higher priority (See [dflow document](https://deepmodeling.com/dflow/dflow.html) for more detail). |
+  | dflow_s3_config | Optional[Dict] | None | Specify dflow s3 repository config in a nested dictionary with higher priority (See [dflow document](https://deepmodeling.com/dflow/dflow.html) for more detail). |
 
-* **DPDispatcher** (One may refer to [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) for details of the following parameters)
+* **Dispatcher config** (One may refer to [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) for details of the following parameters)
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
-  | context_type | String | None | Must be specified at the outermost level if the DPDispather is adopted; Set to `"Bohrium"` to run tasks on the Bohrium |
-  | batch_type | String | None | Set to `"Bohrium"` to run tasks on the Bohrium platform |
-  | machine | Dict | None | Indication of machine and batch type |
-  | resources | Dict | None | Indication of computing recources |
-  | task | Dict | None | Indication of run command and essential files |
+  | context_type | String | None | Context type to connect to the remote server |
+  | batch_type | String | None | System to dispatch tasks |
+  | local_root | String | "./" | Local root path |
+  | remote_root | String | None | Remote root path |
+  | remote_host | String | None | Remote root path |
+  | remote_username | String | None | Remote user name |
+  | remote_password | String | None | Remote user password |
+  | port | Int | 22 | Remote port |
+  | machine | Optional[Dict] | None | Complete **machine setting** dictionary defined in the [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) with higher priority |
+  | resources | Optional[Dict] | None | Complete **resources setting** dictionary defined in the [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) with higher priority |
+  | task | Optional[Dict] | None | Complete **task setting** dictionary defined in the [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) with higher priority |
 
-* **Bohrium** (to be specified when you want to quickly adopt the pre-built dflow service or scientific computing on the [Bohrium platform](https://bohrium.dp.tech) without indicating any **DPDispatcher** related key words)
+* **Bohrium** (additonal dispatcher config to be specified when you want to quickly adopt the pre-built dflow service or scientific computing resources on the [Bohrium platform](https://bohrium.dp.tech) )
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
-  | s3_repo_key | String | None | Key of artifact repository. Set to `"oss-bohrium"` when adopt dflow servise on Bohrium |
-  | s3_storage_client | String | None | client for plugin storage backend. Set to `"TiefblueClient"` when adopt dflow servise on Bohrium |
   | email | String | None | Email of your Bohrium account |
+  | phone | String | None | Phone number of your Bohrium account |
   | password | String | None | Password of your Bohrium account |
   | program_id | Int | None | Program ID of your Bohrium account |
-  | cpu_scass_type | String | None | CPU node type on Bohrium to run the first-principle jobs |
-  | gpu_scass_type | String | None | GPU node type on Bohrium to run LAMMPS jobs |
+  | scass_type | String | None | Node type provided by Bohrium |
 
-Please refer to the [Quick Start](#4-quick-start) section for various instances of `global.json` usage in different situations.
+Please refer to the [Quick Start](#4-quick-start) section for various instances of global JSON examples in different situations.
 
 #### 3.1.2. Calculation Parameters
-The method for indicating parameters in alloy property calculations is akin to the previous `dpgen.autotest` approach. There are **three** categories of JSON files that determine the parameters to be passed to APEX, based on their contents. Users have the flexibility to assign any name to these files.
+The method for indicating parameters in alloy property calculations is akin to the previous `dpgen.autotest` approach. There are **three** categories of JSON files that determine the parameters to be passed to APEX, based on their contents.
 
 Categories calculation parameter files:
 | Type | File format | Dictionary contained | Usage |
@@ -115,7 +145,7 @@ Categories calculation parameter files:
 | Property | json |  `structures`; `interaction`; `Properties`  | For `property` worflow |
 | Joint | json |  `structures`; `interaction`; `Relaxation`; `Properties` | For `relaxation`, `property` and `joint` worflows |
 
-It should be noted that files such as POSCAR, located within the `structure` directory, or any other files specified within the JSON file, must be pre-prepared in the current working directory.
+It should be noted that files such as POSCAR, located within the `structure` directory, or any other files specified within the JSON file should be defined as relative path to the **working directory** and prepared in advanced.
 
 Below are three examples (for detailed explanations of each parameter, please refer to the [Hands-on_auto-test](./docs/Hands_on_auto-test.pdf) documentation for further information):
 
@@ -202,7 +232,40 @@ Below are three examples (for detailed explanations of each parameter, please re
       ]
   }
   ```
-##### 3.1.2.1. Gamma Line Settings
+##### 3.1.2.1. EOS
+  | Key words | Data structure | Example | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | vol_start | Float | 0.9 | The starting volume related to the equilibriumstructure |
+  | vol_end | Float | 1.1 | The maximum volume related to the equilibriumstructure |
+  | vol_step | Float | 0.01 | The volume increment related to the equilibriumstructure |
+
+##### 3.1.2.2. Elastic
+  | Key words | Data structure | Example | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | norm_deform | Float | 1.1 | The biggest volume related to the equilibriumstructure |
+  | shear_deform | Float | 0.01 | The volume increment related to the equilibriumstructure |
+
+##### 3.1.2.3. Surface
+  | Key words | Data structure | Example | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | min_slab_size | Int | 10 | Minimum size of slab thickness |
+  | min_vacuum_size | Int | 11 | Minimum size of vacuume width |
+  | pert_xz | Float | 0.01 | Perturbation through xz direction used tocompute surface energy, default = 0.01 |
+  | max_miller | Int | 2 | The maximum miller index number of surface generated |
+
+##### 3.1.2.4. Vacancy
+  | Key words | Data structure | Example | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | supercell | List[Int] | [3, 3, 3] | The supercell to be constructed, default = [1,1,1] |
+
+##### 3.1.2.5. Interstitial
+  | Key words | Data structure | Example | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | insert_ele | List[String] | ["Al"] | The element to be inserted |
+  | supercell | List[Int] | [3, 3, 3] | The supercell to be constructed, default =[1,1,1] |
+  | conf_filters | Dict | "min_dist": 1.5 | Filter out the undesirable configuration |
+
+##### 3.1.2.6. Gamma Line
   <div>
       <img src="./docs/images/gamma_demo.png" alt="Fig2" style="zoom: 35%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
@@ -281,48 +344,67 @@ The parameters related to Gamma line calculation are listed below:
       "n_steps":         10
 	}
   ```
-  **It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In the previously mentioned example, the slip system configuration within the "hcp" dictionary will be utilized.**
+  **It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In above example, the slip system configuration within the "hcp" dictionary will be utilized.**
 
+### 3.2. Command
+APEX currently supports two seperate run modes: **workflow submission** (running via dflow) and **single-step test** (running without dflow).
 
-### 3.2. Submittion Command
-APEX will execute a specific workflow upon each invocation of the command in the format: `apex [file_names] [--optional_argument]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by the user. Additionally, users can specify the workflow type through an optional argument. The following are command examples for submitting three types of workflows:
+#### 3.2.1. Workflow Submission
+APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by the user. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for help). Here is an example to submit a `joint` workflow:
+```shell
+apex submit param_relax.json param_props.json -c ./global_bohrium.json -w 'dp_demo_0?' 'eam_demo'
+```
+if no config JSON and work directory is specified, `./global.json` and `./` will be passed as default values respectively. 
 
-* `relaxtion` workflow:
-  ```shell
-  apex relaxation.json
-  ```
+#### 3.2.2. Single-Step Test
+APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex test [-h] [-m [MACHINE]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex test -h` for help). Here is a example to do relaxation in this mode:
+1. Firstly, generate relaxation tasks by
    ```shell
-  apex joint.json --relax
-  ```
+   apex test param_relax.json make_relax
+   ```
+2. Then dispatch tasks by
    ```shell
-  apex relaxation.json property.json --relax
-  ```
-* `property` workflow:
-  ```shell
-  apex property.json
-  ```
-  ```shell
-  apex joint.json --props
-  ```
-  ```shell
-  apex relaxation.json property.json --props
-  ```
-* `joint` workflow:
-  ```shell
-  apex joint.json
-  ```
-  ```shell
-  apex property.json relaxation.json
-  ```
-APEX also provides a **single-step local debug mode**, which can run `Make` and `Post` step individually under local enviornment. User can invoke them by following optional arguments like:
-
-  | Type of step | Optional argument | Shorten way |
-  | :------------ | ----- | ----- |
-  | `Make` of `relaxation` | `--make_relax` | `-mr` | 
-  | `Post` of `relaxation` | `--post_relax` | `-pr` | 
-  | `Make` of `property` | `--make_props` | `-mp` | 
-  | `Post` of `proterty` | `--post_props` | `-pp` | 
-
+   apex test param_relax.json run_relax -m machine.json
+   ```
+   where `machine.json` is a JSON file to define dispatch method, containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a [Slurm](https://slurm.schedmd.com) managed remote HPC:
+   ```json
+    {
+      "run_command": "lmp -i in.lammps -v restart 0",
+      "machine": {
+          "batch_type": "Slurm",
+          "context_type": "SSHContext",
+          "local_root" : "./",
+          "remote_root": "/hpc/home/hku/zyl/Downloads/remote_tasks",
+          "remote_profile":{
+              "hostname": "***.**.**.**",
+              "username": "USERNAME",
+              "password": "PASSWD",
+              "port": 22,
+              "timeout": 10
+          }
+      },
+      "resources":{
+          "number_node": 1,
+          "cpu_per_node": 4,
+          "gpu_per_node": 0,
+          "queue_name": "apex_test",
+          "group_size": 1,
+          "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
+          "custom_flags": [
+                "#SBATCH --partition=xlong",
+                "#SBATCH --ntasks=1",
+                "#SBATCH --mem=10G",
+                "#SBATCH --nodes=1",
+                "#SBATCH --time=1-00:00:00"
+          ]
+      }
+    }
+   ```
+3. Finally, as all tasks are finished, post process by
+   ```shell
+   apex test param_relax.json post_relax
+   ```
+The property test can follow similar approach.
 ## 4. Quick Start
 We present several case studies as introductory illustrations of APEX, tailored to distinct user scenarios. For our demonstration, we will utilize a [LAMMPS_example](./examples/lammps_demo) to compute the Equation of State (EOS) and elastic constants of molybdenum in both Body-Centered Cubic (BCC) and Face-Centered Cubic (FCC) phases. To begin, we will examine the files prepared within the working directory for this specific case.
 
@@ -334,12 +416,13 @@ lammps_demo
 │   └── std-fcc
 │       └── POSCAR
 ├── frozen_model.pb
-├── global.json
+├── global_bohrium.json
+├── global_hpc.json
 ├── param_joint.json
 ├── param_props.json
 └── param_relax.json
 ```
-There are three type of parameter files and the `global.json`, as well as a force-field potential file of molybdenum `frozen_model.pb`. Under the directory of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
+There are three types of parameter files and two types of global config files, as well as a force-field potential file of molybdenum `frozen_model.pb`. Under the directory of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
 
 ### 4.1. In the Bohrium
 The most efficient method for submitting an APEX workflow is through the preconfigured execution environment of dflow on the [Bohrium platform](https://bohrium.dp.tech). To do this, it may be necessary to create an account on Bohrium. Below is an example of a global.json file for this approach.
@@ -348,79 +431,78 @@ The most efficient method for submitting an APEX workflow is through the preconf
 {
     "dflow_host": "https://workflows.deepmodeling.com",
     "k8s_api_server": "https://workflows.deepmodeling.com",
-    "s3_repo_key": "oss-bohrium",
-    "s3_storage_client": "TiefblueClient",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
     "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
-    "dpmd_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
+    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
     "lammps_run_command":"lmp -in in.lammps",
-    "batch_type": "Bohrium",
-    "context_type": "Bohrium",
-    "cpu_scass_type":"c4_m8_cpu",
-    "gpu_scass_type":"c8_m31_1 * NVIDIA T4"
+    "scass_type":"c8_m31_1 * NVIDIA T4"
 }
 ```
-Just replace the values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
+Then, one can submit a relaxation workflow via:
+```shell
+apex submit param_relax.json -c global_bohrium.json
+```
+Remember to replace the values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
 
 ### 4.2. In a Local Argo Service
 Additionally, a dflow environment can be installed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (User can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
 ```shell
 bash install-linux-cn.sh
 ```
-This process will automatically configure the required local tools, including Docker, Minikube, and Argo service, with the default port set to `127.0.0.1:2746`. Consequently, one can modify the `global.json` file to submit a workflow to this container without needing a Bohrium account.
+This process will automatically configure the required local tools, including Docker, Minikube, and Argo service, with the default port set to `127.0.0.1:2746`. Consequently, one can modify the `global_hpc.json` file to submit a workflow to this container without needing a Bohrium account. Here is an example:
 
 ```json
 {
-    "dflow_host": "https://127.0.0.1:2746",
-    "k8s_api_server": "https://127.0.0.1:2746",
-    "apex_image_name": "zhuoyli/apex:amd64",
-    "dpmd_image_name": "deepmodeling/deepmd-kit:2.2.1_cuda10.1_gpu",
-    "lammps_run_command": "lmp -in in.lammps",
+    "apex_image_name":"zhuoyli/apex_amd64",
+    "run_image_name": "zhuoyli/apex_amd64",
+    "run_command":"lmp -in in.lammps",
+    "batch_type": "Slurm",
     "context_type": "SSHContext",
-    "machine": {
-        "batch_type": "Slurm",
-        "context_type": "SSHContext",
-        "local_root" : "/home/user123/workplace/22_new_project/",
-        "remote_root": "/home/user123/dpdispatcher_work_dir/",
-        "remote_profile": {
-            "hostname": "39.106.xx.xxx",
-            "username": "user123",
-            "port": 22,
-            "timeout": 10
-            }
-    }
+    "local_root" : "./",
+    "remote_root": "/hpc/home/zyl/Downloads/remote_tasks",
+    "remote_host": "123.12.12.12",
+    "remote_username": "USERNAME",
+    "remote_password": "PASSWD",
+    "resources":{
+        "number_node": 1,
+        "cpu_per_node": 4,
+        "gpu_per_node": 0,
+        "queue_name": "apex_test",
+        "group_size": 1,
+        "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
+        "custom_flags": [
+            "#SBATCH --partition=xlong",
+            "#SBATCH --ntasks=4",
+            "#SBATCH --mem=10G",
+            "#SBATCH --nodes=1",
+            "#SBATCH --time=1-00:00:00"
+            ]
+       }
 }
+
 ```
-In this example, we attempt to distribute tasks to a remote node managed by [Slurm](https://slurm.schedmd.com). Users must replace the relevant parameters within the `machine` dictionary or specify `resources` and `tasks` according to [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) rules.
+In this example, we attempt to distribute tasks to a remote node managed by [Slurm](https://slurm.schedmd.com). Users can replace the relevant parameters within the `machine` dictionary or specify `resources` and `tasks` according to [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) rules.
 
 For the APEX image, it is publicly available on [Docker Hub](https://hub.docker.com) and can be pulled automatically. Users may also choose to pull the image beforehand or create their own Docker image in the Minikube environment locally using a [Dockerfile](./docs/Dockerfile) (please refer to [Docker's documentation](https://docs.docker.com/engine/reference/commandline/build/) for building instructions) to expedite pod initialization.
+
+Then, one can submit a relaxation workflow via:
+```shell
+apex submit param_relax.json -c global_hpc.json
+```
 
 Upon submission of the workflow, progress can be monitored at https://127.0.0.1:2746.
 
 ### 4.3. In a Local Environment
 If your local computer experiences difficulties connecting to the internet, APEX offers a **workflow local debug mode** that allows the flow to operate in a basic `Python3` environment, independent of the Docker container. However, users will **not** be able to monitor the workflow through the Argo UI.
 
-To enable this feature, users can set `debug_mode` to `true` within `global.json`, as demonstrated below:
+To enable this feature, users can add an additional optional argument `-d` to the origin submission command, as demonstrated below:
 
-```json
-{
-    "debug_mode": true,
-    "lammps_run_command": "lmp -in in.lammps",
-    "context_type": "SSHContext",
-    "machine": {
-        "batch_type": "Slurm",
-        "context_type": "SSHContext",
-        "local_root" : "/home/user123/workplace/22_new_project/",
-        "remote_root": "/home/user123/dpdispatcher_work_dir/",
-        "remote_profile": {
-            "hostname": "39.106.xx.xxx",
-            "username": "user123",
-            "port": 22,
-            "timeout": 10
-            }
-    }
-}
+```shell
+apex submit -d param_relax.json -c global_hpc.json
 ```
+
 In this approach, the user is not required to specify an image for executing APEX. Rather, APEX should be pre-installed in the default `Python3` environment to ensure proper functioning.

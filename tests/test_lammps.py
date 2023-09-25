@@ -9,13 +9,13 @@ import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 
+from apex.core.calculator.Lammps import Lammps
+from apex.core.calculator.lib.lammps import inter_deepmd
+
+#from .context import make_kspacing_kpoints, setUpModule
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-
-from apex.calculator.Lammps import Lammps
-from apex.calculator.lib.lammps import inter_deepmd
-
-from .context import make_kspacing_kpoints, setUpModule
 
 
 class TestLammps(unittest.TestCase):

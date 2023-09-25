@@ -13,8 +13,8 @@ from pymatgen.io.vasp import Incar
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
-from apex.property.common_prop import make_property
-from apex.property.refine import make_refine
+from apex.core.common_prop import make_property
+from apex.core.refine import make_refine
 
 from .context import make_kspacing_kpoints, setUpModule
 
