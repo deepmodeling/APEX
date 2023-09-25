@@ -43,7 +43,7 @@ APEX adopts the functionality of the second-generation alloy properties calculat
 The comprehensive architecture of APEX is demonstrated below:
 
 <div>
-    <img src="./docs/images/apex_demo.png" alt="Fig1" style="zoom: 35%;">
+    <img src="./docs/images/apex_demo_v1.0.png" alt="Fig1" style="zoom: 35%;">
     <p style='font-size:1.0rem; font-weight:none'>Figure 1. APEX schematic diagram</p>
 </div>
 
