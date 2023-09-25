@@ -2,7 +2,7 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of property-test workflows by utilizing various computational approaches, including support for LAMMPS, VASP, and ABACUS.
 
-## New Features Update (v1.0.0)
+## New Features Update (v1.0)
 * Decouple property calculations into individual sub-workflow to facilitate the customization of complex property functions
 * Support one-click parallel submission of multiple workflows
 * Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
@@ -14,7 +14,7 @@
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer using simulations](#apex-alloy-property-explorer-using-simulations)
-  - [New Features Update (v1.0.0)](#new-features-update-v100)
+  - [New Features Update (v1.0)](#new-features-update-v10)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
