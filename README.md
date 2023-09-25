@@ -3,13 +3,13 @@
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of property-test workflows by utilizing various computational approaches, including support for LAMMPS, VASP, and ABACUS.
 
 ## New Features Update (v1.0.0)
-* Decouple property calculation into individual sub-workflow for convenience of further custom of complex property function
+* Decouple property calculations into individual sub-workflow to facilitate the customization of complex property functions
 * Support one-click parallel submission of multiple workflows
 * Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
 * Allow user to adjust concurrency for task submission via `group_size` and `pool_size`
-* Allow user to custom `suffix` of property calculation directory so that multi test with same property templete but different settings can be run within one workflow
+* Allow user to customize `suffix` of property calculation directory so that multiple tests with identical property templates but different settings can be run within one workflow
 * Refactor and optimize the command line interaction
-* Enhance robustness for a variety of use scenarios, especially for the local debug mode.
+* Enhance robustness across diverse use scenarios, especially for the local debug mode
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@
         - [3.1.2.1. EOS](#3121-eos)
         - [3.1.2.2. Elastic](#3122-elastic)
         - [3.1.2.3. Surface](#3123-surface)
-        - [3.1.2.4. Vancancy](#3124-vancancy)
+        - [3.1.2.4. Vacancy](#3124-vacancy)
         - [3.1.2.5. Interstitial](#3125-interstitial)
         - [3.1.2.6. Gamma Line](#3126-gamma-line)
     - [3.2. Command](#32-command)
@@ -253,7 +253,7 @@ Below are three examples (for detailed explanations of each parameter, please re
   | pert_xz | Float | 0.01 | Perturbation through xz direction used tocompute surface energy, default = 0.01 |
   | max_miller | Int | 2 | The maximum miller index number of surface generated |
 
-##### 3.1.2.4. Vancancy
+##### 3.1.2.4. Vacancy
   | Key words | Data structure | Example | Description |
   | :------------ | ----- | ----- | ------------------- |
   | supercell | List[Int] | [3, 3, 3] | The supercell to be constructed, default = [1,1,1] |
@@ -366,7 +366,7 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```shell
    apex test param_relax.json run_relax -m machine.json
    ```
-   where `machine.json` is a JSON file to define dispatch method, which containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a [Slurm](https://slurm.schedmd.com) managed remote HPC:
+   where `machine.json` is a JSON file to define dispatch method, containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a [Slurm](https://slurm.schedmd.com) managed remote HPC:
    ```json
     {
       "run_command": "lmp -i in.lammps -v restart 0",
