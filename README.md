@@ -67,7 +67,7 @@ Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dyn
 ## 2. Easy Install
 Easy install by
 ```shell
-pip install "git+https://github.com/deepmodeling/APEX.git"
+pip install apex-flow
 ```
 You may also clone the package firstly by
 ```shell
