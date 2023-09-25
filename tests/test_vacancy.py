@@ -1,24 +1,19 @@
 import glob
-import json
 import os
 import shutil
 import sys
 import unittest
 
-import dpdata
 import numpy as np
-from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.core import Vacancy as pmg_Vacancy
 from pymatgen.core import Structure
 from pymatgen.io.vasp import Incar
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
+from apex.core.property.Vacancy import Vacancy
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
-
-from apex.property.Vacancy import Vacancy
-
-from .context import make_kspacing_kpoints, setUpModule
 
 
 class TestVacancy(unittest.TestCase):
@@ -91,7 +86,7 @@ class TestVacancy(unittest.TestCase):
             st1 = vac.get_supercell_structure(
                 sc_mat=np.eye(3) * self.prop_param[0]["supercell"]
             )
-            for ii in range(3):
-                st0_coords = [format(st0.sites[ii].coords[jj], '.4f') for jj in range(3)]
-                st1_coords = [format(st1.sites[ii].coords[jj], '.4f') for jj in range(3)]
-            self.assertEqual(st0_coords, st1_coords)
+        for ii in range(3):
+            st0_coords = [format(st0.sites[ii].coords[jj], '.4f') for jj in range(3)]
+            st1_coords = [format(st1.sites[ii].coords[jj], '.4f') for jj in range(3)]
+        self.assertEqual(st0_coords, st1_coords)
