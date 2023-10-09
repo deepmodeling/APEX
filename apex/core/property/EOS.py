@@ -10,7 +10,7 @@ from monty.serialization import dumpfn, loadfn
 import apex.core.calculator.lib.abacus as abacus
 import apex.core.calculator.lib.vasp as vasp
 import apex.core.calculator.lib.abacus_scf as abacus_scf
-from apex.core.Property import Property
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
