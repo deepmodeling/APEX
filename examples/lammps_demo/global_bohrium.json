@@ -4,7 +4,7 @@
     "email": "YOUR@EMAIL",
     "password": "YOURPASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:1.0.0",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.0",
     "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
     "group_size": 2,
     "pool_size": 1,

@@ -13,7 +13,7 @@ from pymatgen.analysis.diffraction.tem import TEMCalculator
 
 import apex.core.calculator.lib.abacus as abacus
 import apex.core.calculator.lib.vasp as vasp
-from apex.core.Property import Property
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from apex.core.structure import StructureInfo
