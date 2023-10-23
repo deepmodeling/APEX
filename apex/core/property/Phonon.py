@@ -232,6 +232,7 @@ class Phonon(Property):
                             os.symlink(os.path.join(path_to_work, 'KPT'), 'KPT')
                         except:
                             pass
+                    os.chdir(cwd)
                     return task_list
 
                 # ------------make for vasp and lammps------------
@@ -283,6 +284,7 @@ class Phonon(Property):
                             f'Unsupported phonon approach input: {self.approach}. '
                             f'Please choose from "linear" and "displacement".'
                         )
+                    os.chdir(cwd)
                     return task_list
                 # ----------make for lammps-------------
                 elif self.inter_param["type"] in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
@@ -296,6 +298,7 @@ class Phonon(Property):
 
                     with open("band.conf", "a") as fp:
                         fp.write(ret)
+                    os.chdir(cwd)
                     return task_list
                 else:
                     raise RuntimeError(
