@@ -1,4 +1,5 @@
 import glob
+import os.path
 import tempfile
 from typing import Type
 from multiprocessing import Pool
@@ -178,7 +179,7 @@ def submit_workflow(
     # submit the workflows
     work_dir_list = []
     for ii in work_dir:
-        glob_list = glob.glob(ii)
+        glob_list = glob.glob(os.path.abspath(ii))
         work_dir_list.extend(glob_list)
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
@@ -193,5 +194,7 @@ def submit_workflow(
         pool.join()
     elif len(work_dir_list) == 1:
         submit(flow, flow_type, work_dir_list[0], relax_param, props_param, labels=labels)
+    else:
+        raise RuntimeError('Empty work directory indicated, please check your argument')
 
     print('Completed!')
