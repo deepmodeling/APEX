@@ -14,7 +14,7 @@ from pymatgen.io.vasp import Incar, Kpoints
 import apex.core.calculator.lib.abacus as abacus
 import apex.core.calculator.lib.vasp as vasp
 import apex.core.calculator.lib.abacus_scf as abacus_scf
-from apex.core.Property import Property
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.calculator.lib.vasp import incar_upper
 from dflow.python import upload_packages
