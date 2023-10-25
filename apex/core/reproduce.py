@@ -4,7 +4,7 @@ import os
 import numpy as np
 from monty.serialization import loadfn
 
-import apex.core.calculator.lib.abacus as abacus
+from .calculator.lib import abacus_utils
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -85,7 +85,7 @@ def make_repro(
             else:
                 task_result.to("vasp/poscar", "POSCAR", frame_idx=jj)
             if inter_param["type"] == "abacus":
-                abacus.poscar2stru("POSCAR", inter_param, "STRU")
+                abacus_utils.poscar2stru("POSCAR", inter_param, "STRU")
                 os.remove("POSCAR")
 
     os.chdir(cwd)

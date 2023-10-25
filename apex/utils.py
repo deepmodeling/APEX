@@ -5,7 +5,7 @@ from dflow.python import OP
 from dflow.python import upload_packages
 from fpop.vasp import RunVasp
 from fpop.abacus import RunAbacus
-from apex.op.RunLAMMPS import RunLAMMPS
+from .op.RunLAMMPS import RunLAMMPS
 
 upload_packages.append(__file__)
 

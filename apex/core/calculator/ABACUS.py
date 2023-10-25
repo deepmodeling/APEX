@@ -4,10 +4,9 @@ import logging
 from dpdata import LabeledSystem
 from monty.serialization import dumpfn
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.abacus_scf as abacus_scf
+from .lib import abacus_utils, abacus_scf
 #from dpgen import dlog
-from apex.core.calculator.Task import Task
+from .Task import Task
 from apex.utils import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)
@@ -158,7 +157,7 @@ class ABACUS(Task):
                 raise RuntimeError("not supported calculation type for ABACUS")
 
             # modify STRU file base on the value of fix_atom
-            abacus.stru_fix_atom(os.path.join(output_dir, "STRU"), fix_atom)
+            abacus_utils.stru_fix_atom(os.path.join(output_dir, "STRU"), fix_atom)
 
         if "basis_type" not in incar:
             logging.info("'basis_type' is not defined, set to be 'pw'!")
@@ -169,7 +168,7 @@ class ABACUS(Task):
                 % incar["basis_type"]
             )
             raise RuntimeError(mess)
-        abacus.write_input(os.path.join(output_dir, "../INPUT"), incar)
+        abacus_utils.write_input(os.path.join(output_dir, "../INPUT"), incar)
         cwd = os.getcwd()
         os.chdir(output_dir)
         if not os.path.islink("INPUT"):
@@ -182,7 +181,7 @@ class ABACUS(Task):
         if "kspacing" in incar:
             kspacing = float(incar["kspacing"])
             if os.path.isfile(os.path.join(output_dir, "STRU")):
-                kpt = abacus.make_kspacing_kpt(
+                kpt = abacus_utils.make_kspacing_kpt(
                     os.path.join(output_dir, "STRU"), kspacing
                 )
                 kpt += [0, 0, 0]
@@ -195,7 +194,7 @@ class ABACUS(Task):
             mess += "You can set key word 'kspacing' (unit in 1/bohr) as a float value in INPUT\n"
             mess += "or set key word 'K_POINTS' as a list in 'cal_setting', e.g. [1,2,3,0,0,0]\n"
             raise RuntimeError(mess)
-        abacus.write_kpt(os.path.join(output_dir, "KPT"), kpt)
+        abacus_utils.write_kpt(os.path.join(output_dir, "KPT"), kpt)
 
     def compute(self, output_dir):
         if not os.path.isfile(os.path.join(output_dir, "INPUT")):

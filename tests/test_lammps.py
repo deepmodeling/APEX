@@ -10,7 +10,7 @@ import numpy as np
 from monty.serialization import dumpfn, loadfn
 
 from apex.core.calculator.Lammps import Lammps
-from apex.core.calculator.lib.lammps import inter_deepmd
+from apex.core.calculator.lib.lammps_utils import inter_deepmd
 
 #from .context import make_kspacing_kpoints, setUpModule
 

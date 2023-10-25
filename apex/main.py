@@ -8,7 +8,6 @@ from .run_step import run_step
 from .submit import submit_workflow
 
 
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description=f"APEX: A scientific workflow for Alloy Properties EXplorer "

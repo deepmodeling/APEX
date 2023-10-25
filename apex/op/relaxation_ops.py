@@ -8,13 +8,8 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-try:
-    from monty.serialization import loadfn
-    from apex.utils import return_prop_list
-    from apex.core.common_equi import (make_equi, post_equi)
-    from .utils import recursive_search
-except:
-    pass
+
+from .utils import recursive_search
 
 upload_packages.append(__file__)
 
@@ -48,7 +43,7 @@ class RelaxMake(OP):
             self,
             op_in: OPIO,
     ) -> OPIO:
-        from apex.core.common_equi import make_equi
+        from ..core.common_equi import make_equi
 
         cwd = os.getcwd()
         os.chdir(op_in["input"])
@@ -113,7 +108,7 @@ class RelaxPost(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
-        from apex.core.common_equi import post_equi
+        from ..core.common_equi import post_equi
         cwd = os.getcwd()
         param_argv = op_in['param']
         inter_param = param_argv["interaction"]

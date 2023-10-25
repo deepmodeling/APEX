@@ -7,12 +7,12 @@ import re
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.vasp as vasp
-import apex.core.calculator.lib.abacus_scf as abacus_scf
-from apex.core.property.Property import Property
-from apex.core.refine import make_refine
-from apex.core.reproduce import make_repro, post_repro
+from ..calculator.lib import abacus_utils
+from ..calculator.lib import vasp_utils
+from ..calculator.lib import abacus_scf
+from .Property import Property
+from ..refine import make_refine
+from ..reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -176,7 +176,7 @@ class EOS(Property):
 
                 if self.inter_param["type"] == "abacus":
                     equi_contcar = os.path.join(
-                        path_to_equi, abacus.final_stru(path_to_equi)
+                        path_to_equi, abacus_utils.final_stru(path_to_equi)
                     )
                 else:
                     equi_contcar = os.path.join(path_to_equi, "CONTCAR")
@@ -193,7 +193,7 @@ class EOS(Property):
                         / np.array(stru_data["atom_numbs"]).sum()
                     )
                 else:
-                    vol_to_poscar = vasp.poscar_vol(equi_contcar) / vasp.poscar_natoms(
+                    vol_to_poscar = vasp_utils.poscar_vol(equi_contcar) / vasp_utils.poscar_natoms(
                         equi_contcar
                     )
                 self.parameter["scale2equi"] = []
@@ -210,11 +210,11 @@ class EOS(Property):
                     if self.inter_param["type"] == "abacus":
                         POSCAR = "STRU"
                         POSCAR_orig = "STRU.orig"
-                        scale_func = abacus.stru_scale
+                        scale_func = abacus_utils.stru_scale
                     else:
                         POSCAR = "POSCAR"
                         POSCAR_orig = "POSCAR.orig"
-                        scale_func = vasp.poscar_scale
+                        scale_func = vasp_utils.poscar_scale
 
                     for ii in [
                         "INCAR",

@@ -2,17 +2,17 @@ import glob
 import os
 from multiprocessing import Pool
 
-from apex.core.calculator.calculator import make_calculator
-from apex.core.property.Elastic import Elastic
-from apex.core.property.EOS import EOS
-from apex.core.property.Gamma import Gamma
-from apex.core.property.Interstitial import Interstitial
-from apex.core.lib.utils import create_path
-from apex.core.lib.util import collect_task
-from apex.core.lib.dispatcher import make_submission
-from apex.core.property.Surface import Surface
-from apex.core.property.Vacancy import Vacancy
-from apex.core.property.Phonon import Phonon
+from .calculator.calculator import make_calculator
+from .property.Elastic import Elastic
+from .property.EOS import EOS
+from .property.Gamma import Gamma
+from .property.Interstitial import Interstitial
+from .lib.utils import create_path
+from .lib.util import collect_task
+from .lib.dispatcher import make_submission
+from .property.Surface import Surface
+from .property.Vacancy import Vacancy
+from .property.Phonon import Phonon
 from apex.utils import sepline, get_task_type
 from dflow.python import upload_packages
 upload_packages.append(__file__)

@@ -6,10 +6,10 @@ from monty.serialization import dumpfn
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
-import apex.core.calculator.lib.vasp as vasp
+from .lib import vasp_utils
 #from dpgen import dlog
-from apex.core.calculator.Task import Task
-from apex.core.calculator.lib.vasp import incar_upper
+from .Task import Task
+from .lib.vasp_utils import incar_upper
 from apex.utils import sepline
 from dflow.python import upload_packages
 upload_packages.append(__file__)
@@ -192,7 +192,7 @@ class VASP(Task):
             os.remove("INCAR")
             os.symlink("../INCAR", "INCAR")
         os.chdir(cwd)
-        ret = vasp.make_kspacing_kpoints(self.path_to_poscar, kspacing, kgamma)
+        ret = vasp_utils.make_kspacing_kpoints(self.path_to_poscar, kspacing, kgamma)
         kp = Kpoints.from_str(ret)
         kp.write_file(os.path.join(output_dir, "KPOINTS"))
 

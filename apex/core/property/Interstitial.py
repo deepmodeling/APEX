@@ -9,12 +9,12 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import InterstitialGenerator
 from pymatgen.core.structure import Structure
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.lammps as lammps
-from apex.core.property.Property import Property
-from apex.core.refine import make_refine
-from apex.core.reproduce import make_repro, post_repro
-from apex.core.structure import StructureInfo
+from ..calculator.lib import abacus_utils
+from ..calculator.lib import lammps_utils
+from .Property import Property
+from ..refine import make_refine
+from ..reproduce import make_repro, post_repro
+from ..structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -171,7 +171,7 @@ class Interstitial(Property):
 
             else:
                 if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus.final_stru(path_to_equi)
+                    CONTCAR = abacus_utils.final_stru(path_to_equi)
                     POSCAR = "STRU"
                 else:
                     CONTCAR = "CONTCAR"
@@ -182,7 +182,7 @@ class Interstitial(Property):
                     raise RuntimeError("please do relaxation first")
 
                 if self.inter_param["type"] == "abacus":
-                    ss = abacus.stru2Structure(equi_contcar)
+                    ss = abacus_utils.stru2Structure(equi_contcar)
                 else:
                     ss = Structure.from_file(equi_contcar)
 
@@ -370,7 +370,7 @@ class Interstitial(Property):
                     for ii in range(total_task):
                         output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                         os.chdir(output_task)
-                        abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
+                        abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
                     os.chdir(cwd)
 
@@ -424,7 +424,7 @@ class Interstitial(Property):
                         conf_line = fin2.read().split("\n")
                         insert_line = conf_line[-2]
                     type_map = loadfn(inter)["type_map"]
-                    type_map_list = lammps.element_list(type_map)
+                    type_map_list = lammps_utils.element_list(type_map)
                     if int(insert_line.split()[1]) > len(type_map_list):
                         type_num = type_map[insert_ele] + 1
                         conf_line[2] = str(len(type_map_list)) + " atom types"

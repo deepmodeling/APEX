@@ -7,16 +7,12 @@ import re
 import subprocess
 
 import dpdata
-import numpy as np
-from monty.serialization import dumpfn, loadfn
-from pymatgen.core.structure import Structure
-from pymatgen.core.surface import generate_all_slabs
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.vasp as vasp
-from apex.core.property.Property import Property
-from apex.core.refine import make_refine
-from apex.core.reproduce import make_repro, post_repro
+from ..calculator.lib import abacus_utils
+from ..calculator.lib import vasp_utils
+from .Property import Property
+from ..refine import make_refine
+from ..reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -146,7 +142,7 @@ class Phonon(Property):
 
             else:
                 if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus.final_stru(path_to_equi)
+                    CONTCAR = abacus_utils.final_stru(path_to_equi)
                     POSCAR = "STRU"
                 else:
                     CONTCAR = "CONTCAR"
@@ -159,10 +155,10 @@ class Phonon(Property):
                 if self.inter_param["type"] == "abacus":
                     stru = dpdata.System(equi_contcar, fmt="stru")
                     stru.to("contcar", "CONTCAR.tmp")
-                    ptypes = vasp.get_poscar_types("CONTCAR.tmp")
+                    ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
                     os.remove("CONTCAR.tmp")
                 else:
-                    ptypes = vasp.get_poscar_types(equi_contcar)
+                    ptypes = vasp_utils.get_poscar_types(equi_contcar)
                     # gen structure
 
                 os.chdir(path_to_work)
@@ -195,6 +191,8 @@ class Phonon(Property):
                     ret += "BAND_POINTS = %s\n" % self.BAND_POINTS
                 if self.BAND_CONNECTION:
                     ret += "BAND_CONNECTION = %s\n" % self.BAND_CONNECTION
+
+                ret_force_read = ret + "FORCE_CONSTANTS=READ\n"
 
                 task_list = []
                 # ------------make for abacus---------------
@@ -259,9 +257,8 @@ class Phonon(Property):
                         task_list.append(task_path)
                         os.symlink(os.path.join(path_to_work, "SPOSCAR"), "POSCAR")
                         os.symlink(os.path.join(path_to_work, "POSCAR-unitcell"), "POSCAR-unitcell")
-                        ret_linear = ret + "FORCE_CONSTANTS=READ\n"
                         with open("band.conf", "a") as fp:
-                            fp.write(ret_linear)
+                            fp.write(ret_force_read)
                     # finite displacement method
                     elif self.approach == 'displacement':
                         poscar_list = glob.glob("POSCAR-0*")
@@ -297,7 +294,7 @@ class Phonon(Property):
                     #vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
 
                     with open("band.conf", "a") as fp:
-                        fp.write(ret)
+                        fp.write(ret_force_read)
                     os.chdir(cwd)
                     return task_list
                 else:
@@ -343,6 +340,7 @@ class Phonon(Property):
         return self.parameter
 
     def _compute_lower(self, output_file, all_tasks, all_res):
+        cwd = os.getcwd()
         output_file = os.path.abspath(output_file)
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
@@ -353,7 +351,15 @@ class Phonon(Property):
             elif self.inter_param["type"] == 'vasp':
                 pass
             elif self.inter_param["type"] in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
-                pass
+                os.chdir(all_tasks[0])
+                if not os.path.exists('FORCE_CONSTANTS'):
+                    raise RuntimeError('"FORCE_CONSTANTS" file not found!')
+                os.system('phonopy --dim="%s %s %s" -c POSCAR band.conf' % (
+                    self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+                    )
+                os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+                shutil.copyfile("band.dat", os.path.join(cwd, "band.dat"))
+
         else:
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
@@ -365,6 +371,16 @@ class Phonon(Property):
                 ptr_data,
                 self.parameter.get("reprod_last_frame", True),
             )
+
+        os.chdir(cwd)
+        print(os.getcwd())
+        print(os.listdir(cwd))
+        with open('band.dat', 'r') as f:
+            ptr_data = f.read()
+
+        result_points = ptr_data.split('\n')[1]
+        result_lines = ptr_data.split('\n')[2:]
+        res_data[result_points] = result_lines
 
         with open(output_file, "w") as fp:
             json.dump(res_data, fp, indent=4)

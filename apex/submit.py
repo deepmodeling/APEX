@@ -6,8 +6,8 @@ from multiprocessing import Pool
 from dflow import config, s3_config
 from dflow.python import OP
 from monty.serialization import loadfn
-import fpop, dpdata, apex
-from apex.utils import get_task_type, get_flow_type
+import fpop, dpdata, apex, phonolammps
+from .utils import get_task_type, get_flow_type
 from .config import Config
 from .flow import FlowFactory
 
@@ -161,8 +161,7 @@ def submit_workflow(
     executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
     upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
     upload_python_packages.extend(list(apex.__path__))
-    upload_python_packages.extend(list(dpdata.__path__))
-    upload_python_packages.extend(list(fpop.__path__))
+    upload_python_packages.extend(list(phonolammps.__path__))
 
     flow = FlowFactory(
         make_image=make_image,

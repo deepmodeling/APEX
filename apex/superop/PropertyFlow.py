@@ -24,8 +24,8 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
-from apex.op.property_ops import DistributeProps, CollectProps
-from apex.superop.SimplePropertySteps import SimplePropertySteps
+from ..op.property_ops import DistributeProps, CollectProps
+from .SimplePropertySteps import SimplePropertySteps
 
 
 class PropertyFlow(Steps):
@@ -143,6 +143,7 @@ class PropertyFlow(Steps):
             name="Distributor",
             template=PythonOPTemplate(DistributeProps,
                                       image=make_image,
+                                      python_packages=upload_python_packages,
                                       command=["python3"]),
             artifacts={"input_work_path": self.inputs.artifacts["input_work_path"]},
             parameters={"param": self.inputs.parameters["parameter"]},
@@ -199,6 +200,7 @@ class PropertyFlow(Steps):
             name="PropsCollector",
             template=PythonOPTemplate(CollectProps,
                                       image=make_image,
+                                      python_packages=upload_python_packages,
                                       command=["python3"]),
             artifacts={"input_all": self.inputs.artifacts["input_work_path"],
                        "input_post": propscal.outputs.artifacts["output_post"]},

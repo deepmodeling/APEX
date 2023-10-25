@@ -1,6 +1,6 @@
 import os
 import sys
-from apex.core.calculator.lib.vasp import *
+from apex.core.calculator.lib.vasp_utils import *
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 

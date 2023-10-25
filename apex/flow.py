@@ -16,10 +16,13 @@ from dflow import (
 )
 from dflow.python.op import OP
 from dflow.plugins.dispatcher import DispatcherExecutor
-from apex.superop.RelaxationFlow import RelaxationFlow
-from apex.superop.PropertyFlow import PropertyFlow
-from apex.op.relaxation_ops import RelaxMake, RelaxPost
-from apex.op.property_ops import PropsMake, PropsPost
+from .superop.RelaxationFlow import RelaxationFlow
+from .superop.PropertyFlow import PropertyFlow
+from .op.relaxation_ops import RelaxMake, RelaxPost
+from .op.property_ops import PropsMake, PropsPost
+
+from dflow.python import upload_packages
+upload_packages.append(__file__)
 
 
 def json2dict(function):

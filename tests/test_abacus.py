@@ -7,7 +7,7 @@ import numpy as np
 from monty.serialization import loadfn
 
 from apex.core.calculator.ABACUS import ABACUS
-from apex.core.calculator.lib import abacus
+from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import abacus_scf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -90,7 +90,7 @@ class TestABACUS(unittest.TestCase):
         self.assertEqual(abacus_input["calculation"].lower(), "cell-relax")
         self.assertEqual(abacus_input["fixed_axes"].lower(), "volume")
         self.assertTrue(
-            abacus.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=False)
+            abacus_utils.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=False)
         )
 
     def test_make_input_file_2(self):
@@ -109,7 +109,7 @@ class TestABACUS(unittest.TestCase):
             "fixed_axes" not in abacus_input or abacus_input["fixed_axes"] == "None"
         )
         self.assertTrue(
-            abacus.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=False)
+            abacus_utils.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=False)
         )
 
     def test_make_input_file_3(self):
@@ -134,7 +134,7 @@ class TestABACUS(unittest.TestCase):
             "fixed_axes" not in abacus_input or abacus_input["fixed_axes"] == "None"
         )
         self.assertTrue(
-            abacus.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=False)
+            abacus_utils.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=False)
         )
 
     def test_make_input_file_4(self):
@@ -157,7 +157,7 @@ class TestABACUS(unittest.TestCase):
         self.assertEqual(abacus_input["calculation"].lower(), "cell-relax")
         self.assertEqual(abacus_input["fixed_axes"].lower(), "volume")
         self.assertTrue(
-            abacus.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=True)
+            abacus_utils.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=True)
         )
 
     def test_make_input_file_5(self):
@@ -182,7 +182,7 @@ class TestABACUS(unittest.TestCase):
             "fixed_axes" not in abacus_input or abacus_input["fixed_axes"] == "None"
         )
         self.assertTrue(
-            abacus.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=True)
+            abacus_utils.check_stru_fixed(os.path.join(self.equi_path, "STRU"), fixed=True)
         )
 
     def test_make_input_file_kspacing(self):

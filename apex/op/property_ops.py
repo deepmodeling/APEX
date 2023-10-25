@@ -1,4 +1,4 @@
-import os, glob, pathlib, shutil, subprocess
+import os, glob, pathlib, shutil, subprocess, logging
 from pathlib import Path
 from typing import List
 from dflow.python import (
@@ -8,13 +8,8 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-try:
-    from monty.serialization import loadfn
-    from apex.utils import return_prop_list
-    from apex.core.common_prop import make_property_instance
-    from .utils import recursive_search
-except:
-    pass
+
+from .utils import recursive_search
 
 upload_packages.append(__file__)
 
@@ -139,8 +134,8 @@ class PropsMake(OP):
             self,
             op_in: OPIO,
     ) -> OPIO:
-        from apex.core.common_prop import make_property_instance
-        from apex.core.calculator.calculator import make_calculator
+        from ..core.common_prop import make_property_instance
+        from ..core.calculator.calculator import make_calculator
 
         input_work_path = op_in["input_work_path"]
         path_to_prop = op_in["path_to_prop"]
@@ -160,7 +155,7 @@ class PropsMake(OP):
             poscar = os.path.join(kk, "POSCAR")
             inter = make_calculator(inter_param, poscar)
             inter.make_potential_files(kk)
-            # dlog.debug(prop.task_type())  ### debug
+            logging.debug(prop.task_type())  ### debug
             inter.make_input_file(kk, prop.task_type(), prop.task_param())
         prop.post_process(
             task_list
@@ -213,7 +208,7 @@ class PropsPost(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
-        from apex.core.common_prop import make_property_instance
+        from ..core.common_prop import make_property_instance
         cwd = os.getcwd()
         input_post = op_in["input_post"]
         input_all = op_in["input_all"]
