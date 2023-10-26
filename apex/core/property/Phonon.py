@@ -347,9 +347,55 @@ class Phonon(Property):
 
         if not self.reprod:
             if self.inter_param["type"] == 'abacus':
-                pass
+                shutil.copyfile("task.000000/band.conf", "band.conf")
+                shutil.copyfile("task.000000/param.json", "param.json")
+                shutil.copyfile("task.000000/STRU.ori", "STRU")
+                shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
+                os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
+                os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
+                if os.path.exists("FORCE_SETS"):
+                    print('FORCE_SETS is created')
+                else:
+                    print('FORCE_SETS can not be created')
+                os.system('phonopy band.conf --abacus')
+                os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+
             elif self.inter_param["type"] == 'vasp':
-                pass
+                shutil.copyfile("task.000000/band.conf", "band.conf")
+                shutil.copyfile("task.000000/param.json", "param.json")
+                shutil.copyfile("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
+
+                if self.approach == "linear":
+                    os.chdir(os.path.join(cwd, "task.000000"))
+                    if os.path.isfile('vasprun.xml'):
+                        os.system('phonopy --fc vasprun.xml')
+                        if os.path.isfile('FORCE_CONSTANTS'):
+                            os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
+                                    self.supercell_size[0],
+                                    self.supercell_size[1],
+                                    self.supercell_size[2]))
+                            os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+                            print('band.dat is created')
+                            shutil.copyfile("band.dat", os.path.join(cwd, "band.dat"))
+                        else:
+                            print('FORCE_CONSTANTS No such file')
+                    else:
+                        print('vasprun.xml No such file')
+
+                elif self.approach == "displacement":
+                    shutil.copyfile("task.000000/band.conf", "band.conf")
+                    shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
+                    os.system('phonopy -f task.0*/vasprun.xml')
+                    if os.path.exists("FORCE_SETS"):
+                        print('FORCE_SETS is created')
+                    else:
+                        print('FORCE_SETS can not be created')
+                    os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
+                        self.supercell_size[0],
+                        self.supercell_size[1],
+                        self.supercell_size[2]))
+                    os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+
             elif self.inter_param["type"] in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
                 os.chdir(all_tasks[0])
                 if not os.path.exists('FORCE_CONSTANTS'):
