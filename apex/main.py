@@ -4,8 +4,8 @@ from apex import (
     header,
     __version__,
 )
-from .run_step import run_step
-from .submit import submit_workflow
+from apex.run_step import run_step
+from apex.submit import submit_workflow
 
 
 def parse_args():

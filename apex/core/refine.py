@@ -2,7 +2,7 @@ import glob
 import os
 import re
 
-from .calculator.lib import abacus_utils
+from apex.core.calculator.lib import abacus_utils
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

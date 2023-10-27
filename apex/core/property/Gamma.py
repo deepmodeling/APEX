@@ -11,15 +11,15 @@ from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.analysis.diffraction.tem import TEMCalculator
 
-from ..calculator.lib import abacus_utils
-from ..calculator.lib import vasp_utils
-from .Property import Property
-from ..refine import make_refine
-from ..reproduce import make_repro, post_repro
-from ..structure import StructureInfo
-from ..lib.slab_orientation import SlabSlipSystem
-from ..lib.trans_tools import trans_mat_basis
-from ..lib.trans_tools import (plane_miller_bravais_to_miller,
+from apex.core.calculator.lib import abacus_utils
+from apex.core.calculator.lib import vasp_utils
+from apex.core.property.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
+from apex.core.structure import StructureInfo
+from apex.core.lib.slab_orientation import SlabSlipSystem
+from apex.core.lib.trans_tools import trans_mat_basis
+from apex.core.lib.trans_tools import (plane_miller_bravais_to_miller,
                                        direction_miller_bravais_to_miller)
 from dflow.python import upload_packages
 

@@ -9,10 +9,10 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import VacancyGenerator
 from pymatgen.core.structure import Structure
 
-from ..calculator.lib import abacus_utils
-from .Property import Property
-from ..refine import make_refine
-from ..reproduce import make_repro, post_repro
+from apex.core.calculator.lib import abacus_utils
+from apex.core.property.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

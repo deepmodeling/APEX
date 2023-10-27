@@ -3,12 +3,12 @@ import os
 import shutil
 import logging
 from monty.serialization import dumpfn
-from .calculator.lib import abacus_utils
-from .lib import crys
-from .calculator.calculator import make_calculator
-from .lib.utils import create_path
-from .lib.dispatcher import make_submission
-from .mpdb import get_structure
+from apex.core.calculator.lib import abacus_utils
+from apex.core.lib import crys
+from apex.core.calculator.calculator import make_calculator
+from apex.core.lib.utils import create_path
+from apex.core.lib.dispatcher import make_submission
+from apex.core.mpdb import get_structure
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]

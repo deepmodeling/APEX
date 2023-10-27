@@ -6,7 +6,7 @@ from dflow.plugins import bohrium
 from dflow.plugins.bohrium import TiefblueClient
 from dflow.plugins.dispatcher import DispatcherExecutor
 
-from .utils import update_dict
+from apex.utils import update_dict
 
 
 @dataclass

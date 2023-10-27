@@ -24,8 +24,8 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
-from ..op.property_ops import DistributeProps, CollectProps
-from .SimplePropertySteps import SimplePropertySteps
+from apex.op.property_ops import DistributeProps, CollectProps
+from apex.superop.SimplePropertySteps import SimplePropertySteps
 
 
 class PropertyFlow(Steps):

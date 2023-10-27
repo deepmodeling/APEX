@@ -5,8 +5,8 @@ import numpy as np
 import requests
 
 #from dpgen import dlog
-from ..calculator.lib import abacus_utils, lammps_utils, vasp_utils
-from ..lib.utils import cmd_append_log
+from apex.core.calculator.lib import abacus_utils, lammps_utils, vasp_utils
+from apex.core.lib.utils import cmd_append_log
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

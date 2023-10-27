@@ -4,9 +4,9 @@ import logging
 
 from monty.serialization import dumpfn, loadfn
 
-from .lib import lammps_utils
+from apex.core.calculator.lib import lammps_utils
 #from dpgen import dlog
-from .lib.lammps_utils import (
+from apex.core.calculator.lib.lammps_utils import (
     inter_deepmd,
     inter_eam_alloy,
     inter_eam_fs,

@@ -7,9 +7,9 @@ from dflow import config, s3_config
 from dflow.python import OP
 from monty.serialization import loadfn
 import fpop, dpdata, apex, phonolammps
-from .utils import get_task_type, get_flow_type
-from .config import Config
-from .flow import FlowFactory
+from apex.utils import get_task_type, get_flow_type
+from apex.config import Config
+from apex.flow import FlowFactory
 
 
 def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
@@ -161,6 +161,8 @@ def submit_workflow(
     executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
     upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
     upload_python_packages.extend(list(apex.__path__))
+    upload_python_packages.extend(list(fpop.__path__))
+    upload_python_packages.extend(list(dpdata.__path__))
     upload_python_packages.extend(list(phonolammps.__path__))
 
     flow = FlowFactory(

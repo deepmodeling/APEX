@@ -9,12 +9,12 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import InterstitialGenerator
 from pymatgen.core.structure import Structure
 
-from ..calculator.lib import abacus_utils
-from ..calculator.lib import lammps_utils
-from .Property import Property
-from ..refine import make_refine
-from ..reproduce import make_repro, post_repro
-from ..structure import StructureInfo
+from apex.core.calculator.lib import abacus_utils
+from apex.core.calculator.lib import lammps_utils
+from apex.core.property.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
+from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 

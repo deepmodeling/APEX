@@ -5,14 +5,14 @@ import os
 import shutil
 import re
 import subprocess
-
 import dpdata
+from pathlib import Path
 
-from ..calculator.lib import abacus_utils
-from ..calculator.lib import vasp_utils
-from .Property import Property
-from ..refine import make_refine
-from ..reproduce import make_repro, post_repro
+from apex.core.calculator.lib import abacus_utils
+from apex.core.calculator.lib import vasp_utils
+from apex.core.property.Property import Property
+from apex.core.refine import make_refine
+from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -340,15 +340,16 @@ class Phonon(Property):
         return self.parameter
 
     def _compute_lower(self, output_file, all_tasks, all_res):
-        cwd = os.getcwd()
+        cwd = Path.cwd()
+        work_path = Path(output_file).parent
         output_file = os.path.abspath(output_file)
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
 
         if not self.reprod:
+            os.chdir(work_path)
             if self.inter_param["type"] == 'abacus':
                 shutil.copyfile("task.000000/band.conf", "band.conf")
-                shutil.copyfile("task.000000/param.json", "param.json")
                 shutil.copyfile("task.000000/STRU.ori", "STRU")
                 shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
@@ -362,25 +363,20 @@ class Phonon(Property):
 
             elif self.inter_param["type"] == 'vasp':
                 shutil.copyfile("task.000000/band.conf", "band.conf")
-                shutil.copyfile("task.000000/param.json", "param.json")
                 shutil.copyfile("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
 
                 if self.approach == "linear":
-                    os.chdir(os.path.join(cwd, "task.000000"))
-                    if os.path.isfile('vasprun.xml'):
-                        os.system('phonopy --fc vasprun.xml')
-                        if os.path.isfile('FORCE_CONSTANTS'):
-                            os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
-                                    self.supercell_size[0],
-                                    self.supercell_size[1],
-                                    self.supercell_size[2]))
-                            os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
-                            print('band.dat is created')
-                            shutil.copyfile("band.dat", os.path.join(cwd, "band.dat"))
-                        else:
-                            print('FORCE_CONSTANTS No such file')
-                    else:
-                        print('vasprun.xml No such file')
+                    os.chdir(all_tasks[0])
+                    assert os.path.isfile('vasprun.xml'), "vasprun.xml not found"
+                    os.system('phonopy --fc vasprun.xml')
+                    assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
+                    os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
+                            self.supercell_size[0],
+                            self.supercell_size[1],
+                            self.supercell_size[2]))
+                    os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+                    print('band.dat is created')
+                    shutil.copyfile("band.dat", work_path/"band.dat")
 
                 elif self.approach == "displacement":
                     shutil.copyfile("task.000000/band.conf", "band.conf")
@@ -398,13 +394,12 @@ class Phonon(Property):
 
             elif self.inter_param["type"] in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
                 os.chdir(all_tasks[0])
-                if not os.path.exists('FORCE_CONSTANTS'):
-                    raise RuntimeError('"FORCE_CONSTANTS" file not found!')
+                assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
                 os.system('phonopy --dim="%s %s %s" -c POSCAR band.conf' % (
                     self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
                     )
                 os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
-                shutil.copyfile("band.dat", os.path.join(cwd, "band.dat"))
+                shutil.copyfile("band.dat", work_path/"band.dat")
 
         else:
             if "init_data_path" not in self.parameter:
@@ -418,9 +413,7 @@ class Phonon(Property):
                 self.parameter.get("reprod_last_frame", True),
             )
 
-        os.chdir(cwd)
-        print(os.getcwd())
-        print(os.listdir(cwd))
+        os.chdir(work_path)
         with open('band.dat', 'r') as f:
             ptr_data = f.read()
 
@@ -431,4 +424,5 @@ class Phonon(Property):
         with open(output_file, "w") as fp:
             json.dump(res_data, fp, indent=4)
 
+        os.chdir(cwd)
         return res_data, ptr_data

@@ -364,11 +364,12 @@ def make_vasp_relax_incar(
     return ret
 
 
-def make_vasp_phonon_incar(
-    ecut, ediff, npar, kpar, kspacing=0.5, kgamma=True, ismear=1, sigma=0.2
+def make_vasp_phonon_dfpt_incar(
+    ecut, ediff, npar, kpar, kspacing=0.3, kgamma=True, ismear=1, sigma=0.22
 ):
     isif = 2
     ret = ""
+    ret += "ADDGRID=True\n"
     ret += "PREC=A\n"
     ret += "ENCUT=%d\n" % ecut
     ret += "# ISYM=0\n"
@@ -377,7 +378,7 @@ def make_vasp_phonon_incar(
     ret += "EDIFFG=-0.01\n"
     ret += "LREAL=A\n"
     # ret += 'NPAR=%d\n' % npar
-    ret += "KPAR=%d\n" % kpar
+    # ret += "KPAR=%d\n" % kpar
     ret += "\n"
     ret += "ISMEAR=%d\n" % ismear
     ret += "SIGMA=%f\n" % sigma

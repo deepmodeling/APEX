@@ -1,8 +1,8 @@
 import warnings
 from monty.serialization import loadfn
-from .core.common_equi import (make_equi, run_equi, post_equi)
-from .core.common_prop import (make_property, run_property, post_property)
-from .utils import get_flow_type, return_prop_list
+from apex.core.common_equi import (make_equi, run_equi, post_equi)
+from apex.core.common_prop import (make_property, run_property, post_property)
+from apex.utils import get_flow_type, return_prop_list
 
 
 def run_step(parameter, step, machine_file=None):

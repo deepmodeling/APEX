@@ -178,7 +178,8 @@ class SimplePropertySteps(Steps):
                 parameters={
                     "run_image_config": {"command": run_command},
                     "task_name": make.outputs.parameters["task_names"],
-                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR"]
+                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR",
+                                        "vasprun.xml"]
                 },
                 artifacts={
                     "task_path": make.outputs.artifacts["task_paths"]
