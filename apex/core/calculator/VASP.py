@@ -81,6 +81,7 @@ class VASP(Task):
         incar_relax = incar_upper(Incar.from_file(relax_incar_path))
 
         # deal with relaxation
+        prop_type = task_param.get("type", "relaxation")
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
 
@@ -88,30 +89,27 @@ class VASP(Task):
         if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
             incar_prop = os.path.abspath(cal_setting["input_prop"])
             incar = incar_upper(Incar.from_file(incar_prop))
+            logging.info(f"Will use user specified INCAR (path: {incar_prop}) for {prop_type} calculation")
 
         # revise INCAR based on the INCAR provided in the "interaction"
         else:
-            try:
-                prop_type = task_param["type"]
-            except KeyError:
-                incar = incar_relax
+            if prop_type == "phonon":
+                approach = task_param.get("approach", "linear")
+                logging.info(f"No specification of INCAR for {prop_type} calculation, will auto generate")
+                if approach == "linear":
+                    incar = incar_upper(Incar.from_str(
+                        vasp_utils.make_vasp_phonon_dfpt_incar(
+                            ecut=650, ediff=0.0000001, npar=None, kpar=None
+                        )))
+                elif approach == "displacement":
+                    incar = incar_upper(Incar.from_str(
+                        vasp_utils.make_vasp_static_incar(
+                            ecut=650, ediff=0.0000001, npar=8, kpar=1
+                        )))
             else:
-                if prop_type == "phonon":
-                    approach = task_param.get("approach", "linear")
-                    print(f"No specification of INCAR for {prop_type} calculation, will auto generate")
-                    if approach == "linear":
-                        incar = incar_upper(Incar.from_str(
-                            vasp_utils.make_vasp_phonon_dfpt_incar(
-                                ecut=650, ediff=0.0000001, npar=None, kpar=None
-                            )))
-                    elif approach == "displacement":
-                        incar = incar_upper(Incar.from_str(
-                            vasp_utils.make_vasp_static_incar(
-                                ecut=650, ediff=0.0000001, npar=8, kpar=1
-                            )))
-                else:
-                    print(f"No specification of INCAR for {prop_type} calculation, will use INCAR for relaxation")
-                    incar = incar_relax
+                if not prop_type == "relaxation":
+                    logging.info(f"No specification of INCAR for {prop_type} calculation, will use INCAR for relaxation")
+                incar = incar_relax
 
             if cal_type == "relaxation":
                 relax_pos = cal_setting["relax_pos"]

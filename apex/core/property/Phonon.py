@@ -36,7 +36,7 @@ class Phonon(Property):
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
-                "relax_shape": True,
+                "relax_shape": False,
                 "relax_vol": False,
             }
             if "cal_setting" not in parameter:
