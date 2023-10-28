@@ -423,7 +423,7 @@ def make_kspacing_kpoints_stru(stru, kspacing):
     if type(kspacing) is not list:
         kspacing = [kspacing, kspacing, kspacing]
     box = stru["cells"]
-    rbox = vasp.reciprocal_box(box)
+    rbox = vasp_utils.reciprocal_box(box)
     kpoints = [
         max(1, (np.ceil(2 * np.pi * np.linalg.norm(ii) / ks).astype(int)))
         for ii, ks in zip(rbox, kspacing)

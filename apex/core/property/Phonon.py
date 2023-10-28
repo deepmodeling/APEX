@@ -197,6 +197,7 @@ class Phonon(Property):
                 task_list = []
                 # ------------make for abacus---------------
                 if self.inter_param["type"] == "abacus":
+                    # make setting.conf
                     ret_sc = ""
                     ret_sc += "DIM=%s %s %s\n" % (
                         self.supercell_size[0],
@@ -205,10 +206,13 @@ class Phonon(Property):
                     )
                     ret_sc += "ATOM_NAME ="
                     for atom in ptypes:
-                        ret += " %s" % (atom)
+                        ret_sc += " %s" % (atom)
                     ret_sc += "\n"
                     with open("setting.conf", "a") as fp:
                         fp.write(ret_sc)
+                    # append NUMERICAL_ORBITAL to STRU after relaxation
+                    orb_file = self.inter_param.get("orb_files", None)
+                    abacus_utils.append_orb_file_to_stru("STRU", orb_file, prefix='pp_orb')
                     ## generate STRU-00x
                     cmd = "phonopy setting.conf --abacus -d"
                     subprocess.call(cmd, shell=True)

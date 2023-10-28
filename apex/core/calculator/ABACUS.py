@@ -97,7 +97,7 @@ class ABACUS(Task):
         incar_relax = abacus_scf.get_abacus_input_parameters(relax_incar_path)
 
         # deal with relaxation
-
+        prop_type = task_param.get("type", "relaxation")
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
 

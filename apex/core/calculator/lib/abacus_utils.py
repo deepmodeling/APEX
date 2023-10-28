@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-import os
+import logging
+import os, re
 
 import dpdata
 import numpy as np
@@ -498,4 +499,23 @@ def modify_stru_path(strucf, tpath):
 
     with open(strucf, "w") as f1:
         f1.writelines(lines)
+
+
+def append_orb_file_to_stru(stru, orb: dict = None, prefix: str = ""):
+    with open(stru, 'r') as fin:
+        all_string = fin.read()
+
+    if not re.search("NUMERICAL_ORBITAL", all_string) and orb:
+        logging.info(msg="Append user specific orbital files to STRU")
+        orbital_string = "NUMERICAL_ORBITAL\n"
+        for key, item in orb.items():
+            orbital_string += str(os.path.join(prefix, item))
+            orbital_string += '\n'
+        all_string_new = orbital_string + "\n" + all_string
+
+        if os.path.isfile(stru) or os.path.islink(stru):
+            os.remove(stru)
+
+        with open(stru, 'w') as fout:
+            fout.write(all_string_new)
 
