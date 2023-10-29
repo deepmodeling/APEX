@@ -30,7 +30,6 @@ class TestPhonon(unittest.TestCase):
                     "band_path": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
                     "supercell_matrix": [2, 2, 2]
                 },
-
             ],
         }
 

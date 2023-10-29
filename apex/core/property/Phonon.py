@@ -7,7 +7,9 @@ import re
 import subprocess
 import dpdata
 from pathlib import Path
+from pymatgen.core.structure import Structure
 
+from apex.core.structure import StructureInfo
 from apex.core.calculator.calculator import LAMMPS_TYPE
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
@@ -28,7 +30,6 @@ class Phonon(Property):
                 self.approach = parameter.get('approach', 'linear')
                 self.band_path = parameter.get('band_path')
                 self.supercell_size = parameter.get('supercell_size', [2, 2, 2])
-                self.primitive = parameter.get('primitive')
                 self.MESH = parameter.get('MESH', None)
                 self.PRIMITIVE_AXES = parameter.get('PRIMITIVE_AXES', None)
                 self.BAND_POINTS = parameter.get('BAND_POINTS', None)
@@ -157,10 +158,26 @@ class Phonon(Property):
                     stru = dpdata.System(equi_contcar, fmt="stru")
                     stru.to("contcar", "CONTCAR.tmp")
                     ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
+                    ss = Structure.from_file("CONTCAR.tmp")
                     os.remove("CONTCAR.tmp")
                 else:
                     ptypes = vasp_utils.get_poscar_types(equi_contcar)
+                    ss = Structure.from_file(equi_contcar)
                     # gen structure
+
+                # get user input slip parameter for specific structure
+                st = StructureInfo(ss)
+                self.structure_type = st.lattice_structure
+                type_param = self.parameter.get(self.structure_type, None)
+                if type_param:
+                    self.primitive = type_param.get("primitive", self.primitive)
+                    self.approach = type_param.get("approach", self.approach)
+                    self.band_path = type_param.get("band_path", self.band_path)
+                    self.supercell_size = type_param.get("supercell_size", self.supercell_size)
+                    self.MESH = type_param.get("MESH", self.MESH)
+                    self.PRIMITIVE_AXES = type_param.get("PRIMITIVE_AXES", self.PRIMITIVE_AXES)
+                    self.BAND_POINTS = type_param.get("BAND_POINTS", self.BAND_POINTS)
+                    self.BAND_CONNECTION = type_param.get("BAND_CONNECTION", self.BAND_CONNECTION)
 
                 os.chdir(path_to_work)
                 if os.path.isfile(POSCAR):
