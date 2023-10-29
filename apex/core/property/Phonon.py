@@ -8,6 +8,7 @@ import subprocess
 import dpdata
 from pathlib import Path
 
+from apex.core.calculator.calculator import LAMMPS_TYPE
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property
@@ -288,14 +289,12 @@ class Phonon(Property):
                     os.chdir(cwd)
                     return task_list
                 # ----------make for lammps-------------
-                elif self.inter_param["type"] in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
+                elif self.inter_param["type"] in LAMMPS_TYPE:
                     task_path = os.path.join(path_to_work, 'task.000000')
                     os.makedirs(task_path, exist_ok=True)
                     os.chdir(task_path)
                     task_list.append(task_path)
                     os.symlink(os.path.join(path_to_work, "POSCAR-unitcell"), POSCAR)
-                    #vasp.regulate_poscar("POSCAR", "POSCAR")
-                    #vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
 
                     with open("band.conf", "a") as fp:
                         fp.write(ret_force_read)
@@ -309,7 +308,7 @@ class Phonon(Property):
     def post_process(self, task_list):
         cwd = os.getcwd()
         inter_type = self.inter_param["type"]
-        if inter_type in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
+        if inter_type in LAMMPS_TYPE:
             # prepare in.lammps
             for ii in task_list:
                 os.chdir(ii)

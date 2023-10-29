@@ -1,5 +1,5 @@
 {
-    "structures":            ["confs/std-*"],
+    "structures":            ["confs/std-bcc"],
     "interaction": {
             "type":           "deepmd",
             "model":          "frozen_model.pb",
@@ -23,7 +23,7 @@
         },
         {
          "type":         "elastic",
-	 "skip":         false,
+	 "skip":         true,
          "norm_deform":  1e-2,
          "shear_deform": 1e-2,
 	 "cal_setting":  {"etol": 0,
@@ -44,7 +44,6 @@
          "insert_ele":  ["Mo"]
         },
 	{
-         "type":             "vacancy",
          "skip":         true,
          "supercell":        [2, 2, 2]
         },
@@ -62,7 +61,13 @@
       "vacuum_size": 15,
 	  "add_fix": ["true","true","false"],
       "n_steps":         20
-	}
+	},
+	{
+         "type":         "phonon",
+	 "skip":         false,
+	 "band_path": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
+	 "supercell_size":[4,4,4],
+	 "PRIMITIVE_AXES": "Auto"
+    	}
         ]
-
 }

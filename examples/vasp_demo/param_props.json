@@ -1,5 +1,5 @@
 {
-    "structures":    ["confs/std-*"],
+    "structures":    ["confs/std-bcc"],
     	"interaction": {
         "type":          "vasp",
         "incar":         "vasp_input/INCAR",
@@ -9,14 +9,14 @@
     "properties": [
         {
          "type":         "eos",
-         "skip":         false,
+         "skip":         true,
          "vol_start":    0.6,
          "vol_end":      1.4,
          "vol_step":     0.4
         },
         {
          "type":         "eos",
-         "skip":         false,
+         "skip":         true,
 	 "suffix":  	 "4_step",
          "vol_start":    0.6,
          "vol_end":      1.4,
@@ -56,6 +56,21 @@
       "vacuum_size": 15,
 	  "add_fix": ["true","true","false"],
       "n_steps":         20
-	}
+	},
+        {
+         "type":         "phonon",
+	 "skip":         false,
+	 "suffix":       "linear",
+         "band_path": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
+         "supercell_size":[2,2,2]
+    },
+        {
+         "type":         "phonon",
+	 "skip":         false,
+	 "suffix":       "displacement",
+	 "approach":     "displacement",
+         "band_path": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
+         "supercell_size":[2,2,2]
+    }
         ]
 }
