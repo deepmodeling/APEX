@@ -28,10 +28,10 @@ class Phonon(Property):
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
                 self.primitive = parameter.get('primitive', False)
                 self.approach = parameter.get('approach', 'linear')
-                self.band_path = parameter.get('band_path')
                 self.supercell_size = parameter.get('supercell_size', [2, 2, 2])
                 self.MESH = parameter.get('MESH', None)
                 self.PRIMITIVE_AXES = parameter.get('PRIMITIVE_AXES', None)
+                self.BAND = parameter.get('BAND', None)
                 self.BAND_POINTS = parameter.get('BAND_POINTS', None)
                 self.BAND_CONNECTION = parameter.get('BAND_CONNECTION', True)
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
@@ -172,10 +172,10 @@ class Phonon(Property):
                 if type_param:
                     self.primitive = type_param.get("primitive", self.primitive)
                     self.approach = type_param.get("approach", self.approach)
-                    self.band_path = type_param.get("band_path", self.band_path)
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
                     self.MESH = type_param.get("MESH", self.MESH)
                     self.PRIMITIVE_AXES = type_param.get("PRIMITIVE_AXES", self.PRIMITIVE_AXES)
+                    self.BAND = type_param.get("BAND", self.BAND)
                     self.BAND_POINTS = type_param.get("BAND_POINTS", self.BAND_POINTS)
                     self.BAND_CONNECTION = type_param.get("BAND_CONNECTION", self.BAND_CONNECTION)
 
@@ -187,7 +187,8 @@ class Phonon(Property):
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
 
-                # prepare band.conf
+                if not self.BAND:
+                    raise RuntimeError('No band_path input for phonon calculation!')
                 ret = ""
                 ret += "ATOM_NAME ="
                 for ii in ptypes:
@@ -204,7 +205,7 @@ class Phonon(Property):
                     )
                 if self.PRIMITIVE_AXES:
                     ret += "PRIMITIVE_AXES = %s\n" % self.PRIMITIVE_AXES
-                ret += "BAND = %s\n" % self.band_path
+                ret += "BAND = %s\n" % self.BAND
                 if self.BAND_POINTS:
                     ret += "BAND_POINTS = %s\n" % self.BAND_POINTS
                 if self.BAND_CONNECTION:

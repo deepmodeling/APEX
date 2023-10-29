@@ -3,6 +3,7 @@
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of property-test workflows by utilizing various computational approaches, including support for LAMMPS, VASP, and ABACUS.
 
 ## New Features Update (v1.0)
+* Add calculation function of `phonon` spectrum (v1.1.0)
 * Decouple property calculations into individual sub-workflow to facilitate the customization of complex property functions
 * Support one-click parallel submission of multiple workflows
 * Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
@@ -28,6 +29,7 @@
         - [3.1.2.4. Vacancy](#3124-vacancy)
         - [3.1.2.5. Interstitial](#3125-interstitial)
         - [3.1.2.6. Gamma Line](#3126-gamma-line)
+        - [3.1.2.7. Phonon Spectrum](#3127-phonon-spectrum)
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
       - [3.2.2. Single-Step Test](#322-single-step-test)
@@ -344,7 +346,31 @@ The parameters related to Gamma line calculation are listed below:
       "n_steps":         10
 	}
   ```
-  **It should be noted that for various crystal structures, users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption. In above example, the slip system configuration within the "hcp" dictionary will be utilized.**
+  It should be noted that for various crystal structures, **users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption**. In above example, the slip system configuration within the "hcp" dictionary will be utilized.
+
+##### 3.1.2.7. Phonon Spectrum
+This function incorporates part of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) codes into APEX to make it more complete. This workflow is realized via [Phonopy](https://github.com/phonopy/phonopy), and plus [phonoLAMMPS](https://github.com/abelcarreras/phonolammps) for LAMMPS calculation. 
+
+*IMPORTANT!!*: it should be noticed that one will need the **phonoLAMMPS** package pre-installed within one's `run_image` for proper `LAMMPS` calculation of phonon spectrum.
+
+The parameters related to `Phonon` calculation are listed below:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | primitive | Bool | False | Whether to find primitive lattice structure for phonon calculation |
+  | approach | String | "linear" | Specify phonon calculation method when using `VASP`; Two options: 1. "linear" for the *Linear Response Method*, and 2. "displacement" for the *Finite Displacement Method* |
+  | supercell_size | Sequence[Int] | [2, 2, 2] | Size of supercell created for calculation |
+  | MESH | Sequence[Int] | None | Specify the dimensions of the grid in reciprocal space for which the phonon frequencies and eigenvectors are to be calculated. For example: [8, 8, 8]; Refer to [Phonopy MESH](http://phonopy.github.io/phonopy/setting-tags.html#mesh-sampling-tags) |
+  | PRIMITIVE_AXES | String | None | To define the basis vectors of a primitive cell in terms of the basis vectors of a conventional cell for input cell transformation. For example: "0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0"; Refer to [Phonopy PRIMITIVE_AXES](http://phonopy.github.io/phonopy/setting-tags.html#primitive-axes-or-primitive-axis) |
+  | BAND | String | None | Indicate band path in reciprocal space as format of [Phonopy BAND](http://phonopy.github.io/phonopy/setting-tags.html#band-and-band-points); For example: "0 0 0 1/2 0 1/2, 1/2 1/2 1 0 0 0 1/2 1/2 1/2" |
+  | BAND_POINTS | Int | 51 | Number of sampling points including the path ends |
+  | BAND_CONNECTION | Bool | True | With this option, band connections are estimated from eigenvectors and band structure is drawn considering band crossings. In sensitive cases, to obtain better band connections, it requires to increase number of points calculated in band segments by the `BAND_POINTS` tag. |
+
+When utilize the `VASP`, you have **two** primary calculation methods at your disposal: the **Linear Response Method** and the **Finite Displacement Method**.
+
+The **Linear Response Method** has an edge over the Finite Displacement Method in that it eliminates the need for creating super-cells, thereby offering computational efficiency in certain cases. Additionally, this method is particularly well-suited for systems with anomalous phonon dispersion (like systems with Kohn anomalies), as it can precisely calculate the phonons at the specified points.
+
+On the other hand, the **Finite Displacement Method**'s advantage lies in its versatility; it functions as an add-on compatible with any code, including those beyond the scope of density functional theory. The only requirement is that the external code can compute forces. For instance, ABACUS may lack an implementation of the Linear Response Method, but can effectively utilize the Finite Displacement Method implemented in phonon calculation.
+
 
 ### 3.2. Command
 APEX currently supports two seperate run modes: **workflow submission** (running via dflow) and **single-step test** (running without dflow).
