@@ -165,7 +165,7 @@ class Phonon(Property):
                     ss = Structure.from_file(equi_contcar)
                     # gen structure
 
-                # get user input slip parameter for specific structure
+                # get user input parameter for specific structure
                 st = StructureInfo(ss)
                 self.structure_type = st.lattice_structure
                 type_param = self.parameter.get(self.structure_type, None)
