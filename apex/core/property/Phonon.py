@@ -413,7 +413,7 @@ class Phonon(Property):
                         self.supercell_size[2]))
                     os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
 
-            elif self.inter_param["type"] in ["deepmd", "meam", "eam_fs", "eam_alloy"]:
+            elif self.inter_param["type"] in LAMMPS_TYPE:
                 os.chdir(all_tasks[0])
                 assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
                 os.system('phonopy --dim="%s %s %s" -c POSCAR band.conf' % (
@@ -438,7 +438,7 @@ class Phonon(Property):
         with open('band.dat', 'r') as f:
             ptr_data = f.read()
 
-        result_points = ptr_data.split('\n')[1]
+        result_points = ptr_data.split('\n')[1][4:]
         result_lines = ptr_data.split('\n')[2:]
         res_data[result_points] = result_lines
 
