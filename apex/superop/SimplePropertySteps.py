@@ -140,7 +140,7 @@ class SimplePropertySteps(Steps):
     ):
         # Step for property make
         make = Step(
-            name="prop-make",
+            name="Props-make",
             template=PythonOPTemplate(
                 make_op,
                 image=make_image,

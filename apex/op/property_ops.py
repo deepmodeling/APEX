@@ -164,6 +164,7 @@ class PropsMake(OP):
         task_list.sort()
         os.chdir(input_work_path)
         task_list_str = glob.glob(path_to_prop + '/' + 'task.*')
+        task_list_str.sort()
 
         all_jobs = task_list
         njobs = len(all_jobs)
