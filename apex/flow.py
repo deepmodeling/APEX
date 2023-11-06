@@ -21,6 +21,9 @@ from apex.superop.PropertyFlow import PropertyFlow
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
 
+from dflow.python import upload_packages
+upload_packages.append(__file__)
+
 
 def json2dict(function):
     def wrapper(*args, **kwargs):

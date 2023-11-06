@@ -4,15 +4,15 @@ import logging
 
 from monty.serialization import dumpfn, loadfn
 
-import apex.core.calculator.lib.lammps as lammps
+from apex.core.calculator.lib import lammps_utils
 #from dpgen import dlog
-from apex.core.calculator.lib.lammps import (
+from apex.core.calculator.lib.lammps_utils import (
     inter_deepmd,
     inter_eam_alloy,
     inter_eam_fs,
     inter_meam,
 )
-from apex.core.calculator.Task import Task
+from .Task import Task
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -129,10 +129,10 @@ class Lammps(Task):
         dumpfn(self.inter, os.path.join(output_dir, "inter.json"), indent=4)
 
     def make_input_file(self, output_dir, task_type, task_param):
-        lammps.cvt_lammps_conf(
+        lammps_utils.cvt_lammps_conf(
             os.path.join(output_dir, "POSCAR"),
             os.path.join(output_dir, "conf.lmp"),
-            lammps.element_list(self.type_map),
+            lammps_utils.element_list(self.type_map),
         )
 
         # dumpfn(task_param, os.path.join(output_dir, 'task.json'), indent=4)
@@ -195,7 +195,7 @@ class Lammps(Task):
                 relax_vol = cal_setting["relax_vol"]
 
                 if [relax_pos, relax_shape, relax_vol] == [True, False, False]:
-                    fc = lammps.make_lammps_equi(
+                    fc = lammps_utils.make_lammps_equi(
                         "conf.lmp",
                         self.type_map,
                         self.inter_func,
@@ -207,7 +207,7 @@ class Lammps(Task):
                         False,
                     )
                 elif [relax_pos, relax_shape, relax_vol] == [True, True, True]:
-                    fc = lammps.make_lammps_equi(
+                    fc = lammps_utils.make_lammps_equi(
                         "conf.lmp",
                         self.type_map,
                         self.inter_func,
@@ -225,7 +225,7 @@ class Lammps(Task):
                 ] and not task_type == "eos":
                     if "scale2equi" in task_param:
                         scale2equi = task_param["scale2equi"]
-                        fc = lammps.make_lammps_press_relax(
+                        fc = lammps_utils.make_lammps_press_relax(
                             "conf.lmp",
                             self.type_map,
                             scale2equi[int(output_dir[-6:])],
@@ -239,7 +239,7 @@ class Lammps(Task):
                             maxeval,
                         )
                     else:
-                        fc = lammps.make_lammps_equi(
+                        fc = lammps_utils.make_lammps_equi(
                             "conf.lmp",
                             self.type_map,
                             self.inter_func,
@@ -256,7 +256,7 @@ class Lammps(Task):
                     False,
                 ] and task_type == "eos":
                     task_param["cal_setting"]["relax_shape"] = False
-                    fc = lammps.make_lammps_equi(
+                    fc = lammps_utils.make_lammps_equi(
                         "conf.lmp",
                         self.type_map,
                         self.inter_func,
@@ -268,7 +268,7 @@ class Lammps(Task):
                         False,
                     )
                 elif [relax_pos, relax_shape, relax_vol] == [False, False, False]:
-                    fc = lammps.make_lammps_eval(
+                    fc = lammps_utils.make_lammps_eval(
                         "conf.lmp", self.type_map, self.inter_func, self.model_param
                     )
 
@@ -276,7 +276,7 @@ class Lammps(Task):
                     raise RuntimeError("not supported calculation setting for LAMMPS")
 
             elif cal_type == "static":
-                fc = lammps.make_lammps_eval(
+                fc = lammps_utils.make_lammps_eval(
                     "conf.lmp", self.type_map, self.inter_func, self.model_param
                 )
 
@@ -442,7 +442,7 @@ class Lammps(Task):
 
             _tmp = self.type_map
             #dlog.debug(_tmp)
-            type_map_list = lammps.element_list(self.type_map)
+            type_map_list = lammps_utils.element_list(self.type_map)
 
             type_map_idx = list(range(len(type_map_list)))
             atom_numbs = []

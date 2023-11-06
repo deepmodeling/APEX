@@ -1,5 +1,5 @@
 {
-    "structures":       ["confs/std-*"],
+    "structures":       ["confs/std-bcc"],
     "interaction": {
         "type":          "vasp",
         "incar":         "vasp_input/INCAR",

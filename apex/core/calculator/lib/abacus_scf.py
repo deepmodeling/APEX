@@ -3,7 +3,7 @@ import os
 import numpy as np
 from dpdata.abacus.scf import get_cell, get_coords, get_nele_from_stru
 
-from apex.core.calculator.lib import vasp
+from . import vasp_utils
 from dflow.python import upload_packages
 from dargs.dargs import Argument
 upload_packages.append(__file__)
@@ -423,7 +423,7 @@ def make_kspacing_kpoints_stru(stru, kspacing):
     if type(kspacing) is not list:
         kspacing = [kspacing, kspacing, kspacing]
     box = stru["cells"]
-    rbox = vasp.reciprocal_box(box)
+    rbox = vasp_utils.reciprocal_box(box)
     kpoints = [
         max(1, (np.ceil(2 * np.pi * np.linalg.norm(ii) / ks).astype(int)))
         for ii, ks in zip(rbox, kspacing)

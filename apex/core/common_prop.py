@@ -12,6 +12,7 @@ from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
+from apex.core.property.Phonon import Phonon
 from apex.utils import sepline, get_task_type
 from dflow.python import upload_packages
 upload_packages.append(__file__)
@@ -36,6 +37,8 @@ def make_property_instance(parameters, inter_param):
         return Surface(parameters, inter_param)
     elif prop_type == "gamma":
         return Gamma(parameters, inter_param)
+    elif prop_type == "phonon":
+        return Phonon(parameters, inter_param)
     else:
         raise RuntimeError(f"unknown dflowautotest type {prop_type}")
 

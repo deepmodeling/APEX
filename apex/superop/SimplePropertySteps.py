@@ -140,8 +140,13 @@ class SimplePropertySteps(Steps):
     ):
         # Step for property make
         make = Step(
-            name="prop-make",
-            template=PythonOPTemplate(make_op, image=make_image, command=["python3"]),
+            name="Props-make",
+            template=PythonOPTemplate(
+                make_op,
+                image=make_image,
+                python_packages=upload_python_packages,
+                command=["python3"]
+            ),
             artifacts={"input_work_path": self.inputs.artifacts["input_work_path"]},
             parameters={"prop_param": self.inputs.parameters["prop_param"],
                         "inter_param": self.inputs.parameters["inter_param"],
@@ -173,7 +178,8 @@ class SimplePropertySteps(Steps):
                 parameters={
                     "run_image_config": {"command": run_command},
                     "task_name": make.outputs.parameters["task_names"],
-                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR"]
+                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR",
+                                        "vasprun.xml"]
                 },
                 artifacts={
                     "task_path": make.outputs.artifacts["task_paths"]
@@ -211,6 +217,7 @@ class SimplePropertySteps(Steps):
                     pool_size=pool_size
                 ),
                 image=run_image,
+                python_packages=upload_python_packages,
                 command=["python3"]
             )
             runcal = Step(
@@ -232,6 +239,7 @@ class SimplePropertySteps(Steps):
             template=PythonOPTemplate(
                 post_op,
                 image=post_image,
+                python_packages=upload_python_packages,
                 command=["python3"]
             ),
             artifacts={

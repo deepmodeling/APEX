@@ -4,6 +4,7 @@ RUN pip install numpy -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install monty -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install pymatgen>=2023.8.10 -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install pymatgen.analysis.defects>=2023.8.22 -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install phonopy -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install dpdispatcher -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install pydflow -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install urllib3 -i https://pypi.tuna.tsinghua.edu.cn/simple
