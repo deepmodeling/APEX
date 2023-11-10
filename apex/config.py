@@ -68,6 +68,14 @@ class Config:
     abacus_run_command: str = None
 
     is_bohrium_dflow: bool = False
+    database_type: str = 'mongodb'
+
+    # MongoDB config
+    mongodb_config: dict = None
+    mongo_database: str = "APEX"
+    mongo_collection: str = "default_collection"
+    mongo_host: str = "localhost"
+    mongo_port: int = 27017
 
     def __post_init__(self):
         # judge if running dflow on the Bohrium
@@ -203,6 +211,18 @@ class Config:
         if self.dispatcher_config:
             update_dict(dispatcher_config, self.dispatcher_config)
         return dispatcher_config
+
+    @property
+    def mongodb_config_dict(self):
+        mongodb_config = {
+            "database": self.mongo_database,
+            "collection": self.mongo_collection,
+            "host": self.mongo_host,
+            "port": self.mongo_port
+        }
+        if self.mongodb_config:
+            update_dict(mongodb_config, self.mongodb_config)
+        return mongodb_config
 
     @property
     def basic_config_dict(self):

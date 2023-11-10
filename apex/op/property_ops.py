@@ -9,7 +9,7 @@ from dflow.python import (
     upload_packages
 )
 
-from apex.op.utils import recursive_search
+from apex.utils import handle_prop_suffix, recursive_search
 
 upload_packages.append(__file__)
 
@@ -66,21 +66,9 @@ class DistributeProps(OP):
         conf_dirs.sort()
         for ii in conf_dirs:
             for jj in properties:
-                if jj.get('skip', False):
+                do_refine, suffix = handle_prop_suffix(jj)
+                if not suffix:
                     continue
-                if 'init_from_suffix' and 'output_suffix' in jj:
-                    do_refine = True
-                    suffix = jj['output_suffix']
-                elif 'reproduce' in jj and jj['reproduce']:
-                    do_refine = False
-                    suffix = 'reprod'
-                elif 'suffix' in jj and jj['suffix']:
-                    do_refine = False
-                    suffix = str(jj['suffix'])
-                else:
-                    do_refine = False
-                    suffix = '00'
-
                 property_type = jj["type"]
                 path_to_prop_list.append(os.path.join(ii, property_type + "_" + suffix))
                 prop_param_list.append(jj)

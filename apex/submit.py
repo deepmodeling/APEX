@@ -7,78 +7,9 @@ from dflow import config, s3_config
 from dflow.python import OP
 from monty.serialization import loadfn
 import fpop, dpdata, apex, phonolammps
-from apex.utils import get_task_type, get_flow_type
+from apex.utils import judge_flow
 from apex.config import Config
 from apex.flow import FlowFactory
-
-
-def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
-    # identify type of flow and input parameter file
-    num_args = len(parameter)
-    if num_args == 1:
-        task, run_op = get_task_type(loadfn(parameter[0]))
-        flow = get_flow_type(loadfn(parameter[0]))
-        task_type = task
-        if flow == 'relax':
-            flow_type = 'relax'
-            if specify in ['props', 'joint']:
-                raise RuntimeError(
-                    'relaxation json file argument provided! Please check your jason file.'
-                )
-            relax_param = parameter[0]
-            props_param = None
-        elif flow == 'props':
-            if specify in ['relax', 'joint']:
-                raise RuntimeError(
-                    'property test json file argument provided! Please check your jason file.'
-                )
-            flow_type = 'props'
-            relax_param = None
-            props_param = parameter[0]
-        else:
-            if specify == 'relax':
-                flow_type = 'relax'
-            elif specify == 'props':
-                flow_type = 'props'
-            else:
-                flow_type = 'joint'
-            relax_param = parameter[0]
-            props_param = parameter[0]
-
-    elif num_args == 2:
-        task1, run_op1 = get_task_type(loadfn(parameter[0]))
-        flow1 = get_flow_type(loadfn(parameter[0]))
-        task2, run_op2 = get_task_type(loadfn(parameter[1]))
-        flow2 = get_flow_type(loadfn(parameter[1]))
-        if not flow1 == flow2:
-            if specify == 'relax':
-                flow_type = 'relax'
-            elif specify == 'props':
-                flow_type = 'props'
-            else:
-                flow_type = 'joint'
-            if flow1 == 'relax' and flow2 == 'props':
-                relax_param = parameter[0]
-                props_param = parameter[1]
-            elif flow1 == 'props' and flow2 == 'relax':
-                relax_param = parameter[1]
-                props_param = parameter[0]
-            else:
-                raise RuntimeError(
-                    'confusion of jason arguments provided: '
-                    'joint type of jason conflicts with the other json argument'
-                )
-        else:
-            raise RuntimeError('Same type of input json files')
-        if task1 == task2:
-            task_type = task1
-            run_op = run_op1
-        else:
-            raise RuntimeError('interaction types given are not matched')
-    else:
-        raise ValueError('A maximum of two input arguments is allowed')
-
-    return run_op, task_type, flow_type, relax_param, props_param
 
 
 def submit(
@@ -120,7 +51,7 @@ def submit_workflow(
         parameter,
         config_file,
         work_dir,
-        flow_type,
+        user_flow_type,
         is_debug=False,
         labels=None
 ):
@@ -145,7 +76,7 @@ def submit_workflow(
 
     # judge basic flow info from user indicated parameter files
     (run_op, calculator, flow_type,
-     relax_param, props_param) = judge_flow(parameter, flow_type)
+     relax_param, props_param) = judge_flow(parameter, user_flow_type)
     print(f'Running APEX calculation via {calculator}')
     print(f'Submitting {flow_type} workflow...')
     make_image = wf_config.basic_config_dict["apex_image_name"]
@@ -159,6 +90,8 @@ def submit_workflow(
     group_size = wf_config.basic_config_dict["group_size"]
     pool_size = wf_config.basic_config_dict["pool_size"]
     executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
+
+    # upload necessary python dependencies
     upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
     upload_python_packages.extend(list(apex.__path__))
     upload_python_packages.extend(list(fpop.__path__))
@@ -182,6 +115,7 @@ def submit_workflow(
     for ii in work_dir:
         glob_list = glob.glob(os.path.abspath(ii))
         work_dir_list.extend(glob_list)
+        work_dir_list.sort()
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
         pool = Pool(processes=n_processes)

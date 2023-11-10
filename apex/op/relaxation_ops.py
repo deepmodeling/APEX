@@ -9,7 +9,7 @@ from dflow.python import (
     upload_packages
 )
 
-from apex.op.utils import recursive_search
+from apex.utils import recursive_search
 
 upload_packages.append(__file__)
 

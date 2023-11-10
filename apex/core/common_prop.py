@@ -13,7 +13,7 @@ from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
-from apex.utils import sepline, get_task_type
+from apex.utils import sepline, get_task_type, handle_prop_suffix
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -55,20 +55,9 @@ def make_property(confs, inter_param, property_list):
     for ii in conf_dirs:
         sepline(ch=ii, screen=True)
         for jj in property_list:
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                do_refine = True
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                do_refine = False
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                do_refine = False
-                suffix = str(jj['suffix'])
-            else:
-                do_refine = False
-                suffix = "00"
             # generate working directory like mp-xxx/eos_00 if jj['type'] == 'eos'
             # handel the exception that the working directory exists
             # ...

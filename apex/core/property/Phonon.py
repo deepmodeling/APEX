@@ -312,6 +312,8 @@ class Phonon(Property):
                     os.makedirs(task_path, exist_ok=True)
                     os.chdir(task_path)
                     task_list.append(task_path)
+                    if os.path.isfile(POSCAR) or os.path.islink(POSCAR):
+                        os.remove(POSCAR)
                     os.symlink(os.path.join(path_to_work, "POSCAR-unitcell"), POSCAR)
 
                     with open("band.conf", "a") as fp:
