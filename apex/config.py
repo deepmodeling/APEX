@@ -57,18 +57,15 @@ class Config:
     group_size: int = None
     pool_size: int = None
     upload_python_packages: list = field(default_factory=list)
-    # lammps
     lammps_image_name: str = None
     lammps_run_command: str = None
-    # vasp
     vasp_image_name: str = None
     vasp_run_command: str = None
-    # abacus
     abacus_image_name: str = None
     abacus_run_command: str = None
-
     is_bohrium_dflow: bool = False
     database_type: str = 'mongodb'
+    archive_method: str = 'sync'
 
     # MongoDB config
     mongodb_config: dict = None

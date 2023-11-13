@@ -55,6 +55,7 @@ def submit_workflow(
         is_debug=False,
         labels=None
 ):
+    print('-------Submit Workflow Mode-------')
     try:
         config_dict = loadfn(config_file)
     except FileNotFoundError:

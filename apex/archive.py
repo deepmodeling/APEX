@@ -11,7 +11,7 @@ from apex.utils import (
     update_dict,
     return_prop_list
 )
-from apex.plugins.MongoDB import MongoDBPlugin
+from apex.database.MongoDB import MongoDBPlugin
 from apex.config import Config
 
 
@@ -33,6 +33,7 @@ class ResultArchive:
 
     @json2dict
     def sync_relax(self, relax_param: dict):
+        # sync results from relaxation task
         confs = relax_param["structures"]
         interaction = relax_param["interaction"]
         conf_dirs = []
@@ -63,6 +64,7 @@ class ResultArchive:
 
     @json2dict
     def sync_props(self, props_param: dict):
+        # sync results from property test
         confs = props_param["structures"]
         interaction = props_param["interaction"]
         properties = props_param["properties"]
@@ -87,6 +89,7 @@ class ResultArchive:
 
 
 def archive(relax_param, props_param, config, work_dir, flow_type):
+    print(f'Start archive results from {work_dir}')
     store = ResultArchive(work_dir)
     if relax_param and flow_type != 'props':
         store.sync_relax(relax_param)
@@ -105,10 +108,16 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
             host=config.mongodb_config_dict["host"],
             port=config.mongodb_config_dict["port"],
         )
-        mongo.sync(data_dict, data_id)
+        if config.archive_method == 'sync':
+            mongo.sync(data_dict, data_id)
+        elif config.archive_method == 'record':
+            mongo.record(data_dict, data_id)
+        else:
+            raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
 
 
 def archive_result(parameter, config_file, work_dir, user_flow_type):
+    print('-------Archive result Mode-------')
     try:
         config_dict = loadfn(config_file)
     except FileNotFoundError:
@@ -118,4 +127,11 @@ def archive_result(parameter, config_file, work_dir, user_flow_type):
         )
     config = Config(**config_dict)
     _, _, flow_type, relax_param, props_param = judge_flow(parameter, user_flow_type)
-    archive(relax_param, props_param, config, work_dir, flow_type)
+
+    work_dir_list = []
+    for ii in work_dir:
+        glob_list = glob.glob(os.path.abspath(ii))
+        work_dir_list.extend(glob_list)
+        work_dir_list.sort()
+    for ii in work_dir_list:
+        archive(relax_param, props_param, config, ii, flow_type)

@@ -14,6 +14,7 @@ MaxLength = 70
 
 
 def recursive_search(directories, path='.'):
+    """recursive search target directory"""
     # list all directions
     items = os.listdir(path)
     directories_in_path = [
@@ -127,7 +128,7 @@ def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
         flow1 = get_flow_type(loadfn(parameter[0]))
         task2, run_op2 = get_task_type(loadfn(parameter[1]))
         flow2 = get_flow_type(loadfn(parameter[1]))
-        if not flow1 == flow2:
+        if flow1 != flow2:
             if specify == 'relax':
                 flow_type = 'relax'
             elif specify == 'props':
