@@ -163,6 +163,7 @@ class FlowFactory:
             artifacts_key='retrieve_path',
             work_dir=work_dir
         )
+        return wf.id
 
     @json2dict
     def submit_props(
@@ -183,6 +184,7 @@ class FlowFactory:
             artifacts_key='retrieve_path',
             work_dir=work_dir
         )
+        return wf.id
 
     @json2dict
     def submit_joint(
@@ -209,4 +211,5 @@ class FlowFactory:
             artifacts_key='retrieve_path',
             work_dir=work_dir
         )
+        return wf.id
 

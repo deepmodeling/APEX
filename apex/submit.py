@@ -1,15 +1,20 @@
 import glob
 import os.path
 import tempfile
-from typing import Type
+import logging
 from multiprocessing import Pool
+
+import apex
+import dpdata
+import fpop
+import phonolammps
 from dflow import config, s3_config
-from dflow.python import OP
 from monty.serialization import loadfn
-import fpop, dpdata, apex, phonolammps
-from apex.utils import judge_flow
+
+from apex.archive import archive
 from apex.config import Config
 from apex.flow import FlowFactory
+from apex.utils import judge_flow
 
 
 def submit(
@@ -18,33 +23,46 @@ def submit(
         work_dir,
         relax_param,
         props_param,
+        wf_config,
         conf=config,
         s3_conf=s3_config,
+        do_archive=False,
+        is_sub=False,
         labels=None,
 ):
-    # reset dflow global config for sub-processes
-    config.update(conf)
-    s3_config.update(s3_conf)
+    if is_sub:
+        # reset dflow global config for sub-processes
+        print(f'Sub-process working on: {work_dir}')
+        config.update(conf)
+        s3_config.update(s3_conf)
+        logging.basicConfig(level=logging.INFO)
+    else:
+        print(f'Working on: {work_dir}')
 
+    flow_id = None
     if flow_type == 'relax':
-        flow.submit_relax(
+        flow_id = flow.submit_relax(
             work_dir=work_dir,
             relax_parameter=relax_param,
             labels=labels
         )
     elif flow_type == 'props':
-        flow.submit_props(
+        flow_id = flow.submit_props(
             work_dir=work_dir,
             props_parameter=props_param,
             labels=labels
         )
     elif flow_type == 'joint':
-        flow.submit_joint(
+        flow_id = flow.submit_joint(
             work_dir=work_dir,
             props_parameter=props_param,
             relax_parameter=relax_param,
             labels=labels
         )
+
+    if do_archive:
+        print(f'Archiving results of workflow (ID: {flow_id}) to database...')
+        archive(relax_param, props_param, wf_config, work_dir, flow_type)
 
 
 def submit_workflow(
@@ -52,6 +70,7 @@ def submit_workflow(
         config_file,
         work_dir,
         user_flow_type,
+        do_archive=False,
         is_debug=False,
         labels=None
 ):
@@ -119,17 +138,36 @@ def submit_workflow(
         work_dir_list.sort()
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
+        print(f'Submitting via {n_processes} processes...')
         pool = Pool(processes=n_processes)
-        print(f'submitting via {n_processes} processes...')
         for ii in work_dir_list:
             res = pool.apply_async(
                 submit,
-                (flow, flow_type, ii, relax_param, props_param, config, s3_config, labels)
+                (flow,
+                 flow_type,
+                 ii,
+                 relax_param,
+                 props_param,
+                 wf_config,
+                 config,
+                 s3_config,
+                 do_archive,
+                 True,
+                 labels)
             )
         pool.close()
         pool.join()
     elif len(work_dir_list) == 1:
-        submit(flow, flow_type, work_dir_list[0], relax_param, props_param, labels=labels)
+        submit(
+            flow,
+            flow_type,
+            work_dir_list[0],
+            relax_param,
+            props_param,
+            wf_config,
+            do_archive=do_archive,
+            labels=labels,
+        )
     else:
         raise RuntimeError('Empty work directory indicated, please check your argument')
 

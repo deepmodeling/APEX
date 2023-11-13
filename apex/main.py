@@ -41,18 +41,21 @@ def parse_args():
         default='./global.json',
         help="The json file to config workflow",
     )
-
     parser_submit.add_argument(
         "-w", "--work",
         type=str, nargs='+',
         default='.',
         help="(Optional) Working directory to be submitted",
     )
-
     parser_submit.add_argument(
         "-d", "--debug",
         action="store_true",
         help="(Optional) Run APEX workflow via local debug mode"
+    )
+    parser_submit.add_argument(
+        "-a", "--archive",
+        action="store_true",
+        help="(Optional) archive results to database automatically after completion of workflow"
     )
     parser_submit.add_argument(
         '-f', "--flow",
@@ -135,6 +138,7 @@ def main():
             config_file=args.config,
             work_dir=args.work,
             user_flow_type=args.flow,
+            do_archive=args.archive,
             is_debug=args.debug
         )
     elif args.cmd == 'test':

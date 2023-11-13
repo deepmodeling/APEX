@@ -193,5 +193,6 @@ def json2dict(function):
                     kwargs[k] = loadfn(v)
                 except Exception:
                     pass
-        function(*tuple(args), **kwargs)
+        result = function(*tuple(args), **kwargs)
+        return result
     return wrapper

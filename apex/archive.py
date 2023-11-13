@@ -89,7 +89,7 @@ class ResultArchive:
 
 
 def archive(relax_param, props_param, config, work_dir, flow_type):
-    print(f'Start archive results from {work_dir}')
+    print(f'Archive {work_dir}')
     store = ResultArchive(work_dir)
     if relax_param and flow_type != 'props':
         store.sync_relax(relax_param)
