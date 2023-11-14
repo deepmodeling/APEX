@@ -66,6 +66,7 @@ class Config:
     is_bohrium_dflow: bool = False
     database_type: str = 'mongodb'
     archive_method: str = 'sync'
+    archive_key: str = None
 
     # MongoDB config
     mongodb_config: dict = None

@@ -94,17 +94,23 @@ class ResultArchive:
 
 def archive(relax_param, props_param, config, work_dir, flow_type):
     print(f'Archive {work_dir}')
+    # extract results json
     store = ResultArchive(work_dir)
     if relax_param and flow_type != 'props':
         store.sync_relax(relax_param)
     if props_param and flow_type != 'relax':
         store.sync_props(props_param)
 
-    if config.database_type == 'mongodb':
+    # define archive key
+    if config.archive_key:
+        data_id = config.archive_key
+    else:
         data_id = str(store.work_dir_path)
-        data_json_str = json.dumps(store.result_data, cls=MontyEncoder, indent=4)
-        data_dict = json.loads(data_json_str)
-        data_dict['_id'] = data_id
+    data_json_str = json.dumps(store.result_data, cls=MontyEncoder, indent=4)
+    data_dict = json.loads(data_json_str)
+    data_dict['_id'] = data_id
+
+    if config.database_type == 'mongodb':
         mongo = MongoDBPlugin(
             name=data_id,
             database_name=config.mongodb_config_dict["database"],

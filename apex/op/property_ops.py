@@ -8,8 +8,9 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-
+from monty.serialization import dumpfn
 from apex.utils import handle_prop_suffix, recursive_search
+from apex.core.lib.utils import create_path
 
 upload_packages.append(__file__)
 
@@ -19,7 +20,6 @@ class DistributeProps(OP):
     OP class for distribution
     of individual property test steps
     """
-    # TODO: add API for complex property test superOP
     def __init__(self):
         pass
 
@@ -70,7 +70,10 @@ class DistributeProps(OP):
                 if not suffix:
                     continue
                 property_type = jj["type"]
-                path_to_prop_list.append(os.path.join(ii, property_type + "_" + suffix))
+                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                path_to_prop_list.append(path_to_prop)
+                if os.path.exists(path_to_prop):
+                    shutil.rmtree(path_to_prop)
                 prop_param_list.append(jj)
                 do_refine_list.append(do_refine)
                 flow_id_list.append(ii + '-' + property_type + '-' + suffix)
@@ -134,14 +137,22 @@ class PropsMake(OP):
         cwd = Path.cwd()
         os.chdir(input_work_path)
         abs_path_to_prop = input_work_path / path_to_prop
+        if os.path.exists(abs_path_to_prop):
+            shutil.rmtree(abs_path_to_prop)
+        create_path(str(abs_path_to_prop))
         conf_path = abs_path_to_prop.parent
         prop_name = abs_path_to_prop.name
         path_to_equi = conf_path / "relaxation" / "relax_task"
-        prop = make_property_instance(prop_param, inter_param)
+
+        inter_param_prop = inter_param
+        if "cal_setting" in prop_param and "overwrite_interaction" in prop_param["cal_setting"]:
+            inter_param_prop = prop_param["cal_setting"]["overwrite_interaction"]
+
+        prop = make_property_instance(prop_param, inter_param_prop)
         task_list = prop.make_confs(abs_path_to_prop, path_to_equi, do_refine)
         for kk in task_list:
             poscar = os.path.join(kk, "POSCAR")
-            inter = make_calculator(inter_param, poscar)
+            inter = make_calculator(inter_param_prop, poscar)
             inter.make_potential_files(kk)
             logging.debug(prop.task_type())  ### debug
             inter.make_input_file(kk, prop.task_type(), prop.task_param())
@@ -235,8 +246,11 @@ class PropsPost(OP):
             inter_param = prop_param["cal_setting"]["overwrite_interaction"]
 
         abs_path_to_prop = Path.cwd() / path_to_prop
-
         prop = make_property_instance(prop_param, inter_param)
+        param_json = os.path.join(abs_path_to_prop, "param.json")
+        param_dict = prop.parameter
+        param_dict.pop("skip")
+        dumpfn(param_dict, param_json)
         prop.compute(
             os.path.join(abs_path_to_prop, "result.json"),
             os.path.join(abs_path_to_prop, "result.out"),
@@ -263,7 +277,6 @@ class CollectProps(OP):
     """
     OP class for collect property tasks
     """
-
     def __init__(self):
         pass
 
