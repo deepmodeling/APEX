@@ -2,6 +2,7 @@
 import os
 from typing import Type
 from monty.serialization import loadfn
+from decimal import Decimal
 from dflow.python import OP
 from dflow.python import upload_packages
 from fpop.vasp import RunVasp
@@ -175,6 +176,17 @@ def update_dict(d_base: dict, d_new: dict, depth=10000) -> None:
             update_dict(d_base[k], v, depth)
         else:
             d_base[k] = v
+
+
+def convert_floats_to_decimals(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_floats_to_decimals(x) for x in obj]
+    else:
+        return obj
 
 
 def json2dict(function):

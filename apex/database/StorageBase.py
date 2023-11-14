@@ -1,4 +1,4 @@
-class StoragePluginBase:
+class StorageBase:
     def __init__(self, name):
         self.name = name
 

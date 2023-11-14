@@ -11,7 +11,8 @@ from apex.utils import (
     update_dict,
     return_prop_list
 )
-from apex.database.MongoDB import MongoDBPlugin
+from apex.database.MongoDB import MongoDB
+from apex.database.DynamoDB import DynamoDB
 from apex.config import Config
 
 
@@ -111,17 +112,28 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
     data_dict['_id'] = data_id
 
     if config.database_type == 'mongodb':
-        mongo = MongoDBPlugin(
+        mongo = MongoDB(
             name=data_id,
-            database_name=config.mongodb_config_dict["database"],
-            collection_name=config.mongodb_config_dict["collection"],
-            host=config.mongodb_config_dict["host"],
-            port=config.mongodb_config_dict["port"],
+            database_name=config.mongodb_database,
+            collection_name=config.mongodb_collection,
+            **config.mongodb_config_dict
         )
         if config.archive_method == 'sync':
             mongo.sync(data_dict, data_id, depth=2)
         elif config.archive_method == 'record':
             mongo.record(data_dict, data_id)
+        else:
+            raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
+    elif config.database_type == 'dynamodb':
+        dynamo = DynamoDB(
+            name=data_id,
+            table_name=config.dynamodb_table_name,
+            **config.dynamodb_config_dict
+        )
+        if config.archive_method == 'sync':
+            dynamo.sync(data_dict, data_id, depth=2)
+        elif config.archive_method == 'record':
+            dynamo.record(data_dict, data_id)
         else:
             raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
 
@@ -145,3 +157,5 @@ def archive_result(parameter, config_file, work_dir, user_flow_type):
         work_dir_list.sort()
     for ii in work_dir_list:
         archive(relax_param, props_param, config, ii, flow_type)
+
+    print('Complete!')

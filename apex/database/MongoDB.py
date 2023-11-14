@@ -2,21 +2,20 @@ import logging
 import datetime
 from pymongo import MongoClient
 from bson.json_util import dumps, loads
-from apex.database.StoragePluginBase import StoragePluginBase
+from apex.database.StorageBase import StorageBase
 from apex.utils import update_dict
 
 
-class MongoDBPlugin(StoragePluginBase):
+class MongoDB(StorageBase):
     def __init__(
         self,
         name: str,
         database_name: str,
         collection_name: str,
-        host: str = 'localhost',
-        port: int = 27017
+        **kwargs
     ):
         super().__init__(name)
-        self.client = MongoClient(host, port)
+        self.client = MongoClient(**kwargs)
         self.db = self.client[database_name]
         self.collection = self.db[collection_name]
 

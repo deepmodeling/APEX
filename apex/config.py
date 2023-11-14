@@ -64,16 +64,21 @@ class Config:
     abacus_image_name: str = None
     abacus_run_command: str = None
     is_bohrium_dflow: bool = False
-    database_type: str = 'mongodb'
+    database_type: str = None
     archive_method: str = 'sync'
     archive_key: str = None
 
     # MongoDB config
     mongodb_config: dict = None
-    mongo_database: str = "APEX"
-    mongo_collection: str = "default_collection"
-    mongo_host: str = "localhost"
-    mongo_port: int = 27017
+    mongodb_host: str = "localhost"
+    mongodb_port: int = 27017
+
+    mongodb_database: str = "apex_results"
+    mongodb_collection: str = "default_collection"
+
+    # DynamoDB config
+    dynamodb_config: dict = None
+    dynamodb_table_name: str = "apex_results"
 
     def __post_init__(self):
         # judge if running dflow on the Bohrium
@@ -213,14 +218,19 @@ class Config:
     @property
     def mongodb_config_dict(self):
         mongodb_config = {
-            "database": self.mongo_database,
-            "collection": self.mongo_collection,
-            "host": self.mongo_host,
-            "port": self.mongo_port
+            "host": self.mongodb_host,
+            "port": self.mongodb_port
         }
         if self.mongodb_config:
             update_dict(mongodb_config, self.mongodb_config)
         return mongodb_config
+
+    @property
+    def dynamodb_config_dict(self):
+        dynamodb_config = {}
+        if self.mongodb_config:
+            update_dict(dynamodb_config, self.dynamodb_config)
+        return dynamodb_config
 
     @property
     def basic_config_dict(self):
