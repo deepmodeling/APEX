@@ -63,6 +63,8 @@ def submit(
     if do_archive:
         print(f'Archiving results of workflow (ID: {flow_id}) to database...')
         archive(relax_param, props_param, wf_config, work_dir, flow_type)
+    else:
+        logging.info(msg='skip results archiving process')
 
 
 def submit_workflow(

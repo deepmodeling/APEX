@@ -37,9 +37,14 @@ class Gamma(Property):
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
                 self.plane_miller = parameter.get("plane_miller", None)
-                self.slip_direction = parameter.get("slip_direction", None)
-                self.slip_length = parameter.get("slip_length", None)
-                self.plane_shift = parameter.get("plane_shift", 0)
+                parameter["plane_miller"] = parameter.get("plane_miller", None)
+                self.plane_miller = parameter["plane_miller"]
+                parameter["slip_direction"] = parameter.get("slip_direction", None)
+                self.slip_direction = parameter["slip_direction"]
+                parameter["slip_length"] = parameter.get("slip_length", None)
+                self.slip_length = parameter["slip_length"]
+                parameter["plane_shift"] = parameter.get("plane_shift", 0)
+                self.plane_shift = parameter["plane_shift"]
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
@@ -467,7 +472,7 @@ class Gamma(Property):
     def __stru_fix(self, stru) -> None:
         fix_dict = {"true": True, "false": False}
         fix_xyz = [fix_dict[i] for i in self.addfix]
-        abacus.stru_fix_atom(stru, fix_atom=fix_xyz)
+        abacus_utils.stru_fix_atom(stru, fix_atom=fix_xyz)
 
     def __inLammpes_fix(self, inLammps) -> None:
         # add position fix condition of x and y of in.lammps

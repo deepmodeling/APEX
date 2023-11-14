@@ -77,6 +77,7 @@ class ResultArchive:
             for jj in prop_list:
                 prop_dir = os.path.join(ii, jj)
                 result = os.path.join(prop_dir, 'result.json')
+                param = os.path.join(prop_dir, 'param.json')
                 if not os.path.isfile(result):
                     logging.warning(
                         f"Property task is not complete, will skip result extraction from {prop_dir}"
@@ -84,7 +85,10 @@ class ResultArchive:
                     continue
                 logging.info(msg=f"extracting results from {prop_dir}")
                 conf_key = os.path.relpath(ii, self.work_dir)
-                new_dict = {conf_key: {jj: loadfn(result)}}
+                result_dict = loadfn(result)
+                param_dict = loadfn(param)
+                prop_dict = {"parameter": param_dict, "result": result_dict}
+                new_dict = {conf_key: {jj: prop_dict}}
                 update_dict(self.result_dict, new_dict)
 
 
@@ -109,7 +113,7 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
             port=config.mongodb_config_dict["port"],
         )
         if config.archive_method == 'sync':
-            mongo.sync(data_dict, data_id)
+            mongo.sync(data_dict, data_id, depth=2)
         elif config.archive_method == 'record':
             mongo.record(data_dict, data_id)
         else:

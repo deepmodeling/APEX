@@ -2,7 +2,7 @@ class StoragePluginBase:
     def __init__(self, name):
         self.name = name
 
-    def sync(self, data: dict, id_field: str):
+    def sync(self, data: dict, id_field: str, depth: int):
         raise NotImplementedError
 
     def record(self, data: dict, id_field: str):

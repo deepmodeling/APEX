@@ -166,14 +166,15 @@ def sepline(ch="-", sp="-", screen=False):
     ch.center(MaxLength, sp)
 
 
-def update_dict(d1: dict, d2: dict) -> None:
-    if d2 is None:
+def update_dict(d_base: dict, d_new: dict, depth=10000) -> None:
+    depth -= 1
+    if d_new is None:
         return None
-    for k, v in d2.items():
-        if isinstance(v, dict) and k in d1 and isinstance(d1[k], dict):
-            update_dict(d1[k], v)
+    for k, v in d_new.items():
+        if isinstance(v, dict) and k in d_base and isinstance(d_base[k], dict) and depth >= 0:
+            update_dict(d_base[k], v, depth)
         else:
-            d1[k] = v
+            d_base[k] = v
 
 
 def json2dict(function):

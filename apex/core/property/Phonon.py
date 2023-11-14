@@ -26,14 +26,22 @@ class Phonon(Property):
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                self.primitive = parameter.get('primitive', False)
-                self.approach = parameter.get('approach', 'linear')
-                self.supercell_size = parameter.get('supercell_size', [2, 2, 2])
-                self.MESH = parameter.get('MESH', None)
-                self.PRIMITIVE_AXES = parameter.get('PRIMITIVE_AXES', None)
-                self.BAND = parameter.get('BAND', None)
-                self.BAND_POINTS = parameter.get('BAND_POINTS', None)
-                self.BAND_CONNECTION = parameter.get('BAND_CONNECTION', True)
+                parameter["primitive"] = parameter.get('primitive', False)
+                self.primitive = parameter["primitive"]
+                parameter["approach"] = parameter.get('approach', 'linear')
+                self.approach = parameter["approach"]
+                parameter["supercell_size"] = parameter.get('supercell_size', [2, 2, 2])
+                self.supercell_size = parameter["supercell_size"]
+                parameter["MESH"] = parameter.get('MESH', None)
+                self.MESH = parameter["MESH"]
+                parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', None)
+                self.PRIMITIVE_AXES = parameter["PRIMITIVE_AXES"]
+                parameter["BAND"] = parameter.get('BAND', None)
+                self.BAND = parameter["BAND"]
+                parameter["BAND_POINTS"] = parameter.get('BAND_POINTS', None)
+                self.BAND_POINTS = parameter["BAND_POINTS"]
+                parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
+                self.BAND_CONNECTION = parameter["BAND_CONNECTION"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
