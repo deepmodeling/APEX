@@ -1,4 +1,4 @@
-import os, glob, pathlib, shutil, subprocess
+import os, glob, pathlib, shutil, subprocess, logging
 from pathlib import Path
 from typing import List
 from dflow.python import (
@@ -8,13 +8,9 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-try:
-    from monty.serialization import loadfn
-    from apex.utils import return_prop_list
-    from apex.core.common_prop import make_property_instance
-    from .utils import recursive_search
-except:
-    pass
+from monty.serialization import dumpfn
+from apex.utils import handle_prop_suffix, recursive_search
+from apex.core.lib.utils import create_path
 
 upload_packages.append(__file__)
 
@@ -24,7 +20,6 @@ class DistributeProps(OP):
     OP class for distribution
     of individual property test steps
     """
-    # TODO: add API for complex property test superOP
     def __init__(self):
         pass
 
@@ -71,23 +66,14 @@ class DistributeProps(OP):
         conf_dirs.sort()
         for ii in conf_dirs:
             for jj in properties:
-                if jj.get('skip', False):
+                do_refine, suffix = handle_prop_suffix(jj)
+                if not suffix:
                     continue
-                if 'init_from_suffix' and 'output_suffix' in jj:
-                    do_refine = True
-                    suffix = jj['output_suffix']
-                elif 'reproduce' in jj and jj['reproduce']:
-                    do_refine = False
-                    suffix = 'reprod'
-                elif 'suffix' in jj and jj['suffix']:
-                    do_refine = False
-                    suffix = str(jj['suffix'])
-                else:
-                    do_refine = False
-                    suffix = '00'
-
                 property_type = jj["type"]
-                path_to_prop_list.append(os.path.join(ii, property_type + "_" + suffix))
+                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                path_to_prop_list.append(path_to_prop)
+                if os.path.exists(path_to_prop):
+                    shutil.rmtree(path_to_prop)
                 prop_param_list.append(jj)
                 do_refine_list.append(do_refine)
                 flow_id_list.append(ii + '-' + property_type + '-' + suffix)
@@ -139,8 +125,8 @@ class PropsMake(OP):
             self,
             op_in: OPIO,
     ) -> OPIO:
-        from apex.core.common_prop import make_property_instance
-        from apex.core.calculator.calculator import make_calculator
+        from ..core.common_prop import make_property_instance
+        from ..core.calculator.calculator import make_calculator
 
         input_work_path = op_in["input_work_path"]
         path_to_prop = op_in["path_to_prop"]
@@ -151,16 +137,24 @@ class PropsMake(OP):
         cwd = Path.cwd()
         os.chdir(input_work_path)
         abs_path_to_prop = input_work_path / path_to_prop
+        if os.path.exists(abs_path_to_prop):
+            shutil.rmtree(abs_path_to_prop)
+        create_path(str(abs_path_to_prop))
         conf_path = abs_path_to_prop.parent
         prop_name = abs_path_to_prop.name
         path_to_equi = conf_path / "relaxation" / "relax_task"
-        prop = make_property_instance(prop_param, inter_param)
+
+        inter_param_prop = inter_param
+        if "cal_setting" in prop_param and "overwrite_interaction" in prop_param["cal_setting"]:
+            inter_param_prop = prop_param["cal_setting"]["overwrite_interaction"]
+
+        prop = make_property_instance(prop_param, inter_param_prop)
         task_list = prop.make_confs(abs_path_to_prop, path_to_equi, do_refine)
         for kk in task_list:
             poscar = os.path.join(kk, "POSCAR")
-            inter = make_calculator(inter_param, poscar)
+            inter = make_calculator(inter_param_prop, poscar)
             inter.make_potential_files(kk)
-            # dlog.debug(prop.task_type())  ### debug
+            logging.debug(prop.task_type())  ### debug
             inter.make_input_file(kk, prop.task_type(), prop.task_param())
         prop.post_process(
             task_list
@@ -169,6 +163,7 @@ class PropsMake(OP):
         task_list.sort()
         os.chdir(input_work_path)
         task_list_str = glob.glob(path_to_prop + '/' + 'task.*')
+        task_list_str.sort()
 
         all_jobs = task_list
         njobs = len(all_jobs)
@@ -213,7 +208,7 @@ class PropsPost(OP):
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
-        from apex.core.common_prop import make_property_instance
+        from ..core.common_prop import make_property_instance
         cwd = os.getcwd()
         input_post = op_in["input_post"]
         input_all = op_in["input_all"]
@@ -251,8 +246,11 @@ class PropsPost(OP):
             inter_param = prop_param["cal_setting"]["overwrite_interaction"]
 
         abs_path_to_prop = Path.cwd() / path_to_prop
-
         prop = make_property_instance(prop_param, inter_param)
+        param_json = os.path.join(abs_path_to_prop, "param.json")
+        param_dict = prop.parameter
+        param_dict.pop("skip")
+        dumpfn(param_dict, param_json)
         prop.compute(
             os.path.join(abs_path_to_prop, "result.json"),
             os.path.join(abs_path_to_prop, "result.out"),
@@ -279,7 +277,6 @@ class CollectProps(OP):
     """
     OP class for collect property tasks
     """
-
     def __init__(self):
         pass
 

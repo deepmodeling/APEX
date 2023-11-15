@@ -6,7 +6,6 @@ from typing import (
     Union,
     List
 )
-from monty.serialization import loadfn
 import dflow
 from dflow import (
     Step,
@@ -20,22 +19,13 @@ from apex.superop.RelaxationFlow import RelaxationFlow
 from apex.superop.PropertyFlow import PropertyFlow
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
+from apex.utils import json2dict
+
+from dflow.python import upload_packages
+upload_packages.append(__file__)
 
 
-def json2dict(function):
-    def wrapper(*args, **kwargs):
-        # check input parameter and try to convert to dict if is json file
-        for k, v in kwargs.items():
-            if isinstance(v, os.PathLike) or isinstance(v, str):
-                try:
-                    kwargs[k] = loadfn(v)
-                except Exception:
-                    pass
-        function(*args, **kwargs)
-    return wrapper
-
-
-class FlowFactory:
+class FlowGenerator:
     def __init__(
         self,
         make_image: str,
@@ -173,6 +163,7 @@ class FlowFactory:
             artifacts_key='retrieve_path',
             work_dir=work_dir
         )
+        return wf.id
 
     @json2dict
     def submit_props(
@@ -193,6 +184,7 @@ class FlowFactory:
             artifacts_key='retrieve_path',
             work_dir=work_dir
         )
+        return wf.id
 
     @json2dict
     def submit_joint(
@@ -219,4 +211,5 @@ class FlowFactory:
             artifacts_key='retrieve_path',
             work_dir=work_dir
         )
+        return wf.id
 

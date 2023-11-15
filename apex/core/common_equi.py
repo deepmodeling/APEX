@@ -3,9 +3,8 @@ import os
 import shutil
 import logging
 from monty.serialization import dumpfn
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.lib.crys as crys
-import apex.core.lib.util as util
+from apex.core.calculator.lib import abacus_utils
+from apex.core.lib import crys
 from apex.core.calculator.calculator import make_calculator
 from apex.core.lib.utils import create_path
 from apex.core.lib.dispatcher import make_submission
@@ -67,7 +66,7 @@ def make_equi(confs, inter_param, relax_param):
                     crys.sc(ele_list[element_label]).to("POSCAR", "POSCAR")
 
             if inter_param["type"] == "abacus" and not os.path.exists("STRU"):
-                abacus.poscar2stru("POSCAR", inter_param, "STRU")
+                abacus_utils.poscar2stru("POSCAR", inter_param, "STRU")
                 os.remove("POSCAR")
 
             os.chdir(cwd)
@@ -82,7 +81,7 @@ def make_equi(confs, inter_param, relax_param):
         if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
             get_structure(crys_type).to("POSCAR", os.path.join(ii, "POSCAR"))
             if inter_param["type"] == "abacus" and not os.path.exists("STRU"):
-                abacus.poscar2stru(
+                abacus_utils.poscar2stru(
                     os.path.join(ii, "POSCAR"), inter_param, os.path.join(ii, "STRU")
                 )
                 os.remove(os.path.join(ii, "POSCAR"))
@@ -91,7 +90,7 @@ def make_equi(confs, inter_param, relax_param):
         POSCAR = "POSCAR"
         if inter_param["type"] == "abacus":
             shutil.copyfile(os.path.join(ii, "STRU"), os.path.join(ii, "STRU.bk"))
-            abacus.modify_stru_path(os.path.join(ii, "STRU"), "pp_orb/")
+            abacus_utils.modify_stru_path(os.path.join(ii, "STRU"), "pp_orb/")
             poscar = os.path.abspath(os.path.join(ii, "STRU"))
             POSCAR = "STRU"
         if not os.path.exists(poscar):

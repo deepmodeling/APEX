@@ -57,17 +57,28 @@ class Config:
     group_size: int = None
     pool_size: int = None
     upload_python_packages: list = field(default_factory=list)
-    # lammps
     lammps_image_name: str = None
     lammps_run_command: str = None
-    # vasp
     vasp_image_name: str = None
     vasp_run_command: str = None
-    # abacus
     abacus_image_name: str = None
     abacus_run_command: str = None
-
     is_bohrium_dflow: bool = False
+    database_type: str = None
+    archive_method: str = 'sync'
+    archive_key: str = None
+
+    # MongoDB config
+    mongodb_config: dict = None
+    mongodb_host: str = "localhost"
+    mongodb_port: int = 27017
+
+    mongodb_database: str = "apex_results"
+    mongodb_collection: str = "default_collection"
+
+    # DynamoDB config
+    dynamodb_config: dict = None
+    dynamodb_table_name: str = "apex_results"
 
     def __post_init__(self):
         # judge if running dflow on the Bohrium
@@ -203,6 +214,23 @@ class Config:
         if self.dispatcher_config:
             update_dict(dispatcher_config, self.dispatcher_config)
         return dispatcher_config
+
+    @property
+    def mongodb_config_dict(self):
+        mongodb_config = {
+            "host": self.mongodb_host,
+            "port": self.mongodb_port
+        }
+        if self.mongodb_config:
+            update_dict(mongodb_config, self.mongodb_config)
+        return mongodb_config
+
+    @property
+    def dynamodb_config_dict(self):
+        dynamodb_config = {}
+        if self.mongodb_config:
+            update_dict(dynamodb_config, self.dynamodb_config)
+        return dynamodb_config
 
     @property
     def basic_config_dict(self):

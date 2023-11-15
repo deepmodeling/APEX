@@ -1,6 +1,7 @@
 import glob
 import os
 from multiprocessing import Pool
+from monty.serialization import dumpfn
 
 from apex.core.calculator.calculator import make_calculator
 from apex.core.property.Elastic import Elastic
@@ -12,7 +13,8 @@ from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
-from apex.utils import sepline, get_task_type
+from apex.core.property.Phonon import Phonon
+from apex.utils import sepline, get_task_type, handle_prop_suffix
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -36,6 +38,8 @@ def make_property_instance(parameters, inter_param):
         return Surface(parameters, inter_param)
     elif prop_type == "gamma":
         return Gamma(parameters, inter_param)
+    elif prop_type == "phonon":
+        return Phonon(parameters, inter_param)
     else:
         raise RuntimeError(f"unknown dflowautotest type {prop_type}")
 
@@ -52,20 +56,9 @@ def make_property(confs, inter_param, property_list):
     for ii in conf_dirs:
         sepline(ch=ii, screen=True)
         for jj in property_list:
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                do_refine = True
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                do_refine = False
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                do_refine = False
-                suffix = str(jj['suffix'])
-            else:
-                do_refine = False
-                suffix = "00"
             # generate working directory like mp-xxx/eos_00 if jj['type'] == 'eos'
             # handel the exception that the working directory exists
             # ...
@@ -151,16 +144,9 @@ def run_property(confs, inter_param, property_list, mdata):
         for jj in property_list:
             # determine the suffix: from scratch or refine
             # ...
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                suffix = str(jj['suffix'])
-            else:
-                suffix = "00"
 
             property_type = jj["type"]
             path_to_work = os.path.abspath(
@@ -231,16 +217,9 @@ def post_property(confs, inter_param, property_list):
         for jj in property_list:
             # determine the suffix: from scratch or refine
             # ...
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                suffix = str(jj['suffix'])
-            else:
-                suffix = "00"
 
             inter_param_prop = inter_param
             if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
@@ -249,6 +228,10 @@ def post_property(confs, inter_param, property_list):
             property_type = jj["type"]
             path_to_work = os.path.join(ii, property_type + "_" + suffix)
             prop = make_property_instance(jj, inter_param_prop)
+            param_json = os.path.join(path_to_work, "param.json")
+            param_dict = prop.parameter
+            param_dict.pop("skip")
+            dumpfn(param_dict, param_json)
             prop.compute(
                 os.path.join(path_to_work, "result.json"),
                 os.path.join(path_to_work, "result.out"),

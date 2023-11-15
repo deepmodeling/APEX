@@ -11,8 +11,8 @@ from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.analysis.diffraction.tem import TEMCalculator
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.vasp as vasp
+from apex.core.calculator.lib import abacus_utils
+from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
@@ -37,9 +37,14 @@ class Gamma(Property):
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
                 self.plane_miller = parameter.get("plane_miller", None)
-                self.slip_direction = parameter.get("slip_direction", None)
-                self.slip_length = parameter.get("slip_length", None)
-                self.plane_shift = parameter.get("plane_shift", 0)
+                parameter["plane_miller"] = parameter.get("plane_miller", None)
+                self.plane_miller = parameter["plane_miller"]
+                parameter["slip_direction"] = parameter.get("slip_direction", None)
+                self.slip_direction = parameter["slip_direction"]
+                parameter["slip_length"] = parameter.get("slip_length", None)
+                self.slip_length = parameter["slip_length"]
+                parameter["plane_shift"] = parameter.get("plane_shift", 0)
+                self.plane_shift = parameter["plane_shift"]
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
@@ -180,7 +185,7 @@ class Gamma(Property):
 
             else:
                 if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus.final_stru(path_to_equi)
+                    CONTCAR = abacus_utils.final_stru(path_to_equi)
                     POSCAR = "STRU"
                 else:
                     CONTCAR = "CONTCAR"
@@ -197,11 +202,11 @@ class Gamma(Property):
                 if self.inter_param["type"] == "abacus":
                     stru = dpdata.System(equi_contcar, fmt="stru")
                     stru.to("contcar", "CONTCAR.tmp")
-                    ptypes = vasp.get_poscar_types("CONTCAR.tmp")
+                    ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
                     ss = Structure.from_file("CONTCAR.tmp")
                     os.remove("CONTCAR.tmp")
                 else:
-                    ptypes = vasp.get_poscar_types(equi_contcar)
+                    ptypes = vasp_utils.get_poscar_types(equi_contcar)
                     # read structure from relaxed CONTCAR
                     ss = Structure.from_file(equi_contcar)
 
@@ -286,10 +291,10 @@ class Gamma(Property):
                     )
                     # make confs
                     obtained_slab.to("POSCAR.tmp", "POSCAR")
-                    vasp.regulate_poscar("POSCAR.tmp", "POSCAR")
-                    vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
+                    vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
+                    vasp_utils.sort_poscar("POSCAR", "POSCAR", ptypes)
                     if self.inter_param["type"] == "abacus":
-                        abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
+                        abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
                     # vasp.perturb_xz('POSCAR', 'POSCAR', self.pert_xz)
                     # record miller
@@ -467,7 +472,7 @@ class Gamma(Property):
     def __stru_fix(self, stru) -> None:
         fix_dict = {"true": True, "false": False}
         fix_xyz = [fix_dict[i] for i in self.addfix]
-        abacus.stru_fix_atom(stru, fix_atom=fix_xyz)
+        abacus_utils.stru_fix_atom(stru, fix_atom=fix_xyz)
 
     def __inLammpes_fix(self, inLammps) -> None:
         # add position fix condition of x and y of in.lammps

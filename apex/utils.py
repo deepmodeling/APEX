@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+import os
 from typing import Type
 from monty.serialization import loadfn
+from decimal import Decimal
 from dflow.python import OP
 from dflow.python import upload_packages
 from fpop.vasp import RunVasp
@@ -12,22 +14,50 @@ upload_packages.append(__file__)
 MaxLength = 70
 
 
+def recursive_search(directories, path='.'):
+    """recursive search target directory"""
+    # list all directions
+    items = os.listdir(path)
+    directories_in_path = [
+        i for i in items if os.path.isdir(os.path.join(path, i)) and not i.startswith('.')
+    ]
+
+    # check if target work direction is found
+    if set(directories) <= set(directories_in_path):
+        return os.path.abspath(path)
+
+    # recursive search in next direction
+    if len(directories_in_path) == 1:
+        return recursive_search(directories, os.path.join(path, directories_in_path[0]))
+
+    # return False for failure
+    return False
+
+
+def handle_prop_suffix(parameter: dict):
+    if parameter.get('skip', False):
+        return None, None
+    if 'init_from_suffix' and 'output_suffix' in parameter:
+        do_refine = True
+        suffix = parameter['output_suffix']
+    elif 'reproduce' in parameter and parameter['reproduce']:
+        do_refine = False
+        suffix = 'reprod'
+    elif 'suffix' in parameter and parameter['suffix']:
+        do_refine = False
+        suffix = str(parameter['suffix'])
+    else:
+        do_refine = False
+        suffix = '00'
+    return do_refine, suffix
+
+
 def return_prop_list(parameters: list) -> list:
     prop_list = []
     for ii in parameters:
-        if ii.get('skip', False):
+        _, suffix = handle_prop_suffix(ii)
+        if not suffix:
             continue
-        if 'init_from_suffix' and 'output_suffix' in ii:
-            # do_refine = True
-            suffix = ii['output_suffix']
-        elif 'reproduce' in ii and ii['reproduce']:
-            # do_refine = False
-            suffix = 'reprod'
-        elif 'suffix' in ii and ii['suffix']:
-            suffix = str(ii['suffix'])
-        else:
-            # do_refine = False
-            suffix = '00'
         prop_list.append(ii['type'] + '_' + suffix)
     return prop_list
 
@@ -61,6 +91,75 @@ def get_task_type(d: dict) -> (str, Type[OP]):
     return task_type, run_op
 
 
+def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
+    # identify type of flow and input parameter file
+    num_args = len(parameter)
+    if num_args == 1:
+        task, run_op = get_task_type(loadfn(parameter[0]))
+        flow = get_flow_type(loadfn(parameter[0]))
+        task_type = task
+        if flow == 'relax':
+            flow_type = 'relax'
+            if specify in ['props', 'joint']:
+                raise RuntimeError(
+                    'relaxation json file argument provided! Please check your jason file.'
+                )
+            relax_param = parameter[0]
+            props_param = None
+        elif flow == 'props':
+            if specify in ['relax', 'joint']:
+                raise RuntimeError(
+                    'property test json file argument provided! Please check your jason file.'
+                )
+            flow_type = 'props'
+            relax_param = None
+            props_param = parameter[0]
+        else:
+            if specify == 'relax':
+                flow_type = 'relax'
+            elif specify == 'props':
+                flow_type = 'props'
+            else:
+                flow_type = 'joint'
+            relax_param = parameter[0]
+            props_param = parameter[0]
+
+    elif num_args == 2:
+        task1, run_op1 = get_task_type(loadfn(parameter[0]))
+        flow1 = get_flow_type(loadfn(parameter[0]))
+        task2, run_op2 = get_task_type(loadfn(parameter[1]))
+        flow2 = get_flow_type(loadfn(parameter[1]))
+        if flow1 != flow2:
+            if specify == 'relax':
+                flow_type = 'relax'
+            elif specify == 'props':
+                flow_type = 'props'
+            else:
+                flow_type = 'joint'
+            if flow1 == 'relax' and flow2 == 'props':
+                relax_param = parameter[0]
+                props_param = parameter[1]
+            elif flow1 == 'props' and flow2 == 'relax':
+                relax_param = parameter[1]
+                props_param = parameter[0]
+            else:
+                raise RuntimeError(
+                    'confusion of jason arguments provided: '
+                    'joint type of jason conflicts with the other json argument'
+                )
+        else:
+            raise RuntimeError('Same type of input json files')
+        if task1 == task2:
+            task_type = task1
+            run_op = run_op1
+        else:
+            raise RuntimeError('interaction types given are not matched')
+    else:
+        raise ValueError('A maximum of two input arguments is allowed')
+
+    return run_op, task_type, flow_type, relax_param, props_param
+
+
 def sepline(ch="-", sp="-", screen=False):
     r"""
     seperate the output by '-'
@@ -68,11 +167,45 @@ def sepline(ch="-", sp="-", screen=False):
     ch.center(MaxLength, sp)
 
 
-def update_dict(d1: dict, d2: dict) -> None:
-    if d2 is None:
+def update_dict(d_base: dict, d_new: dict, depth=9999) -> None:
+    depth -= 1
+    if d_new is None:
         return None
-    for k, v in d2.items():
-        if isinstance(v, dict) and k in d1 and isinstance(d1[k], dict):
-            update_dict(d1[k], v)
+    for k, v in d_new.items():
+        if isinstance(v, dict) and k in d_base and isinstance(d_base[k], dict) and depth >= 0:
+            update_dict(d_base[k], v, depth)
         else:
-            d1[k] = v
+            d_base[k] = v
+
+
+def convert_floats_to_decimals(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_floats_to_decimals(x) for x in obj]
+    else:
+        return obj
+
+
+def json2dict(function):
+    def wrapper(*args, **kwargs):
+        # try to convert json to dict for arguments passed as args
+        args = list(args)
+        for ii in range(len(args)):
+            if isinstance(args[ii], os.PathLike) or isinstance(args[ii], str):
+                try:
+                    args[ii] = loadfn(args[ii])
+                except Exception:
+                    pass
+        # try to convert json to dict for arguments passed as kwargs
+        for k, v in kwargs.items():
+            if isinstance(v, os.PathLike) or isinstance(v, str):
+                try:
+                    kwargs[k] = loadfn(v)
+                except Exception:
+                    pass
+        result = function(*tuple(args), **kwargs)
+        return result
+    return wrapper

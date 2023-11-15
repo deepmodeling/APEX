@@ -6,7 +6,7 @@ from apex.utils import get_flow_type, return_prop_list
 
 
 def run_step(parameter, step, machine_file=None):
-    print('-------Singel step local debug mode--------')
+    print('-------Singel Step Local Debug Mode--------')
     param_dict = loadfn(parameter[0])
     # check input args
     json_type = get_flow_type(param_dict)

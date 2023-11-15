@@ -4,9 +4,9 @@ from apex import (
     header,
     __version__,
 )
-from .run_step import run_step
-from .submit import submit_workflow
-
+from apex.run_step import run_step
+from apex.submit import submit_workflow
+from apex.archive import archive_result
 
 
 def parse_args():
@@ -41,25 +41,27 @@ def parse_args():
         default='./global.json',
         help="The json file to config workflow",
     )
-
     parser_submit.add_argument(
         "-w", "--work",
         type=str, nargs='+',
         default='.',
-        help="Working directory to be submitted",
+        help="(Optional) Working directory to be submitted",
     )
-
     parser_submit.add_argument(
         "-d", "--debug",
         action="store_true",
-        help="Run APEX workflow via local debug mode"
+        help="(Optional) Run APEX workflow via local debug mode"
+    )
+    parser_submit.add_argument(
+        "-a", "--archive",
+        action="store_true",
+        help="(Optional) archive results to database automatically after completion of workflow"
     )
     parser_submit.add_argument(
         '-f', "--flow",
         choices=['relax', 'props', 'joint'],
-        help="Specify type of workflow to submit: (relax | props | joint)"
+        help="(Optional) Specify type of workflow to submit: (relax | props | joint)"
     )
-
     ##########################################
     # Single step local test mode
     parser_test = subparsers.add_parser(
@@ -88,6 +90,33 @@ def parse_args():
         default='./global.json',
         help="The json file to config the dpdispatcher",
     )
+    ##########################################
+    # Archive results
+    parser_archive = subparsers.add_parser(
+        "archive",
+        help="Archive test results to database",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser_archive.add_argument(
+        "parameter", type=str, nargs='+',
+        help='Json files to indicate calculation parameters'
+    )
+    parser_archive.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file of global config",
+    )
+    parser_archive.add_argument(
+        "-w", "--work",
+        type=str, nargs='+',
+        default='.',
+        help="(Optional) Working directory",
+    )
+    parser_archive.add_argument(
+        '-f', "--flow",
+        choices=['relax', 'props', 'joint'],
+        help="(Optional) Specify type of workflow: (relax | props | joint)")
 
     parsed_args = parser.parse_args()
     # print help if no parser
@@ -108,15 +137,22 @@ def main():
             parameter=args.parameter,
             config_file=args.config,
             work_dir=args.work,
-            flow_type=args.flow,
+            user_flow_type=args.flow,
+            do_archive=args.archive,
             is_debug=args.debug
         )
-
     elif args.cmd == 'test':
         run_step(
             parameter=args.parameter,
             machine_file=args.machine,
             step=args.step
+        )
+    elif args.cmd == 'archive':
+        archive_result(
+            parameter=args.parameter,
+            config_file=args.config,
+            work_dir=args.work,
+            user_flow_type=args.flow
         )
     else:
         raise RuntimeError(
