@@ -167,7 +167,7 @@ def sepline(ch="-", sp="-", screen=False):
     ch.center(MaxLength, sp)
 
 
-def update_dict(d_base: dict, d_new: dict, depth=10000) -> None:
+def update_dict(d_base: dict, d_new: dict, depth=9999) -> None:
     depth -= 1
     if d_new is None:
         return None

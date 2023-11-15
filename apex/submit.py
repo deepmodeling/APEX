@@ -13,7 +13,7 @@ from monty.serialization import loadfn
 
 from apex.archive import archive
 from apex.config import Config
-from apex.flow import FlowFactory
+from apex.flow import FlowGenerator
 from apex.utils import judge_flow
 
 
@@ -120,7 +120,7 @@ def submit_workflow(
     upload_python_packages.extend(list(dpdata.__path__))
     upload_python_packages.extend(list(phonolammps.__path__))
 
-    flow = FlowFactory(
+    flow = FlowGenerator(
         make_image=make_image,
         run_image=run_image,
         post_image=post_image,

@@ -25,7 +25,7 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 
-class FlowFactory:
+class FlowGenerator:
     def __init__(
         self,
         make_image: str,

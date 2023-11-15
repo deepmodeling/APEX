@@ -8,7 +8,7 @@ from apex.database.StorageBase import StorageBase
 from apex.utils import update_dict, convert_floats_to_decimals
 
 
-class DynamoDB(StorageBase):
+class DynamoDBClient(StorageBase):
     def __init__(self, name: str, table_name: str, **kwargs):
         super().__init__(name)
         kwargs["service_name"] = 'dynamodb'
@@ -38,7 +38,7 @@ class DynamoDB(StorageBase):
                 raise  # re-raise the exception if it's not because the table doesn't exist
         self.table = self.dynamodb.Table(table_name)
 
-    def sync(self, data: dict, id_field: str, depth: int=10000):
+    def sync(self, data: dict, id_field: str, depth: int = 9999):
         """synchronize dict data to DynamoDB"""
         data = convert_floats_to_decimals(data)
         logging.info(msg=f'Synchronize data into DynamoDB {self.table}')

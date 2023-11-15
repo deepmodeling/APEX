@@ -11,12 +11,11 @@ from apex.utils import (
     update_dict,
     return_prop_list
 )
-from apex.database.MongoDB import MongoDB
-from apex.database.DynamoDB import DynamoDB
+from apex.database.DatabaseFactory import DatabaseFactory
 from apex.config import Config
 
 
-class ResultArchive:
+class ResultStorage:
     def __init__(
         self,
         work_dir
@@ -84,7 +83,7 @@ class ResultArchive:
                         f"Property task is not complete, will skip result extraction from {prop_dir}"
                     )
                     continue
-                logging.info(msg=f"extracting results from {prop_dir}")
+                logging.info(msg=f"extract results from {prop_dir}")
                 conf_key = os.path.relpath(ii, self.work_dir)
                 result_dict = loadfn(result)
                 param_dict = loadfn(param)
@@ -96,7 +95,7 @@ class ResultArchive:
 def archive(relax_param, props_param, config, work_dir, flow_type):
     print(f'Archive {work_dir}')
     # extract results json
-    store = ResultArchive(work_dir)
+    store = ResultStorage(work_dir)
     if relax_param and flow_type != 'props':
         store.sync_relax(relax_param)
     if props_param and flow_type != 'relax':
@@ -111,31 +110,30 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
     data_dict = json.loads(data_json_str)
     data_dict['_id'] = data_id
 
+    # connect to database
     if config.database_type == 'mongodb':
-        mongo = MongoDB(
-            name=data_id,
-            database_name=config.mongodb_database,
-            collection_name=config.mongodb_collection,
+        database = DatabaseFactory.create_database(
+            'mongodb',
+            data_id,
+            config.mongodb_database,
+            config.mongodb_collection,
             **config.mongodb_config_dict
         )
-        if config.archive_method == 'sync':
-            mongo.sync(data_dict, data_id, depth=2)
-        elif config.archive_method == 'record':
-            mongo.record(data_dict, data_id)
-        else:
-            raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
     elif config.database_type == 'dynamodb':
-        dynamo = DynamoDB(
-            name=data_id,
-            table_name=config.dynamodb_table_name,
+        database = DatabaseFactory.create_database(
+            'dynamodb',
+            data_id,
+            config.dynamodb_table_name,
             **config.dynamodb_config_dict
         )
-        if config.archive_method == 'sync':
-            dynamo.sync(data_dict, data_id, depth=2)
-        elif config.archive_method == 'record':
-            dynamo.record(data_dict, data_id)
-        else:
-            raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
+    else:
+        raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
+
+    # archive results
+    if config.archive_method == 'sync':
+        database.sync(data_dict, data_id, depth=2)
+    elif config.archive_method == 'record':
+        database.record(data_dict, data_id)
 
 
 def archive_result(parameter, config_file, work_dir, user_flow_type):

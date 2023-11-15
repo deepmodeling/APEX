@@ -6,7 +6,7 @@ from apex.database.StorageBase import StorageBase
 from apex.utils import update_dict
 
 
-class MongoDB(StorageBase):
+class MongoDBClient(StorageBase):
     def __init__(
         self,
         name: str,
@@ -19,7 +19,7 @@ class MongoDB(StorageBase):
         self.db = self.client[database_name]
         self.collection = self.db[collection_name]
 
-    def sync(self, data: dict, id_field: str, depth: int = 10000):
+    def sync(self, data: dict, id_field: str, depth: int = 9999):
         """synchronize dict data to MongoDB"""
         logging.info(msg=f'synchronize data into MongoDB {self.collection}')
         if self.collection.count_documents({'_id': id_field}, limit=1) != 0:
