@@ -35,7 +35,11 @@ class RunLAMMPS(OP):
     def execute(self, op_in: OPIO) -> OPIO:
         cwd = os.getcwd()
         os.chdir(op_in["input_lammps"])
-        cmd = op_in["run_command"]
+        if os.path.exists("run_command"):
+            with open("run_command", 'r') as f:
+                cmd = f.read()
+        else:
+            cmd = op_in["run_command"]
         exit_code = subprocess.call(cmd, shell=True)
         if exit_code == 0:
             print("Call Lammps command successfully!")

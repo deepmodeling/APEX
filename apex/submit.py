@@ -1,14 +1,15 @@
 import glob
+import os.path
 import tempfile
 from typing import Type
 from multiprocessing import Pool
 from dflow import config, s3_config
 from dflow.python import OP
 from monty.serialization import loadfn
-import fpop, dpdata, apex
+import fpop, dpdata, apex, phonolammps
 from apex.utils import get_task_type, get_flow_type
-from .config import Config
-from .flow import FlowFactory
+from apex.config import Config
+from apex.flow import FlowFactory
 
 
 def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
@@ -160,8 +161,9 @@ def submit_workflow(
     executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
     upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
     upload_python_packages.extend(list(apex.__path__))
-    upload_python_packages.extend(list(dpdata.__path__))
     upload_python_packages.extend(list(fpop.__path__))
+    upload_python_packages.extend(list(dpdata.__path__))
+    upload_python_packages.extend(list(phonolammps.__path__))
 
     flow = FlowFactory(
         make_image=make_image,
@@ -178,7 +180,7 @@ def submit_workflow(
     # submit the workflows
     work_dir_list = []
     for ii in work_dir:
-        glob_list = glob.glob(ii)
+        glob_list = glob.glob(os.path.abspath(ii))
         work_dir_list.extend(glob_list)
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
@@ -193,5 +195,7 @@ def submit_workflow(
         pool.join()
     elif len(work_dir_list) == 1:
         submit(flow, flow_type, work_dir_list[0], relax_param, props_param, labels=labels)
+    else:
+        raise RuntimeError('Empty work directory indicated, please check your argument')
 
     print('Completed!')
