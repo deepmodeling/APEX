@@ -274,7 +274,7 @@ Below are three examples (for detailed explanations of each parameter, please re
       <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
   </div>
 
-The Gamma line (generalized stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with slip length defined by user or default settings. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
+The Gamma line (generalized stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with slip length defined by users or default settings. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
 
 For most common slip systems in respect to FCC, BCC and HCP crystal structures, slip direction, secondary direction and default fractional slip lengths are already documented and listed below (users are **strongly advised** to follow those pre-defined slip system, or may need to double-check the generated slab structure, as unexpected results may occur especially for system like HCP):
 * FCC
@@ -321,7 +321,7 @@ The parameters related to Gamma line calculation are listed below:
   | :------------ | ----- | ----- | ------------------- |
   | plane_miller | Sequence[Int] | None | Miller index of the target slab |
   | slip_direction | Sequence[Int] | None | Miller index of slip (primary) direction of the slab |
-  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as the table shows above, or 1 if not indicated | Slip length along the primary direction with default unit set by user or default setting. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
+  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as the table shows above, or 1 if not indicated | Slip length along the primary direction with default unit set by users or default setting. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
   | plane_shift | Int\|Float | 0 | Shift of displacement plane with unit of lattice parameter **$c$** (positive for upwards). This allows creating slip plane within narrowly-spaced planes (see [ref](https://doi.org/10.1016/j.actamat.2016.10.042)). |
   | n_steps | Int | 10 | Number of steps to displace slab along the slip vector  |
   | vacuum_size | Int\|Float | 0 | Thickness of vacuum layer added around the slab with unit of Angstrom |
@@ -384,7 +384,7 @@ apex submit param_relax.json param_props.json -c ./global_bohrium.json -w 'dp_de
 if no config JSON and work directory is specified, `./global.json` and `./` will be passed as default values respectively. 
 
 #### 3.2.2. Single-Step Test
-APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex test [-h] [-m [MACHINE]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex test -h` for help). Here is a example to do relaxation in this mode:
+APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** Users can invoke them by format of `apex test [-h] [-m [MACHINE]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex test -h` for help). Here is a example to do relaxation in this mode:
 1. Firstly, generate relaxation tasks by
    ```shell
    apex test param_relax.json make_relax
@@ -476,7 +476,7 @@ apex submit param_relax.json -c global_bohrium.json
 Remember to replace `email`, `password` and `program_id` of your own before submission. As for image, you can either build your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it at https://workflows.deepmodeling.com.
 
 ### 4.2. In a Local Argo Service
-Additionally, a dflow environment can be installed in a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (user can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
+Additionally, a dflow environment can be installed in a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (users can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
 ```shell
 bash install-linux-cn.sh
 ```
