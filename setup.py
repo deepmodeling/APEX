@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="APEX",
-    version="1.0.0",
+    name="apex-flow",
+    version="1.1.1",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -19,6 +19,8 @@ setuptools.setup(
         'pymatgen-analysis-defects>=2023.8.22',
         "dpdata>=0.2.13",
         "dpdispatcher",
+        "phonoLAMMPS",
+        "phonopy",
         "matplotlib",
         "seekpath",
         "fpop>=0.0.7",

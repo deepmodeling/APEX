@@ -11,12 +11,12 @@ from pymatgen.analysis.elasticity.stress import Stress
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.vasp as vasp
-import apex.core.calculator.lib.abacus_scf as abacus_scf
-from apex.core.Property import Property
+from apex.core.calculator.lib import abacus_utils
+from apex.core.calculator.lib import vasp_utils
+from apex.core.calculator.lib import abacus_scf
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
-from apex.core.calculator.lib.vasp import incar_upper
+from apex.core.calculator.lib.vasp_utils import incar_upper
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -87,7 +87,7 @@ class Elastic(Property):
         cwd = os.getcwd()
 
         if self.inter_param["type"] == "abacus":
-            CONTCAR = abacus.final_stru(path_to_equi)
+            CONTCAR = abacus_utils.final_stru(path_to_equi)
             POSCAR = "STRU"
         else:
             CONTCAR = "CONTCAR"
@@ -153,7 +153,7 @@ class Elastic(Property):
                 raise RuntimeError("please do relaxation first")
 
             if self.inter_param["type"] == "abacus":
-                ss = abacus.stru2Structure(equi_contcar)
+                ss = abacus_utils.stru2Structure(equi_contcar)
             else:
                 ss = Structure.from_file(equi_contcar)
             dfm_ss = DeformedStructureSet(
@@ -183,7 +183,7 @@ class Elastic(Property):
                 task_list.append(output_task)
                 dfm_ss.deformed_structures[ii].to("POSCAR", "POSCAR")
                 if self.inter_param["type"] == "abacus":
-                    abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
+                    abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                     os.remove("POSCAR")
                 # record strain
                 df = Strain.from_deformation(dfm_ss.deformations[ii])
@@ -209,12 +209,12 @@ class Elastic(Property):
                 input_aba = abacus_scf.get_abacus_input_parameters("INPUT")
                 if "kspacing" in input_aba:
                     kspacing = float(input_aba["kspacing"])
-                    kpt = abacus.make_kspacing_kpt(poscar_start, kspacing)
+                    kpt = abacus_utils.make_kspacing_kpt(poscar_start, kspacing)
                     kpt += [0, 0, 0]
-                    abacus.write_kpt("KPT", kpt)
+                    abacus_utils.write_kpt("KPT", kpt)
                     del input_aba["kspacing"]
                     os.remove("INPUT")
-                    abacus.write_input("INPUT", input_aba)
+                    abacus_utils.write_input("INPUT", input_aba)
                 else:
                     os.rename(os.path.join(task_list[0], "KPT"), "./KPT")
             else:
@@ -223,7 +223,7 @@ class Elastic(Property):
                 )
                 kspacing = incar.get("KSPACING")
                 kgamma = incar.get("KGAMMA", False)
-                ret = vasp.make_kspacing_kpoints(poscar_start, kspacing, kgamma)
+                ret = vasp_utils.make_kspacing_kpoints(poscar_start, kspacing, kgamma)
                 kp = Kpoints.from_string(ret)
                 if os.path.isfile("KPOINTS"):
                     os.remove("KPOINTS")

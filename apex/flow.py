@@ -21,6 +21,9 @@ from apex.superop.PropertyFlow import PropertyFlow
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
 
+from dflow.python import upload_packages
+upload_packages.append(__file__)
+
 
 def json2dict(function):
     def wrapper(*args, **kwargs):
@@ -158,9 +161,10 @@ class FlowFactory:
     def submit_relax(
             self,
             work_dir: Union[os.PathLike, str],
-            relax_parameter: dict
+            relax_parameter: dict,
+            labels: Optional[dict] = None
     ):
-        wf = Workflow(name='relaxation')
+        wf = Workflow(name='relaxation', labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(work_dir),
             relax_parameter=relax_parameter
@@ -177,14 +181,15 @@ class FlowFactory:
     def submit_props(
             self,
             work_dir: Union[os.PathLike, str],
-            props_parameter: dict
+            props_parameter: dict,
+            labels: Optional[dict] = None
     ):
-        wf = Workflow(name='property')
-        property = self._set_props_flow(
+        wf = Workflow(name='property', labels=labels)
+        properties = self._set_props_flow(
             input_work_dir=upload_artifact(work_dir),
             props_parameter=props_parameter
         )
-        wf.add(property)
+        wf.add(properties)
         wf.submit()
         self.download(
             wf, step_name='property-cal',
@@ -197,19 +202,20 @@ class FlowFactory:
             self,
             work_dir: Union[os.PathLike, str],
             relax_parameter: dict,
-            props_parameter: dict
+            props_parameter: dict,
+            labels: Optional[dict] = None
     ):
-        wf = Workflow(name='joint')
+        wf = Workflow(name='joint', labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(work_dir),
             relax_parameter=relax_parameter
         )
-        property = self._set_props_flow(
+        properties = self._set_props_flow(
             input_work_dir=relaxation.outputs.artifacts["output_all"],
             props_parameter=props_parameter
         )
         wf.add(relaxation)
-        wf.add(property)
+        wf.add(properties)
         wf.submit()
         self.download(
             wf, step_name='property-cal',

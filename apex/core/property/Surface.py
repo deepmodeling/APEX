@@ -10,9 +10,9 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import generate_all_slabs
 
-import apex.core.calculator.lib.abacus as abacus
-import apex.core.calculator.lib.vasp as vasp
-from apex.core.Property import Property
+from apex.core.calculator.lib import abacus_utils
+from apex.core.calculator.lib import vasp_utils
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
@@ -166,7 +166,7 @@ class Surface(Property):
 
             else:
                 if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus.final_stru(path_to_equi)
+                    CONTCAR = abacus_utils.final_stru(path_to_equi)
                     POSCAR = "STRU"
                 else:
                     CONTCAR = "CONTCAR"
@@ -179,11 +179,11 @@ class Surface(Property):
                 if self.inter_param["type"] == "abacus":
                     stru = dpdata.System(equi_contcar, fmt="stru")
                     stru.to("contcar", "CONTCAR.tmp")
-                    ptypes = vasp.get_poscar_types("CONTCAR.tmp")
+                    ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
                     ss = Structure.from_file("CONTCAR.tmp")
                     os.remove("CONTCAR.tmp")
                 else:
-                    ptypes = vasp.get_poscar_types(equi_contcar)
+                    ptypes = vasp_utils.get_poscar_types(equi_contcar)
                     # gen structure
                     ss = Structure.from_file(equi_contcar)
 
@@ -221,11 +221,11 @@ class Surface(Property):
                     )
                     # make confs
                     all_slabs[ii].to("POSCAR.tmp", "POSCAR")
-                    vasp.regulate_poscar("POSCAR.tmp", "POSCAR")
-                    vasp.sort_poscar("POSCAR", "POSCAR", ptypes)
-                    vasp.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
+                    vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
+                    vasp_utils.sort_poscar("POSCAR", "POSCAR", ptypes)
+                    vasp_utils.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
                     if self.inter_param["type"] == "abacus":
-                        abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
+                        abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
                     # record miller
                     dumpfn(all_slabs[ii].miller_index, "miller.json")

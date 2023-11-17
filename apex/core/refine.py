@@ -2,7 +2,7 @@ import glob
 import os
 import re
 
-import apex.core.calculator.lib.abacus as abacus
+from apex.core.calculator.lib import abacus_utils
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -47,7 +47,7 @@ def make_refine(init_from_suffix, output_suffix, path_to_work):
             os.path.join(init_from_task, "STRU")
         ):
             # if there has INPUT and STRU files in this path, we believe this is a ABACUS job
-            CONTCAR = abacus.final_stru(init_from_task)
+            CONTCAR = abacus_utils.final_stru(init_from_task)
             POSCAR = "STRU"
         else:
             CONTCAR = "CONTCAR"

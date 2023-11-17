@@ -9,8 +9,8 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import VacancyGenerator
 from pymatgen.core.structure import Structure
 
-import apex.core.calculator.lib.abacus as abacus
-from apex.core.Property import Property
+from apex.core.calculator.lib import abacus_utils
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
@@ -156,7 +156,7 @@ class Vacancy(Property):
                 os.chdir(cwd)
             else:
                 if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus.final_stru(path_to_equi)
+                    CONTCAR = abacus_utils.final_stru(path_to_equi)
                     POSCAR = "STRU"
                 else:
                     CONTCAR = "CONTCAR"
@@ -167,7 +167,7 @@ class Vacancy(Property):
                     raise RuntimeError("please do relaxation first")
 
                 if self.inter_param["type"] == "abacus":
-                    ss = abacus.stru2Structure(equi_contcar)
+                    ss = abacus_utils.stru2Structure(equi_contcar)
                 else:
                     ss = Structure.from_file(equi_contcar)
 
@@ -205,7 +205,7 @@ class Vacancy(Property):
                     task_list.append(output_task)
                     dss[ii].to("POSCAR", "POSCAR")
                     if self.inter_param["type"] == "abacus":
-                        abacus.poscar2stru("POSCAR", self.inter_param, "STRU")
+                        abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
                     # np.savetxt('supercell.out', self.supercell, fmt='%d')
                     dumpfn(self.supercell, "supercell.json")

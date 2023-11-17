@@ -5,12 +5,13 @@ import numpy as np
 import requests
 
 #from dpgen import dlog
-from apex.core.calculator.lib import abacus, lammps, vasp
+from apex.core.calculator.lib import abacus_utils, lammps_utils, vasp_utils
 from apex.core.lib.utils import cmd_append_log
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]  # 06/13 revised
+
 
 def voigt_to_stress(inpt):
     ret = np.zeros((3, 3))
@@ -98,13 +99,13 @@ def collect_task(all_task, task_type):
 
     if task_type == "vasp":
         output_file = "OUTCAR"
-        check_finished = vasp.check_finished
+        check_finished = vasp_utils.check_finished
     elif task_type in lammps_task_type:
         output_file = "log.lammps"
-        check_finished = lammps.check_finished
+        check_finished = lammps_task_type.check_finished
     elif task_type == "abacus":
         output_file = "OUT.ABACUS/running_relax.log"
-        check_finished = abacus.check_finished
+        check_finished = abacus_utils.check_finished
 
     run_tasks_ = []
     for ii in all_task:

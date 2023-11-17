@@ -142,6 +142,7 @@ class RelaxationFlow(Steps):
             name="Relaxmake",
             template=PythonOPTemplate(make_op,
                                       image=make_image,
+                                      python_packages=upload_python_packages,
                                       command=["python3"]),
             artifacts={"input": self.inputs.artifacts["input_work_path"]},
             parameters={"param": self.inputs.parameters["parameter"]},
@@ -211,6 +212,7 @@ class RelaxationFlow(Steps):
                     pool_size=pool_size
                 ),
                 image=run_image,
+                python_packages=upload_python_packages,
                 command=["python3"]
             )
             runcal = Step(

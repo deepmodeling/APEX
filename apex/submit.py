@@ -1,15 +1,15 @@
 import glob
+import os.path
 import tempfile
 from typing import Type
 from multiprocessing import Pool
 from dflow import config, s3_config
 from dflow.python import OP
 from monty.serialization import loadfn
-import fpop, dpdata, apex
+import fpop, dpdata, apex, phonolammps
 from apex.utils import get_task_type, get_flow_type
-from .config import Config
-from .flow import FlowFactory
-
+from apex.config import Config
+from apex.flow import FlowFactory
 
 
 def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
@@ -81,13 +81,16 @@ def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
     return run_op, task_type, flow_type, relax_param, props_param
 
 
-def submit(flow,
-           flow_type,
-           work_dir,
-           relax_param,
-           props_param,
-           conf=config,
-           s3_conf=s3_config):
+def submit(
+        flow,
+        flow_type,
+        work_dir,
+        relax_param,
+        props_param,
+        conf=config,
+        s3_conf=s3_config,
+        labels=None,
+):
     # reset dflow global config for sub-processes
     config.update(conf)
     s3_config.update(s3_conf)
@@ -95,26 +98,32 @@ def submit(flow,
     if flow_type == 'relax':
         flow.submit_relax(
             work_dir=work_dir,
-            relax_parameter=relax_param
+            relax_parameter=relax_param,
+            labels=labels
         )
     elif flow_type == 'props':
         flow.submit_props(
             work_dir=work_dir,
-            props_parameter=props_param
+            props_parameter=props_param,
+            labels=labels
         )
     elif flow_type == 'joint':
         flow.submit_joint(
             work_dir=work_dir,
             props_parameter=props_param,
-            relax_parameter=relax_param
+            relax_parameter=relax_param,
+            labels=labels
         )
 
 
-def submit_workflow(parameter,
-                    config_file,
-                    work_dir,
-                    flow_type,
-                    is_debug=False):
+def submit_workflow(
+        parameter,
+        config_file,
+        work_dir,
+        flow_type,
+        is_debug=False,
+        labels=None
+):
     try:
         config_dict = loadfn(config_file)
     except FileNotFoundError:
@@ -152,8 +161,9 @@ def submit_workflow(parameter,
     executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
     upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
     upload_python_packages.extend(list(apex.__path__))
-    upload_python_packages.extend(list(dpdata.__path__))
     upload_python_packages.extend(list(fpop.__path__))
+    upload_python_packages.extend(list(dpdata.__path__))
+    upload_python_packages.extend(list(phonolammps.__path__))
 
     flow = FlowFactory(
         make_image=make_image,
@@ -170,7 +180,7 @@ def submit_workflow(parameter,
     # submit the workflows
     work_dir_list = []
     for ii in work_dir:
-        glob_list = glob.glob(ii)
+        glob_list = glob.glob(os.path.abspath(ii))
         work_dir_list.extend(glob_list)
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
@@ -179,11 +189,13 @@ def submit_workflow(parameter,
         for ii in work_dir_list:
             res = pool.apply_async(
                 submit,
-                (flow, flow_type, ii, relax_param, props_param, config, s3_config)
+                (flow, flow_type, ii, relax_param, props_param, config, s3_config, labels)
             )
         pool.close()
         pool.join()
     elif len(work_dir_list) == 1:
-        submit(flow, flow_type, work_dir_list[0], relax_param, props_param)
+        submit(flow, flow_type, work_dir_list[0], relax_param, props_param, labels=labels)
+    else:
+        raise RuntimeError('Empty work directory indicated, please check your argument')
 
     print('Completed!')

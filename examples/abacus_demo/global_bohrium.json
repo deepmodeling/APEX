@@ -4,10 +4,10 @@
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:1.0.0",
-    "abacus_image_name":"registry.dp.tech/dptech/prod-11461/abacus:phonopy",
-    "abacus_run_command":"ulimit -s unlimited && ulimit -m unlimited && OMP_NUM_THREADS=1 mpirun -np 32 abacus > log",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.1.0",
+    "abacus_image_name":"registry.dp.tech/dptech/abacus:3.2.3",
+    "abacus_run_command":"mpirun -n 32 abacus",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "scass_type":"c32_m64_cpu"
+    "scass_type":"c64_m128_cpu"
 }
