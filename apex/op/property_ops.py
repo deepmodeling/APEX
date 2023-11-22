@@ -161,6 +161,9 @@ class PropsMake(OP):
         )  # generate same KPOINTS file for elastic when doing VASP
 
         task_list.sort()
+        os.chdir(path_to_prop)
+        task_list_name = {'task_list': glob.glob('task.*').sort()}
+        dumpfn(task_list_name, 'task_list.json')
         os.chdir(input_work_path)
         task_list_str = glob.glob(path_to_prop + '/' + 'task.*')
         task_list_str.sort()

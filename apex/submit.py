@@ -118,7 +118,7 @@ def submit_workflow(
     upload_python_packages.extend(list(apex.__path__))
     upload_python_packages.extend(list(fpop.__path__))
     upload_python_packages.extend(list(dpdata.__path__))
-    upload_python_packages.extend(list(phonolammps.__path__))
+    #upload_python_packages.extend(list(phonolammps.__path__))
 
     flow = FlowGenerator(
         make_image=make_image,

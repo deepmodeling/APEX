@@ -24,6 +24,7 @@ def parse_args():
         action="version",
         version=f"APEX v{__version__}"
     )
+
     ##########################################
     # Submit
     parser_submit = subparsers.add_parser(
@@ -62,6 +63,7 @@ def parse_args():
         choices=['relax', 'props', 'joint'],
         help="(Optional) Specify type of workflow to submit: (relax | props | joint)"
     )
+
     ##########################################
     # Single step local test mode
     parser_test = subparsers.add_parser(
@@ -90,6 +92,7 @@ def parse_args():
         default='./global.json',
         help="The json file to config the dpdispatcher",
     )
+
     ##########################################
     # Archive results
     parser_archive = subparsers.add_parser(
@@ -116,7 +119,31 @@ def parse_args():
     parser_archive.add_argument(
         '-f', "--flow",
         choices=['relax', 'props', 'joint'],
-        help="(Optional) Specify type of workflow: (relax | props | joint)")
+        help="(Optional) Specify type of workflow's results to archive: (relax | props | joint)"
+    )
+    parser_archive.add_argument(
+        '-d', "--database",
+        choices=['mongodb', 'dynamodb'],
+        help="(Optional) Specify type of database: (mongodb | dynamodb)"
+    )
+    parser_archive.add_argument(
+        '-m', "--method",
+        choices=['sync', 'record'],
+        help="(Optional) Specify archive method: (sync | record)"
+    )
+    parser_archive.add_argument(
+        "-t", "--tasks",
+        action="store_true",
+        help="Whether to archive running details of each task (default: False)"
+    )
+
+    ##########################################
+    # Report
+    parser_report = subparsers.add_parser(
+        "plot",
+        help="Generate html graphic result report",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     parsed_args = parser.parse_args()
     # print help if no parser
@@ -152,7 +179,10 @@ def main():
             parameter=args.parameter,
             config_file=args.config,
             work_dir=args.work,
-            user_flow_type=args.flow
+            user_flow_type=args.flow,
+            database=args.database,
+            method=args.method,
+            archive_tasks=args.tasks
         )
     else:
         raise RuntimeError(

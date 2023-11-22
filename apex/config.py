@@ -67,12 +67,12 @@ class Config:
     database_type: str = None
     archive_method: str = 'sync'
     archive_key: str = None
+    archive_tasks: bool = False
 
     # MongoDB config
     mongodb_config: dict = None
     mongodb_host: str = "localhost"
     mongodb_port: int = 27017
-
     mongodb_database: str = "apex_results"
     mongodb_collection: str = "default_collection"
 

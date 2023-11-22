@@ -22,6 +22,8 @@ setuptools.setup(
         "phonoLAMMPS",
         "phonopy",
         "matplotlib",
+        "plotly",
+        "dash",
         "seekpath",
         "fpop>=0.0.7",
         "boto3",
