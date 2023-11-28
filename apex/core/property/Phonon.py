@@ -4,10 +4,16 @@ import logging
 import os
 import shutil
 import re
+import pandas as pd
+import numpy as np
+import matplotlib as plt
 import subprocess
 import dpdata
 from pathlib import Path
 from pymatgen.core.structure import Structure
+
+import plotly.graph_objs as go
+from dash import dash_table
 
 from apex.core.structure import StructureInfo
 from apex.core.calculator.calculator import LAMMPS_TYPE
@@ -18,6 +24,13 @@ from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
+
+
+def random_color():
+    r = np.random.randint(0, 256)
+    g = np.random.randint(0, 256)
+    b = np.random.randint(0, 256)
+    return f'rgb({r}, {g}, {b})'
 
 
 class Phonon(Property):
@@ -370,9 +383,24 @@ class Phonon(Property):
     def task_param(self):
         return self.parameter
 
+    @staticmethod
+    def unpack_band(band_out: str) -> list[list[dict]]:
+        branch_list = band_out.split('\n\n\n')
+        branch_list.pop()
+        unpacked_branch_list = []
+        for ii in branch_list:
+            segment_list = ii.split('\n\n')
+            unpacked_segment_list = []
+            for jj in segment_list:
+                point_list = jj.split('\n')
+                segment_dict = {float(kk.split()[0]): float(kk.split()[1]) for kk in point_list}
+                unpacked_segment_list.append(segment_dict)
+            unpacked_branch_list.append(unpacked_segment_list)
+        return unpacked_branch_list
+
     def _compute_lower(self, output_file, all_tasks, all_res):
         cwd = Path.cwd()
-        work_path = Path(output_file).parent
+        work_path = Path(output_file).parent.absolute()
         output_file = os.path.abspath(output_file)
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
@@ -448,12 +476,103 @@ class Phonon(Property):
         with open('band.dat', 'r') as f:
             ptr_data = f.read()
 
-        result_points = ptr_data.split('\n')[1][4:]
+        result_points = ptr_data.split('\n')[1][4:].split()
         result_lines = ptr_data.split('\n')[2:]
-        res_data[result_points] = result_lines
+        unpacked_lines = self.unpack_band('\n'.join(result_lines))
+        res_data['band_path'] = result_points
+        res_data['band'] = unpacked_lines
 
         with open(output_file, "w") as fp:
             json.dump(res_data, fp, indent=4)
 
         os.chdir(cwd)
         return res_data, ptr_data
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
+        bands = res_data['band']
+        band_path_list = []
+        for seg in bands[0]:
+            seg_list = [k for k in seg.keys()]
+            band_path_list.extend(seg_list)
+        band_list = []
+        for band in bands:
+            seg_result_list = []
+            for seg in band:
+                seg_result = [v for v in seg.values()]
+                seg_result_list.extend(seg_result)
+            band_list.append(seg_result_list)
+        pd_dict = {"Band Path": band_path_list}
+        for ii in range(len(band_list)):
+            pd_dict['Band %02d' % (ii + 1)] = band_list[ii]
+        df = pd.DataFrame(pd_dict)
+        traces = []
+        color = random_color()
+        for ii in range(len(band_list)):
+            trace = go.Scatter(
+                x=df['Band Path'],
+                y=df['Band %02d' % (ii + 1)],
+                name='Band %02d' % (ii + 1),
+                legendgroup=name,
+                legendgrouptitle_text=name,
+                mode='lines+markers',
+                line=dict(color=color)
+            )
+            traces.append(trace)
+
+        layout = go.Layout(
+            autotypenumbers='convert types',
+            xaxis=dict(
+                title_text="Band Path",
+                title_font=dict(
+                    family="Courier New, monospace",
+                    size=18,
+                    color="#7f7f7f"
+                )
+            ),
+            yaxis=dict(
+                title_text="Frequency",
+                title_font=dict(
+                    family="Courier New, monospace",
+                    size=18,
+                    color="#7f7f7f"
+                )
+            )
+        )
+
+        return traces, layout
+
+    @staticmethod
+    def dash_table(res_data: dict, **kwargs) -> dash_table.DataTable:
+        bands = res_data['band']
+        band_path_list = []
+        for seg in bands[0]:
+            seg_list = [k for k in seg.keys()]
+            band_path_list.extend(seg_list)
+            band_path_list.append(' ')
+        band_path_list.pop()
+
+        band_list = []
+        for band in bands:
+            seg_result_list = []
+            for seg in band:
+                seg_result = [v for v in seg.values()]
+                seg_result_list.extend(seg_result)
+                seg_result_list.append(' ')
+            seg_result_list.pop()
+            band_list.append(seg_result_list)
+
+        pd_dict = {"Band Path": band_path_list}
+        for ii in range(len(band_list)):
+            pd_dict['Band %02d' % (ii + 1)] = band_list[ii]
+
+        df = pd.DataFrame(pd_dict)
+
+        table = dash_table.DataTable(
+            data=df.to_dict('records'),
+            columns=[{'name': i, 'id': i} for i in df.columns],
+            style_table={'width': '50%'},
+            style_cell={'textAlign': 'left'}
+        )
+
+        return table

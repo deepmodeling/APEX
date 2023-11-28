@@ -3,6 +3,7 @@ import json
 import os
 import re
 import logging
+import pandas as pd
 
 import dpdata
 import numpy as np
@@ -10,6 +11,9 @@ from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.analysis.diffraction.tem import TEMCalculator
+
+import plotly.graph_objs as go
+from dash import dash_table
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
@@ -601,3 +605,72 @@ class Gamma(Property):
             json.dump(res_data, fp, indent=4)
 
         return res_data, ptr_data
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
+        displ = []
+        fault_en = []
+        struct_en = []
+        equi_en = []
+        for k, v in res_data.items():
+            displ.append(k)
+            fault_en.append(v[0])
+            struct_en.append((v[1]))
+            equi_en.append(v[2])
+        df = pd.DataFrame({
+            "displacement": displ,
+            "fault_en": fault_en
+        })
+        trace = go.Scatter(
+            name=name,
+            x=df['displacement'],
+            y=df['fault_en'],
+            mode='lines+markers'
+        )
+        layout = go.Layout(
+            xaxis=dict(
+                title_text="Displacement",
+                title_font=dict(
+                    family="Courier New, monospace",
+                    size=18,
+                    color="#7f7f7f"
+                )
+            ),
+            yaxis=dict(
+                title_text="Fault Energy (J/m^2)",
+                title_font=dict(
+                    family="Courier New, monospace",
+                    size=18,
+                    color="#7f7f7f"
+                )
+            )
+        )
+
+        return [trace], layout
+
+    @staticmethod
+    def dash_table(res_data: dict, **kwargs) -> dash_table.DataTable:
+        displ = []
+        fault_en = []
+        struct_en = []
+        equi_en = []
+        for k, v in res_data.items():
+            displ.append(k)
+            fault_en.append(v[0])
+            struct_en.append((v[1]))
+            equi_en.append(v[2])
+        df = pd.DataFrame({
+            "Displacement": displ,
+            "E_Fault (J/m^2)": fault_en,
+            "E_Slab (eV)": struct_en,
+            "E_Equilibrium (eV)": equi_en
+        })
+
+        table = dash_table.DataTable(
+            data=df.to_dict('records'),
+            columns=[{'name': i, 'id': i} for i in df.columns],
+            style_table={'width': '50%'},
+            style_cell={'textAlign': 'left'}
+        )
+
+        return table

@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 from monty.json import MontyEncoder
-from monty.serialization import loadfn
+from monty.serialization import loadfn, dumpfn
 from apex.utils import (
     judge_flow,
     json2dict,
@@ -13,6 +13,7 @@ from apex.utils import (
 )
 from apex.database.DatabaseFactory import DatabaseFactory
 from apex.config import Config
+from apex.utils import load_config_file
 
 
 class ResultStorage:
@@ -112,6 +113,30 @@ class ResultStorage:
                 update_dict(self.result_dict, new_dict)
 
 
+def connect_database(config):
+    # connect to database
+    if config.database_type == 'mongodb':
+        logging.info(msg='Use database type: MongoDB')
+        database = DatabaseFactory.create_database(
+            'mongodb',
+            'mongodb',
+            config.mongodb_database,
+            config.mongodb_collection,
+            **config.mongodb_config_dict
+        )
+    elif config.database_type == 'dynamodb':
+        logging.info(msg='Use database type: DynamoDB')
+        database = DatabaseFactory.create_database(
+            'dynamodb',
+            'dynamodb',
+            config.dynamodb_table_name,
+            **config.dynamodb_config_dict
+        )
+    else:
+        raise RuntimeError(f'unsupported database type: {config.database_type}')
+    return database
+
+
 def archive(relax_param, props_param, config, work_dir, flow_type):
     print(f'Archive {work_dir}')
     # extract results json
@@ -126,60 +151,38 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
         data_id = config.archive_key
     else:
         data_id = str(store.work_dir_path)
-    data_json_str = json.dumps(store.result_data, cls=MontyEncoder, indent=4)
-    data_dict = json.loads(data_json_str)
-    data_dict['_id'] = data_id
+    dump_file = os.path.join(store.work_dir_path, 'all_result.json')
+    dumpfn(store.result_data, dump_file, indent=4)
+    if config.database_type != 'local':
+        data_json_str = json.dumps(store.result_data, cls=MontyEncoder, indent=4)
+        data_dict = json.loads(data_json_str)
+        data_dict['_id'] = data_id
 
-    # connect to database
-    if config.database_type == 'mongodb':
-        logging.info(msg='Use database type: MongoDB')
-        database = DatabaseFactory.create_database(
-            'mongodb',
-            data_id,
-            config.mongodb_database,
-            config.mongodb_collection,
-            **config.mongodb_config_dict
-        )
-    elif config.database_type == 'dynamodb':
-        logging.info(msg='Use database type: DynamoDB')
-        database = DatabaseFactory.create_database(
-            'dynamodb',
-            data_id,
-            config.dynamodb_table_name,
-            **config.dynamodb_config_dict
-        )
-    else:
-        raise RuntimeError(f'unrecognized result archive method: {config.archive_method}')
-
-    # archive results
-    if config.archive_method == 'sync':
-        logging.debug(msg='Archive method: sync')
-        database.sync(data_dict, data_id, depth=2)
-    elif config.archive_method == 'record':
-        logging.debug(msg='Archive method: record')
-        database.record(data_dict, data_id)
-    else:
-        raise TypeError(
-            f'Unrecognized archive method: {config.archive_method}. '
-            f"Should select from 'sync' and 'record'."
-        )
+        database = connect_database(config)
+        # archive results database
+        if config.archive_method == 'sync':
+            logging.debug(msg='Archive method: sync')
+            database.sync(data_dict, data_id, depth=2)
+        elif config.archive_method == 'record':
+            logging.debug(msg='Archive method: record')
+            database.record(data_dict, data_id)
+        else:
+            raise TypeError(
+                f'Unrecognized archive method: {config.archive_method}. '
+                f"Should select from 'sync' and 'record'."
+            )
 
 
-def archive_result(parameter, config_file, work_dir, user_flow_type, database, method, archive_tasks):
+def archive_result(parameter, config_file, work_dir, user_flow_type, database_type, method, archive_tasks):
     print('-------Archive result Mode-------')
-    try:
-        config_dict = loadfn(config_file)
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            'Please prepare global.json under current work direction '
-            'or use optional argument: -c to indicate a specific json file.'
-        )
+    config_dict = load_config_file(config_file)
     global_config = Config(**config_dict)
+
     _, _, flow_type, relax_param, props_param = judge_flow(parameter, user_flow_type)
 
     # re-specify args
-    if database:
-        global_config.database_type = database
+    if database_type:
+        global_config.database_type = database_type
     if method:
         global_config.archive_method = method
     if archive_tasks:

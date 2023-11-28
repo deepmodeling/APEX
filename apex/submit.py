@@ -14,7 +14,7 @@ from monty.serialization import loadfn
 from apex.archive import archive
 from apex.config import Config
 from apex.flow import FlowGenerator
-from apex.utils import judge_flow
+from apex.utils import judge_flow, load_config_file
 
 
 def submit(
@@ -26,7 +26,6 @@ def submit(
         wf_config,
         conf=config,
         s3_conf=s3_config,
-        do_archive=False,
         is_sub=False,
         labels=None,
 ):
@@ -59,12 +58,9 @@ def submit(
             relax_parameter=relax_param,
             labels=labels
         )
-
-    if do_archive:
-        print(f'Archiving results of workflow (ID: {flow_id}) to database...')
-        archive(relax_param, props_param, wf_config, work_dir, flow_type)
-    else:
-        logging.info(msg='skip results archiving process')
+    # auto archive results
+    print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
+    archive(relax_param, props_param, wf_config, work_dir, flow_type)
 
 
 def submit_workflow(
@@ -72,18 +68,11 @@ def submit_workflow(
         config_file,
         work_dir,
         user_flow_type,
-        do_archive=False,
         is_debug=False,
         labels=None
 ):
     print('-------Submit Workflow Mode-------')
-    try:
-        config_dict = loadfn(config_file)
-    except FileNotFoundError:
-        raise FileNotFoundError(
-            'Please prepare global.json under current work direction '
-            'or use optional argument: -c to indicate a specific json file.'
-        )
+    config_dict = load_config_file(config_file)
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
     wf_config.config_dflow(wf_config.dflow_config_dict)
@@ -153,7 +142,6 @@ def submit_workflow(
                  wf_config,
                  config,
                  s3_config,
-                 do_archive,
                  True,
                  labels)
             )
@@ -167,7 +155,6 @@ def submit_workflow(
             relax_param,
             props_param,
             wf_config,
-            do_archive=do_archive,
             labels=labels,
         )
     else:

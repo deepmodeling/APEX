@@ -7,6 +7,7 @@ from apex import (
 from apex.run_step import run_step
 from apex.submit import submit_workflow
 from apex.archive import archive_result
+from apex.report import report_result
 
 
 def parse_args():
@@ -54,18 +55,13 @@ def parse_args():
         help="(Optional) Run APEX workflow via local debug mode"
     )
     parser_submit.add_argument(
-        "-a", "--archive",
-        action="store_true",
-        help="(Optional) archive results to database automatically after completion of workflow"
-    )
-    parser_submit.add_argument(
         '-f', "--flow",
         choices=['relax', 'props', 'joint'],
         help="(Optional) Specify type of workflow to submit: (relax | props | joint)"
     )
 
     ##########################################
-    # Single step local test mode
+    # Single step local test
     parser_test = subparsers.add_parser(
         "test",
         help="Single step local test mode",
@@ -123,8 +119,8 @@ def parse_args():
     )
     parser_archive.add_argument(
         '-d', "--database",
-        choices=['mongodb', 'dynamodb'],
-        help="(Optional) Specify type of database: (mongodb | dynamodb)"
+        choices=['local', 'mongodb', 'dynamodb'],
+        help="(Optional) Specify type of database: (local | mongodb | dynamodb)"
     )
     parser_archive.add_argument(
         '-m', "--method",
@@ -138,11 +134,23 @@ def parse_args():
     )
 
     ##########################################
-    # Report
+    # Report results
     parser_report = subparsers.add_parser(
-        "plot",
-        help="Generate html graphic result report",
+        "report",
+        help="Generate bash result report",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser_report.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file of global config",
+    )
+    parser_report.add_argument(
+        "-w", "--work",
+        type=str, nargs='+',
+        default='.',
+        help="(Optional) Working directory or json file path to be reported",
     )
 
     parsed_args = parser.parse_args()
@@ -165,7 +173,6 @@ def main():
             config_file=args.config,
             work_dir=args.work,
             user_flow_type=args.flow,
-            do_archive=args.archive,
             is_debug=args.debug
         )
     elif args.cmd == 'test':
@@ -180,9 +187,14 @@ def main():
             config_file=args.config,
             work_dir=args.work,
             user_flow_type=args.flow,
-            database=args.database,
+            database_type=args.database,
             method=args.method,
             archive_tasks=args.tasks
+        )
+    elif args.cmd == 'report':
+        report_result(
+            config_file=args.config,
+            path_list=args.work,
         )
     else:
         raise RuntimeError(

@@ -4,21 +4,41 @@ from multiprocessing import Pool
 from monty.serialization import dumpfn
 
 from apex.core.calculator.calculator import make_calculator
+from apex.core.property.Relaxation import Relaxation
 from apex.core.property.Elastic import Elastic
 from apex.core.property.EOS import EOS
 from apex.core.property.Gamma import Gamma
 from apex.core.property.Interstitial import Interstitial
-from apex.core.lib.utils import create_path
-from apex.core.lib.util import collect_task
-from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
+from apex.core.lib.utils import create_path
+from apex.core.lib.util import collect_task
+from apex.core.lib.dispatcher import make_submission
 from apex.utils import sepline, get_task_type, handle_prop_suffix
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
+
+
+def return_prop_class(prop_type: str):
+    if prop_type == 'relaxation':
+        return Relaxation
+    elif prop_type == 'eos':
+        return EOS
+    elif prop_type == 'elastic':
+        return Elastic
+    elif prop_type == 'surface':
+        return Surface
+    elif prop_type == 'interstitial':
+        return Interstitial
+    elif prop_type == 'vacancy':
+        return Vacancy
+    elif prop_type == 'gamma':
+        return Gamma
+    elif prop_type == 'phonon':
+        return Phonon
 
 
 def make_property_instance(parameters, inter_param):

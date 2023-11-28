@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import logging
 import os
+import json
 from typing import Type
 from monty.serialization import loadfn
 from decimal import Decimal
@@ -12,6 +14,28 @@ from apex.op.RunLAMMPS import RunLAMMPS
 upload_packages.append(__file__)
 
 MaxLength = 70
+
+
+def is_json_file(filename):
+    try:
+        with open(filename, 'r') as f:
+            json.load(f)
+        return True
+    except ValueError as e:
+        return False
+
+
+def load_config_file(config_file: str) -> dict:
+    try:
+        config_dict = loadfn(config_file)
+    except FileNotFoundError:
+        logging.warning(
+            msg='No global config file provided, will default all settings. '
+                'You may prepare global.json under current work direction '
+                'or use optional argument: -c to indicate a specific json file.'
+        )
+        config_dict = {}
+    return config_dict
 
 
 def recursive_search(directories, path='.'):

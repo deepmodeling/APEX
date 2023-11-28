@@ -3,9 +3,11 @@ import json
 import logging
 import os
 import re
-
+import pandas as pd
 import numpy as np
 from monty.serialization import dumpfn, loadfn
+import plotly.graph_objs as go
+from dash import dash_table
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
@@ -288,3 +290,62 @@ class EOS(Property):
             json.dump(res_data, fp, indent=4)
 
         return res_data, ptr_data
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
+        vpa = []
+        epa = []
+        for k, v in res_data.items():
+            vpa.append(k)
+            epa.append(v)
+        df = pd.DataFrame({
+            "VpA(A^3)": vpa,
+            "EpA(eV)": epa
+        })
+        trace = go.Scatter(
+            name=name,
+            x=df['VpA(A^3)'],
+            y=df['EpA(eV)'],
+            mode='lines+markers',
+        )
+        layout = go.Layout(
+            xaxis=dict(
+                title_text="VpA(A^3)",
+                title_font=dict(
+                    family="Courier New, monospace",
+                    size=18,
+                    color="#7f7f7f"
+                )
+            ),
+            yaxis=dict(
+                title_text="EpA(eV)",
+                title_font=dict(
+                    family="Courier New, monospace",
+                    size=18,
+                    color="#7f7f7f"
+                )
+            )
+        )
+
+        return [trace], layout
+
+    @staticmethod
+    def dash_table(res_data: dict, **kwargs) -> dash_table.DataTable:
+        vpa = []
+        epa = []
+        for k, v in res_data.items():
+            vpa.append(k)
+            epa.append(v)
+        df = pd.DataFrame({
+            "VpA(A^3)": vpa,
+            "EpA(eV)": epa
+        })
+
+        table = dash_table.DataTable(
+            data=df.to_dict('records'),
+            columns=[{'name': i, 'id': i} for i in df.columns],
+            style_table={'width': '50%'},
+            style_cell={'textAlign': 'left'}
+        )
+
+        return table
