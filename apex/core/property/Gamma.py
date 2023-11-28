@@ -607,7 +607,7 @@ class Gamma(Property):
         return res_data, ptr_data
 
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
         displ = []
         fault_en = []
         struct_en = []

@@ -489,7 +489,7 @@ class Phonon(Property):
         return res_data, ptr_data
 
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
         bands = res_data['band']
         band_path_list = []
         for seg in bands[0]:
