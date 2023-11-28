@@ -292,7 +292,7 @@ class EOS(Property):
         return res_data, ptr_data
 
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         vpa = []
         epa = []
         for k, v in res_data.items():
