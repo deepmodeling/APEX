@@ -133,7 +133,7 @@ class Property(ABC):
 
     @staticmethod
     @abstractmethod
-    def plotly_graph(res_data: dict, name: str) -> [list[plotly.graph_objs], plotly.graph_objs.layout]:
+    def plotly_graph(res_data: dict, name: str) -> [plotly.graph_objs, plotly.graph_objs.layout]:
         """
         Plot plotly graph.
 
