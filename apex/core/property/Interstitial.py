@@ -3,15 +3,11 @@ import json
 import logging
 import os
 import re
-import pandas as pd
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import InterstitialGenerator
 from pymatgen.core.structure import Structure
-
-import plotly.graph_objs as go
-from dash import dash_table
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import lammps_utils
@@ -460,12 +456,16 @@ class Interstitial(Property):
                 os.path.join(os.path.dirname(output_file), "element.out"), "r"
             ) as fin:
                 fc = fin.read().split("\n")
-            ptr_data += "Insert_ele-Struct: Inter_E(eV)  E(eV) equi_E(eV)\n"
+            ptr_data += "Insert_ele-Struct:          \tInter_E(eV)    \tE(eV)     \tequi_E(eV)\n"
             idid = -1
             for ii in all_tasks:
                 idid += 1
+                # skip task.000000
+                if idid == 0:
+                    continue
                 structure_dir = os.path.basename(ii)
                 task_result = loadfn(all_res[idid])
+                interstitial_type = loadfn(os.path.join(ii, 'interstitial_type.json'))
                 natoms = task_result["atom_numbs"][0]
                 equi_path = os.path.abspath(
                     os.path.join(
@@ -479,14 +479,14 @@ class Interstitial(Property):
                 supercell_index = loadfn(os.path.join(ii, "supercell.json"))
                 # insert_ele = loadfn(os.path.join(ii, 'task.json'))['insert_ele'][0]
                 insert_ele = fc[idid]
-                ptr_data += "%s: %7.3f  %7.3f %7.3f \n" % (
-                    insert_ele + "-" + str(supercell_index) + "-" + structure_dir,
+                ptr_data += "%s: \t%7.3f  \t%7.3f \t%7.3f \n" % (
+                    insert_ele + "_" + str(interstitial_type) + "_" + structure_dir,
                     evac,
                     task_result["energies"][-1],
                     equi_epa * natoms,
                 )
                 res_data[
-                    insert_ele + "-" + str(supercell_index) + "-" + structure_dir
+                    insert_ele + "_" + str(interstitial_type) + "_" + structure_dir
                 ] = [evac, task_result["energies"][-1], equi_epa * natoms]
 
         else:
@@ -505,61 +505,3 @@ class Interstitial(Property):
             json.dump(res_data, fp, indent=4)
 
         return res_data, ptr_data
-
-    @staticmethod
-    def plotly_graph(res_data: dict, **kwargs) -> [go, go.layout]:
-        vpa = []
-        epa = []
-        for k, v in res_data.items():
-            vpa.append(k)
-            epa.append(v)
-        df = pd.DataFrame({
-            "VpA(A^3)": vpa,
-            "EpA(eV)": epa
-        })
-        trace = go.Scatter(
-            x=df['VpA(A^3)'],
-            y=df['EpA(eV)'],
-            mode='lines',
-        )
-        layout = go.Layout(
-            xaxis=dict(
-                title_text="VpA(A^3)",
-                title_font=dict(
-                    family="Courier New, monospace",
-                    size=18,
-                    color="#7f7f7f"
-                )
-            ),
-            yaxis=dict(
-                title_text="EpA(eV)",
-                title_font=dict(
-                    family="Courier New, monospace",
-                    size=18,
-                    color="#7f7f7f"
-                )
-            )
-        )
-
-        return trace, layout
-
-    @staticmethod
-    def dash_table(res_data: dict, **kwargs) -> dash_table.DataTable:
-        vpa = []
-        epa = []
-        for k, v in res_data.items():
-            vpa.append(k)
-            epa.append(v)
-        df = pd.DataFrame({
-            "VpA(A^3)": vpa,
-            "EpA(eV)": epa
-        })
-
-        table = dash_table.DataTable(
-            data=df.to_dict('records'),
-            columns=[{'name': i, 'id': i} for i in df.columns],
-            style_table={'width': '50%'},
-            style_cell={'textAlign': 'center'}
-        )
-
-        return table

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="apex-flow",
-    version="1.1.2",
+    version="1.2.0",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -24,6 +24,8 @@ setuptools.setup(
         "matplotlib",
         "plotly",
         "dash",
+        "dash_bootstrap_components",
+        "dash_bootstrap_templates",
         "seekpath",
         "fpop>=0.0.7",
         "boto3",

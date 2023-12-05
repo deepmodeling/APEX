@@ -9,11 +9,11 @@ from apex.utils import (
     judge_flow,
     json2dict,
     update_dict,
-    return_prop_list
+    return_prop_list,
+    load_config_file
 )
 from apex.database.DatabaseFactory import DatabaseFactory
 from apex.config import Config
-from apex.utils import load_config_file
 
 
 class ResultStorage:
@@ -151,8 +151,16 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
         data_id = config.archive_key
     else:
         data_id = str(store.work_dir_path)
+
     dump_file = os.path.join(store.work_dir_path, 'all_result.json')
-    dumpfn(store.result_data, dump_file, indent=4)
+    if os.path.isfile(dump_file):
+        logging.info(msg='all_result.json exists, and will be updated.')
+        orig_data = loadfn(dump_file)
+        update_dict(orig_data, store.result_data, depth=2)
+        dumpfn(orig_data, dump_file, indent=4)
+    else:
+        dumpfn(store.result_data, dump_file, indent=4)
+
     if config.database_type != 'local':
         data_json_str = json.dumps(store.result_data, cls=MontyEncoder, indent=4)
         data_dict = json.loads(data_json_str)

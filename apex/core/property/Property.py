@@ -4,8 +4,6 @@ import os
 from abc import ABC, abstractmethod
 
 from monty.serialization import dumpfn
-import plotly.graph_objs
-from dash import dash_table
 
 from apex.core.calculator.calculator import make_calculator
 from dflow.python import upload_packages
@@ -128,41 +126,5 @@ class Property(ABC):
             The dict storing the result of the props
         ptr_data : str
             The result printed in string format
-        """
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def plotly_graph(res_data: dict, name: str) -> [list[plotly.graph_objs], plotly.graph_objs.layout]:
-        """
-        Plot plotly graph.
-
-        Parameters
-        ----------
-        res_data : dict
-            The dict storing the result of the props
-        Returns:
-        -------
-        plotly.graph_objs
-            The list of plotly graph object
-        plotly.graph_objs.layout
-            the layout
-        """
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def dash_table(res_data: dict) -> dash_table.DataTable:
-        """
-        Make Dash table.
-
-        Parameters
-        ----------
-        res_data : dict
-            The dict storing the result of the props
-        Returns:
-        -------
-        dash_table.DataTable
-            The dash table object
         """
         pass

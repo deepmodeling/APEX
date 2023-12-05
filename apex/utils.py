@@ -16,6 +16,23 @@ upload_packages.append(__file__)
 MaxLength = 70
 
 
+def simplify_paths(path_list: list) -> dict:
+    # Split all paths into components
+    split_paths = [os.path.normpath(p).split(os.sep) for p in path_list]
+
+    # Find common prefix
+    common_prefix = os.path.commonprefix(split_paths)
+    common_prefix_len = len(common_prefix)
+
+    # Remove common prefix from each path and create dictionary
+    simplified_paths_dict = {
+        os.sep.join(p): '.../' + os.sep.join(p[common_prefix_len:]) if common_prefix_len else os.sep.join(p)
+        for p in split_paths
+    }
+
+    return simplified_paths_dict
+
+
 def is_json_file(filename):
     try:
         with open(filename, 'r') as f:

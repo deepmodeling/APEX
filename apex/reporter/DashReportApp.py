@@ -1,13 +1,35 @@
+import logging
+
 import dash
-from dash import dcc, html
+from dash import dcc, html, State
 from dash.dependencies import Input, Output
+import dash_bootstrap_components as dbc
+from dash_bootstrap_templates import load_figure_template
 import plotly.graph_objects as go
-from dash import dash_table
 import webbrowser
 from threading import Timer
-from apex.core.common_prop import return_prop_class
+from .relaxation_report import RelaxationReport
+from .property_report import *
 
-NO_GRAPH_LIST = ['elastic', 'vacancy']
+
+NO_GRAPH_LIST = ['relaxation']
+
+
+def return_prop_class(prop_type: str):
+    if prop_type == 'eos':
+        return EOSReport
+    elif prop_type == 'elastic':
+        return ElasticReport
+    elif prop_type == 'surface':
+        return SurfaceReport
+    elif prop_type == 'interstitial':
+        return InterstitialReport
+    elif prop_type == 'vacancy':
+        return VacancyReport
+    elif prop_type == 'gamma':
+        return GammaReport
+    elif prop_type == 'phonon':
+        return PhononReport
 
 
 def generate_test_datasets():
@@ -15,22 +37,12 @@ def generate_test_datasets():
         '/Users/zhuoyuan/labspace/ti-mo_test/Ti_test/DP_test': {
             'confs/std-hcp': {
                 'eos_00': {
-                    "10.407143058573908": -6.019576,
-                    "11.274404980121734": -6.458249,
-                    "12.14166690166956": -6.883705,
-                    "13.008928823217385": -7.25439,
-                    "13.87619074476521": -7.499602,
                     "14.743452666313036": -7.6612955,
                     "15.610714587860862": -7.7632485,
                     "16.477976509408688": -7.817405,
                     "17.345238430956513": -7.8335905,
                     "18.21250035250434": -7.8194775,
                     "19.079762274052165": -7.7812295,
-                    "19.94702419559999": -7.723846,
-                    "20.81428611714782": -7.651926,
-                    "21.68154803869564": -7.5676175,
-                    "22.548809960243467": -7.473754,
-                    "23.416071881791293": -7.370028
                 }
             }
         }
@@ -43,7 +55,12 @@ class DashReportApp:
         self.datasets = datasets
         self.all_dimensions = set()
         self.all_datasets = set()
-        self.app = dash.Dash(__name__)
+        self.app = dash.Dash(
+            __name__,
+            suppress_callback_exceptions=True,
+            external_stylesheets=[dbc.themes.MATERIA]
+        )
+        # load_figure_template("materia")
         self.app.layout = self.generate_layout()
 
         """define callbacks"""
@@ -65,11 +82,6 @@ class DashReportApp:
              Input('confs-radio', 'value')]
         )(self.update_table)
 
-        self.app.callback(
-            Output('props-dropdown', 'options'),
-            [Input('confs-radio', 'value')]
-        )(self.update_dropdown_options)
-
     @staticmethod
     def return_prop_type(prop: str) -> str:
         prop_type = prop.split('_')[0]
@@ -86,11 +98,15 @@ class DashReportApp:
 
         layout = html.Div(
             [
+                html.H2("APEX Results Visualization Report"),
+                html.Label('Configuration:', style={'font-weight': 'bold'}),
                 dcc.RadioItems(
                     id='confs-radio',
                     options=[{'label': name, 'value': name} for name in self.all_dimensions],
                     value=default_dimension
                 ),
+                html.Br(),
+                html.Label('Property:', style={'font-weight': 'bold'}),
                 dcc.Dropdown(
                     id='props-dropdown',
                     options=[{'label': name, 'value': name} for name in self.all_datasets],
@@ -145,26 +161,62 @@ class DashReportApp:
         return fig
 
     def update_table(self, selected_prop, selected_confs):
+        table_index = 0
         tables = []
         prop_type = DashReportApp.return_prop_type(selected_prop)
-        for w_dimension, dataset in self.datasets.items():
-            try:
-                data = dataset[selected_confs][selected_prop]['result']
-            except KeyError:
-                pass
-            else:
-                propCls = return_prop_class(prop_type)
+        if prop_type == 'relaxation':
+            for w_dimension, dataset in self.datasets.items():
                 table_title = html.H3(f"{w_dimension} - {selected_confs} - {selected_prop}")
-                table = propCls.dash_table(data)
-                tables.append(html.Div([table_title, table],
-                                       style={'width': '50%', 'display': 'inline-block'}))
+                clip_id = f"clip-{table_index}"
+                clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": 20})
+                table = RelaxationReport.dash_table(dataset)
+                table.id = f"table-{table_index}"
+                tables.append(html.Div([table_title, clipboard, table],
+                                       style={'width': '100%', 'display': 'inline-block'}))
+                table_index += 1
+        else:
+            for w_dimension, dataset in self.datasets.items():
+                try:
+                    data = dataset[selected_confs][selected_prop]['result']
+                except KeyError:
+                    pass
+                else:
+                    propCls = return_prop_class(prop_type)
+                    table_title = html.H3(
+                        f"{w_dimension} - {selected_confs} - {selected_prop}",
+                        style={"fontSize": 16}
+                    )
+                    table, df = propCls.dash_table(data)
+                    table.id = f"table-{table_index}"
+                    clip_id = f"clip-{table_index}"
+                    clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": 20})
+                    tables.append(
+                        html.Div([table_title, clipboard, table],
+                                 style={'width': '50%', 'display': 'inline-block'})
+                    )
+                    table_index += 1
 
-        return html.Div(tables, style={'display': 'flex', 'flex-wrap': 'wrap'})
+            self._generate_dynamic_callbacks(table_index)
 
-    def run(self):
-        Timer(1.5, self.open_webpage).start()
+        return html.Div(
+            tables, style={'display': 'flex', 'flex-wrap': 'wrap'}
+        )
+
+    @staticmethod
+    def csv_copy(_, data):
+        dff = pd.DataFrame(data)
+        return dff.to_csv(index=False)  # do not include row names
+
+    def _generate_dynamic_callbacks(self, count):
+        for index in range(count):
+            self.app.callback(Output(f'clip-{index}', 'content'),
+            [Input(f'clip-{index}', 'n_clicks'),
+             State(f'table-{index}', 'data')])(self.csv_copy)
+
+    def run(self, **kwargs):
+        Timer(1, self.open_webpage).start()
         print('Dash server running... (See the report at http://127.0.0.1:8050/)')
-        self.app.run_server(debug=True)
+        self.app.run(**kwargs)
 
     @staticmethod
     def open_webpage():

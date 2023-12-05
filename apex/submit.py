@@ -158,6 +158,6 @@ def submit_workflow(
             labels=labels,
         )
     else:
-        raise RuntimeError('Empty work directory indicated, please check your argument')
+        raise NotADirectoryError('Empty work directory indicated, please check your argument')
 
     print('Completed!')
