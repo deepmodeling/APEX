@@ -371,7 +371,7 @@ class Phonon(Property):
         return self.parameter
 
     @staticmethod
-    def unpack_band(band_out: str) -> list[list[dict]]:
+    def unpack_band(band_out: str) -> list:
         branch_list = band_out.split('\n\n\n')
         branch_list.pop()
         unpacked_branch_list = []
