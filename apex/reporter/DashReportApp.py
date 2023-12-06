@@ -112,6 +112,7 @@ class DashReportApp:
                     options=[{'label': name, 'value': name} for name in self.all_datasets],
                     value=default_dataset
                 ),
+                html.Br(),
                 dcc.Graph(id='graph', style={'display': 'block'}, className='graph-container'),
                 html.Div(id='table')
             ]
