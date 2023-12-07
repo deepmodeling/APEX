@@ -1,5 +1,4 @@
 import logging
-
 import dash
 from dash import dcc, html, State
 from dash.dependencies import Input, Output
@@ -32,6 +31,14 @@ def return_prop_class(prop_type: str):
         return PhononReport
 
 
+def return_prop_type(prop: str):
+    try:
+        prop_type = prop.split('_')[0]
+    except AttributeError:
+        return None
+    return prop_type
+
+
 def generate_test_datasets():
     datasets = {
         '/Users/zhuoyuan/labspace/ti-mo_test/Ti_test/DP_test': {
@@ -52,13 +59,14 @@ def generate_test_datasets():
 
 class DashReportApp:
     def __init__(self, datasets):
+        dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
         self.datasets = datasets
         self.all_dimensions = set()
         self.all_datasets = set()
         self.app = dash.Dash(
             __name__,
             suppress_callback_exceptions=True,
-            external_stylesheets=[dbc.themes.MATERIA]
+            external_stylesheets=[dbc.themes.MATERIA, dbc_css]
         )
         # load_figure_template("materia")
         self.app.layout = self.generate_layout()
@@ -82,11 +90,6 @@ class DashReportApp:
              Input('confs-radio', 'value')]
         )(self.update_table)
 
-    @staticmethod
-    def return_prop_type(prop: str) -> str:
-        prop_type = prop.split('_')[0]
-        return prop_type
-
     def generate_layout(self):
         for w in self.datasets.values():
             self.all_dimensions.update(w.keys())
@@ -98,7 +101,7 @@ class DashReportApp:
 
         layout = html.Div(
             [
-                html.H2("APEX Results Visualization Report"),
+                html.H2("APEX Results Visualization Report", style={'textAlign': 'center'}),
                 html.Label('Configuration:', style={'font-weight': 'bold'}),
                 dcc.RadioItems(
                     id='confs-radio',
@@ -115,12 +118,13 @@ class DashReportApp:
                 html.Br(),
                 dcc.Graph(id='graph', style={'display': 'block'}, className='graph-container'),
                 html.Div(id='table')
-            ]
+            ],
+            style={'margin': '0 auto', 'maxWidth': '900px'}
         )
         return layout
 
     def update_graph_visibility(self, selected_prop, selected_confs):
-        prop_type = DashReportApp.return_prop_type(selected_prop)
+        prop_type = return_prop_type(selected_prop)
         valid_count = 0
         if prop_type not in NO_GRAPH_LIST:
             for w_dimension, dataset in self.datasets.items():
@@ -145,7 +149,7 @@ class DashReportApp:
 
     def update_graph(self, selected_prop, selected_confs):
         fig = go.Figure()
-        prop_type = DashReportApp.return_prop_type(selected_prop)
+        prop_type = return_prop_type(selected_prop)
         if prop_type not in NO_GRAPH_LIST:
             for w_dimension, dataset in self.datasets.items():
                 try:
@@ -164,7 +168,7 @@ class DashReportApp:
     def update_table(self, selected_prop, selected_confs):
         table_index = 0
         tables = []
-        prop_type = DashReportApp.return_prop_type(selected_prop)
+        prop_type = return_prop_type(selected_prop)
         if prop_type == 'relaxation':
             for w_dimension, dataset in self.datasets.items():
                 table_title = html.H3(f"{w_dimension} - {selected_confs} - {selected_prop}")
@@ -189,6 +193,11 @@ class DashReportApp:
                     )
                     table, df = propCls.dash_table(data)
                     table.id = f"table-{table_index}"
+                    # add strips to table
+                    table.style_data_conditional = \
+                        [{'if': {'row_index': 'odd'},
+                            'backgroundColor': 'rgb(248, 248, 248)'}]
+                    # add clipboards
                     clip_id = f"clip-{table_index}"
                     clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": 20})
                     tables.append(

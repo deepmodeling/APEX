@@ -77,14 +77,14 @@ class EOSReport(PropertyReport):
         layout = go.Layout(
             title='Energy of State',
             xaxis=dict(
-                title_text="VpA(A^3)",
+                title_text="VpA (A<sup>3</sup>)",
                 title_font=dict(
                     size=18,
                     color="#7f7f7f"
                 )
             ),
             yaxis=dict(
-                title_text="EpA(eV)",
+                title_text="EpA (eV)",
                 title_font=dict(
                     size=18,
                     color="#7f7f7f"
@@ -421,7 +421,7 @@ class GammaReport(PropertyReport):
                 )
             ),
             yaxis=dict(
-                title_text="Fault Energy (J/m^2)",
+                title_text='Fault Energy (J/m<sup>2</sup>)',
                 title_font=dict(
                     size=18,
                     color="#7f7f7f"
@@ -505,7 +505,7 @@ class PhononReport(PropertyReport):
                 )
             ),
             yaxis=dict(
-                title_text="Frequency",
+                title_text="Frequency (THz)",
                 title_font=dict(
                     size=18,
                     color="#7f7f7f"

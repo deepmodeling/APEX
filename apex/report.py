@@ -50,11 +50,7 @@ def report_local(input_path_list):
 
     # simplify the work path key for all datasets
     simplified_dataset = simplify_dataset(all_data_dict)
-    DashReportApp(datasets=simplified_dataset).run(debug=True)
-
-
-def report_database():
-    pass
+    DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=False)
 
 
 def report_result(config_file, path_list):
@@ -62,9 +58,6 @@ def report_result(config_file, path_list):
     config_dict = load_config_file(config_file)
     config = Config(**config_dict)
 
-    if config.database_type == 'local':
-        report_local(path_list)
-    else:
-        pass
+    report_local(path_list)
 
     print('Complete!')
