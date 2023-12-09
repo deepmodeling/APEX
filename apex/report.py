@@ -35,7 +35,7 @@ def report_local(input_path_list):
 
     if not file_path_list:
         raise FileNotFoundError(
-            'all_result.json not exist or not under work path indicated. Please double check the input.'
+            'all_result.json not exist or not under work path indicated. Please do result archive locally first.'
         )
     all_data_dict = {}
     for kk in file_path_list:

@@ -505,7 +505,13 @@ class Gamma(Property):
                 fin2.write(contents[ii])
 
     def post_process(self, task_list):
-        if self.add_fix:
+        # for no exist of self.add_fix in refine mode, skip post_process
+        try:
+            add_fix = self.add_fix
+        except AttributeError:
+            add_fix = None
+
+        if add_fix:
             count = 0
             for ii in task_list:
                 count += 1
@@ -542,6 +548,7 @@ class Gamma(Property):
             """
             ptr_data += "No_task: \tDisplacement \tStacking_Fault_E(J/m^2) EpA(eV) slab_equi_EpA(eV)\n"
             all_tasks.sort()
+            n_steps = len(all_tasks) - 1
             task_result_slab_equi = loadfn(
                 os.path.join(all_tasks[0], "result_task.json")
             )
@@ -578,12 +585,12 @@ class Gamma(Property):
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
                 ptr_data += "%-25s     %7.2f   %7.3f    %8.3f %8.3f\n" % (
                     str(miller_index) + "-" + structure_dir + ":",
-                    int(ii[-4:]) / self.n_steps,
+                    int(ii[-4:]) / n_steps,
                     sfe,
                     epa,
                     equi_epa_slab,
                 )
-                res_data[int(ii[-4:]) / self.n_steps] = [sfe, epa, equi_epa]
+                res_data[int(ii[-4:]) / n_steps] = [sfe, epa, equi_epa]
 
         else:
             if "init_data_path" not in self.parameter:
