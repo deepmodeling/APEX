@@ -33,6 +33,8 @@
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
       - [3.2.2. Single-Step Test](#322-single-step-test)
+      - [3.2.3. Archive Test Results](#323-archive-test-results)
+      - [3.2.4. Results Visualization Report](#324-results-visualization-report)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
@@ -426,11 +428,60 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
       }
     }
    ```
-3. Finally, as all tasks are finished, post process by
+3. Finally, as all tasks are finished, post-process by
    ```shell
    apex test param_relax.json post_relax
    ```
 The property test can follow similar approach.
+
+#### 3.2.3. Archive Test Results
+After completion of each workflow, the results and test parameters of corresponding property will be stored as `json` format automatically under respective work directory named as `all_result.json`. You can also do this manually to update this file based on the latest run by:
+
+```shell
+apex archive [parameter …]
+```
+
+Argument format of this sub-command is pretty similar to that of `submit` command. Please use `apex archive -h` for complete usage introduction. It should be noticed that each `archive` command will only update property information of those identified as **active** according to the parameter files and indication provided similar to the `submit` mode.
+
+This mode can also result archive to **NoSQL** database. We currently support two types of database client: [MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/). Below shows global configuration parameters for two database archive:
+
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | database_type | String | local | Database type, three chooses available: `local` (only archive to local `all_result.json`), `mongodb` and `dynamodb`. One can also indicate this by `-d` within `archive` command |
+  | archive_method | String | sync | Choose from `sync` and `record`. `sync` synchronize and update the result into same item based on work directory id; `record` record each archive result into a new item with unique timestamp. One can also indicate this by `-m` within `archive` command |
+
+  For `MongoDB`:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | mongodb_host | String | localhost | `Mongodb` host |
+  | mongodb_port | Int | 27017 | `Mongodb` port |
+  | mongodb_database | String | apex_results | `Mongodb` database name |
+  | mongodb_collection | String | apex_results | `Mongodb` collection name |
+  | mongodb_config | Dict | None | Complete parameter dictionary for [MongoClient](https://www.mongodb.com/blog/post/introducing-mongoclient) |
+
+  For `DynamoDB`:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | dynamodb_table_name | String | apex_results | `Dynamodb` table name |
+  | dynamodb_config | Dict | None | Complete parameter dictionary for [boto3 session](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource) |
+
+#### 3.2.4. Results Visualization Report
+In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash APP](https://dash.plotly.com). You can invoke the report app simply under target work directory by:
+```shell
+apex report
+```
+One can also indicate multiple work directories or path of result file in `json` format by `-w` for cross-comparison. Here is an example:
+```shell
+apex report -w MEAM.bk DP/all_result.json
+```
+Once open the report app, one can select interesting configuration and type of configuration, and the result plot and data table will be shown accordingly.
+  <div>
+      <img src="./docs/images/report_app.png" alt="Fig3" style="zoom: 35%;">
+      <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
+  </div>
+
+
+
 ## 4. Quick Start
 We present several case studies as introductory illustrations of APEX, tailored to distinct user scenarios. For our demonstration, we will utilize a [LAMMPS_example](./examples/lammps_demo) to compute the Equation of State (EOS) and elastic constants of molybdenum in both Body-Centered Cubic (BCC) and Face-Centered Cubic (FCC) phases. To begin, we will examine the files prepared within the working directory for this specific case.
 

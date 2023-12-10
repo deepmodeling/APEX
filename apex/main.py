@@ -93,7 +93,7 @@ def parse_args():
     # Archive results
     parser_archive = subparsers.add_parser(
         "archive",
-        help="Archive test results to database",
+        help="Archive test results to local or database",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser_archive.add_argument(
@@ -137,7 +137,7 @@ def parse_args():
     # Report results
     parser_report = subparsers.add_parser(
         "report",
-        help="Generate bash result report",
+        help="Run result visualization report app",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser_report.add_argument(

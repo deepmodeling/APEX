@@ -138,7 +138,7 @@ def connect_database(config):
 
 
 def archive(relax_param, props_param, config, work_dir, flow_type):
-    print(f'Archive {work_dir}')
+    print(f'=> Begin archiving {work_dir}')
     # extract results json
     store = ResultStorage(work_dir)
     if relax_param and flow_type != 'props':
