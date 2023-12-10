@@ -470,7 +470,7 @@ In this mode, APEX will create a comprehensive and interactive results visualiza
 ```shell
 apex report
 ```
-One can also indicate multiple work directories or path of result file in `json` format by `-w` for cross-comparison. Here is an example:
+Or indicate multiple work directories or path of result file in `json` format by `-w` for cross-comparison. Here is an example:
 ```shell
 apex report -w MEAM.bk DP/all_result.json
 ```
