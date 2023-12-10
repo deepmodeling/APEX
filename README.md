@@ -375,8 +375,6 @@ On the other hand, the **Finite Displacement Method**'s advantage lies in its ve
 
 
 ### 3.2. Command
-APEX currently supports two seperate run modes: **workflow submission** (running via dflow) and **single-step test** (running without dflow).
-
 #### 3.2.1. Workflow Submission
 APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by the user. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for help). Here is an example to submit a `joint` workflow:
 ```shell
