@@ -474,7 +474,7 @@ One can also indicate multiple work directories or path of result file in `json`
 ```shell
 apex report -w MEAM.bk DP/all_result.json
 ```
-Once open the report app, one can select interesting configuration and type of configuration, and the result plot and data table will be shown accordingly.
+Once the report app is opened (or manully via http://127.0.0.1:8050/), one can select interesting configuration and type of property and the result plot and data table will be shown accordingly.
   <div>
       <img src="./docs/images/report_app.png" alt="Fig3" style="zoom: 35%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
