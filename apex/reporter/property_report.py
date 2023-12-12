@@ -149,6 +149,7 @@ class ElasticReport(PropertyReport):
             polar=dict(
                 radialaxis=dict(
                     visible=True,
+                    autorange=True
                 )
             ),
             showlegend=True,
@@ -220,6 +221,7 @@ class SurfaceReport(PropertyReport):
             polar=dict(
                 radialaxis=dict(
                     visible=True,
+                    autorange=True
                 )
             ),
             showlegend=True,
@@ -286,6 +288,7 @@ class InterstitialReport(PropertyReport):
             polar=dict(
                 radialaxis=dict(
                     visible=True,
+                    autorange=True
                 )
             ),
             showlegend=True,
