@@ -90,6 +90,11 @@ class DashReportApp:
              Input('confs-radio', 'value')]
         )(self.update_table)
 
+        self.app.callback(
+            Output('props-dropdown', 'options'),
+            [Input('confs-radio', 'value')]
+        )(self.update_dropdown_options)
+
     def generate_layout(self):
         for w in self.datasets.values():
             self.all_dimensions.update(w.keys())
