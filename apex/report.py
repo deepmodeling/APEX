@@ -50,7 +50,7 @@ def report_local(input_path_list):
 
     # simplify the work path key for all datasets
     simplified_dataset = simplify_dataset(all_data_dict)
-    DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=False)
+    DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=True)
 
 
 def report_result(config_file, path_list):

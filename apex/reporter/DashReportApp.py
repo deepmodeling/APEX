@@ -101,8 +101,19 @@ class DashReportApp:
             for dimension in w.values():
                 self.all_datasets.update(dimension.keys())
 
-        default_dataset = list(self.all_datasets)[0] if self.all_datasets else None
-        default_dimension = list(self.all_dimensions)[0] if self.all_dimensions else None
+        # find the first default combination of configuration and property exist
+        default_dimension = None
+        default_dataset = None
+        for w_key, w in self.datasets.items():
+            if not w:
+                continue
+            for d_key, d in w.items():
+                if d:
+                    default_dimension = d_key
+                    default_dataset = next(iter(d.keys()))
+                    break
+            if default_dataset:
+                break
 
         layout = html.Div(
             [
@@ -211,7 +222,7 @@ class DashReportApp:
                     )
                     table_index += 1
 
-            self._generate_dynamic_callbacks(table_index)
+        self._generate_dynamic_callbacks(table_index)
 
         return html.Div(
             tables, style={'display': 'flex', 'flex-wrap': 'wrap'}
