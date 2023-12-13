@@ -240,8 +240,11 @@ class DashReportApp:
              State(f'table-{index}', 'data')])(self.csv_copy)
 
     def run(self, **kwargs):
-        Timer(1, self.open_webpage).start()
+        Timer(1.2, self.open_webpage).start()
         print('Dash server running... (See the report at http://127.0.0.1:8050/)')
+        print('NOTE: If clipboard buttons do not function well, try to reload the page for one time.')
+        print('NOTE: Do not over-refresh the page as duplicate error may occur. '
+              'If did, stop the server and re-execute the apex report command.')
         self.app.run(**kwargs)
 
     @staticmethod
