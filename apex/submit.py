@@ -11,7 +11,7 @@ import phonolammps
 from dflow import config, s3_config
 from monty.serialization import loadfn
 
-from apex.archive import archive
+from apex.archive import archive_workdir
 from apex.config import Config
 from apex.flow import FlowGenerator
 from apex.utils import judge_flow, load_config_file
@@ -60,7 +60,7 @@ def submit(
         )
     # auto archive results
     print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
-    archive(relax_param, props_param, wf_config, work_dir, flow_type)
+    archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)
 
 
 def submit_workflow(

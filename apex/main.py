@@ -98,7 +98,8 @@ def parse_args():
     )
     parser_archive.add_argument(
         "parameter", type=str, nargs='+',
-        help='Json files to indicate calculation parameters'
+        help='Json files to indicate calculation parameters '
+             'or result json files that will be directly archived to database when -r flag is raised'
     )
     parser_archive.add_argument(
         "-c", "--config",
@@ -131,6 +132,11 @@ def parse_args():
         "-t", "--tasks",
         action="store_true",
         help="Whether to archive running details of each task (default: False)"
+    )
+    parser_archive.add_argument(
+        "-r", "--result",
+        action="store_true",
+        help="(Optional) whether to treat json files as results and archive them directly to database",
     )
 
     ##########################################
@@ -189,7 +195,8 @@ def main():
             user_flow_type=args.flow,
             database_type=args.database,
             method=args.method,
-            archive_tasks=args.tasks
+            archive_tasks=args.tasks,
+            is_result=args.result
         )
     elif args.cmd == 'report':
         report_result(

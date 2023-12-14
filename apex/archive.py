@@ -137,7 +137,23 @@ def connect_database(config):
     return database
 
 
-def archive(relax_param, props_param, config, work_dir, flow_type):
+def archive2db(config, data: dict, data_id: str):
+    database = connect_database(config)
+    # archive results database
+    if config.archive_method == 'sync':
+        logging.debug(msg='Archive method: sync')
+        database.sync(data, data_id, depth=2)
+    elif config.archive_method == 'record':
+        logging.debug(msg='Archive method: record')
+        database.record(data, data_id)
+    else:
+        raise TypeError(
+            f'Unrecognized archive method: {config.archive_method}. '
+            f"Should select from 'sync' and 'record'."
+        )
+
+
+def archive_workdir(relax_param, props_param, config, work_dir, flow_type):
     print(f'=> Begin archiving {work_dir}')
     # extract results json
     store = ResultStorage(work_dir)
@@ -166,28 +182,37 @@ def archive(relax_param, props_param, config, work_dir, flow_type):
         data_dict = json.loads(data_json_str)
         data_dict['_id'] = data_id
 
-        database = connect_database(config)
-        # archive results database
-        if config.archive_method == 'sync':
-            logging.debug(msg='Archive method: sync')
-            database.sync(data_dict, data_id, depth=2)
-        elif config.archive_method == 'record':
-            logging.debug(msg='Archive method: record')
-            database.record(data_dict, data_id)
-        else:
-            raise TypeError(
-                f'Unrecognized archive method: {config.archive_method}. '
-                f"Should select from 'sync' and 'record'."
-            )
+        archive2db(config, data_dict, data_id)
 
 
-def archive_result(parameter, config_file, work_dir, user_flow_type, database_type, method, archive_tasks):
+def archive2db_from_json(config, json_file):
+    logging.info(msg=f'Archive from local json file: {json_file}')
+    data_dict = loadfn(json_file)
+    data_json_str = json.dumps(data_dict, cls=MontyEncoder, indent=4)
+    data_dict = json.loads(data_json_str)
+    # define archive key
+    if config.archive_key:
+        data_id = config.archive_key
+    else:
+        data_id = str(data_dict["work_path"])
+    data_dict['_id'] = data_id
+
+    archive2db(config, data_dict, data_id)
+
+
+def archive_result(
+        parameter,
+        config_file,
+        work_dir,
+        user_flow_type,
+        database_type,
+        method,
+        archive_tasks,
+        is_result
+):
     print('-------Archive result Mode-------')
     config_dict = load_config_file(config_file)
     global_config = Config(**config_dict)
-
-    _, _, flow_type, relax_param, props_param = judge_flow(parameter, user_flow_type)
-
     # re-specify args
     if database_type:
         global_config.database_type = database_type
@@ -196,12 +221,25 @@ def archive_result(parameter, config_file, work_dir, user_flow_type, database_ty
     if archive_tasks:
         global_config.archive_tasks = archive_tasks
 
-    work_dir_list = []
-    for ii in work_dir:
-        glob_list = glob.glob(os.path.abspath(ii))
-        work_dir_list.extend(glob_list)
-        work_dir_list.sort()
-    for ii in work_dir_list:
-        archive(relax_param, props_param, global_config, ii, flow_type)
+    if is_result:
+        # archive local results json file
+        json_file_list = []
+        # Parameter here stands for json files that store test results and be archived directly
+        for ii in parameter:
+            glob_list = glob.glob(os.path.abspath(ii))
+            json_file_list.extend(glob_list)
+            json_file_list.sort()
+        for ii in json_file_list:
+            archive2db_from_json(global_config, ii)
+    else:
+        _, _, flow_type, relax_param, props_param = judge_flow(parameter, user_flow_type)
+        # archive work directories
+        work_dir_list = []
+        for ii in work_dir:
+            glob_list = glob.glob(os.path.abspath(ii))
+            work_dir_list.extend(glob_list)
+            work_dir_list.sort()
+        for ii in work_dir_list:
+            archive_workdir(relax_param, props_param, global_config, ii, flow_type)
 
     print('Complete!')
