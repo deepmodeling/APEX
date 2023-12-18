@@ -186,10 +186,10 @@ class Interstitial(Property):
 
                 if self.inter_param["type"] == "abacus":
                     ss = abacus_utils.stru2Structure(equi_contcar)
-                    orig_ss = abacus_utils.stru2Structure(orig_poscar)
+                    # orig_ss = abacus_utils.stru2Structure(orig_poscar)
                 else:
                     ss = Structure.from_file(equi_contcar)
-                    orig_ss = Structure.from_file(orig_poscar)
+                    # orig_ss = Structure.from_file(orig_poscar)
 
                 # get structure type
                 os.chdir(self.path_to_work)
