@@ -29,6 +29,8 @@ class Interstitial(Property):
                 parameter["supercell"] = parameter.get("supercell", default_supercell)
                 self.supercell = parameter["supercell"]
                 self.insert_ele = parameter["insert_ele"]
+                parameter["lattice_type"] = parameter.get("lattice_type", None)
+                self.lattice_type = parameter["lattice_type"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
@@ -178,19 +180,31 @@ class Interstitial(Property):
                     POSCAR = "POSCAR"
 
                 equi_contcar = os.path.join(path_to_equi, CONTCAR)
+                orig_poscar = os.path.join(path_to_equi, POSCAR)
                 if not os.path.exists(equi_contcar):
                     raise RuntimeError("please do relaxation first")
 
                 if self.inter_param["type"] == "abacus":
                     ss = abacus_utils.stru2Structure(equi_contcar)
+                    orig_ss = abacus_utils.stru2Structure(orig_poscar)
                 else:
                     ss = Structure.from_file(equi_contcar)
+                    orig_ss = Structure.from_file(orig_poscar)
 
                 # get structure type
                 os.chdir(self.path_to_work)
                 ss.to("POSCAR", "POSCAR")
-                st = StructureInfo(ss)
+                # convert site element into same type for a pseudo-structure just for simple lattice type judgment
+                same_type_ss = ss.copy()
+                species_mapping = {str(specie): "Ni" for specie in same_type_ss.composition.elements}
+                same_type_ss.replace_species(species_mapping)
+                st = StructureInfo(same_type_ss, symprec=0.1, angle_tolerance=5)
+                # indication of structure type
                 self.structure_type = st.lattice_structure
+                breakpoint()
+                if self.lattice_type:
+                    logging.info(msg=f'Adopt user indicated lattice type: {self.lattice_type}')
+                    self.structure_type = self.lattice_type
                 os.chdir(cwd)
 
                 # gen defects
@@ -291,7 +305,6 @@ class Interstitial(Property):
                             chl = idx
 
                 os.chdir(cwd)
-
                 # specify interstitial structures
                 if self.structure_type == 'bcc':
                     for idx, ii in enumerate(self.pos_line):
