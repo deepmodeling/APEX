@@ -201,7 +201,6 @@ class Interstitial(Property):
                 st = StructureInfo(same_type_ss, symprec=0.1, angle_tolerance=5)
                 # indication of structure type
                 self.structure_type = st.lattice_structure
-                breakpoint()
                 if self.lattice_type:
                     logging.info(msg=f'Adopt user indicated lattice type: {self.lattice_type}')
                     self.structure_type = self.lattice_type
