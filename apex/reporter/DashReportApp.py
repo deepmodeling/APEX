@@ -174,7 +174,8 @@ class DashReportApp:
                     pass
                 else:
                     propCls = return_prop_class(prop_type)
-                    trace_name = f"{w_dimension} - {selected_confs} - {selected_prop}"
+                    # trace_name = f"{w_dimension} - {selected_confs} - {selected_prop}"
+                    trace_name = w_dimension
                     traces, layout = propCls.plotly_graph(data, trace_name)
                     fig.add_traces(traces)
                     fig.layout = layout
@@ -187,7 +188,7 @@ class DashReportApp:
         prop_type = return_prop_type(selected_prop)
         if prop_type == 'relaxation':
             for w_dimension, dataset in self.datasets.items():
-                table_title = html.H3(f"{w_dimension} - {selected_confs} - {selected_prop}")
+                table_title = html.H3(f"{w_dimension} - {selected_prop}")
                 clip_id = f"clip-{table_index}"
                 clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": 20})
                 table = RelaxationReport.dash_table(dataset)
