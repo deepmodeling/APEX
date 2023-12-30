@@ -12,6 +12,7 @@ from .property_report import *
 
 
 NO_GRAPH_LIST = ['relaxation']
+UI_FRONTSIZE = 18
 
 
 def return_prop_class(prop_type: str):
@@ -117,22 +118,25 @@ class DashReportApp:
 
         layout = html.Div(
             [
-                html.H2("APEX Results Visualization Report", style={'textAlign': 'center'}),
-                html.Label('Configuration:', style={'font-weight': 'bold'}),
+                html.H1("APEX Results Visualization Report", style={'textAlign': 'center'}),
+                html.Label('Configuration:', style={'font-weight': 'bold', "fontSize": UI_FRONTSIZE}),
                 dcc.RadioItems(
                     id='confs-radio',
                     options=[{'label': name, 'value': name} for name in self.all_dimensions],
-                    value=default_dimension
+                    value=default_dimension,
+                    style={"fontSize": UI_FRONTSIZE}
                 ),
                 html.Br(),
-                html.Label('Property:', style={'font-weight': 'bold'}),
+                html.Label('Property:', style={'font-weight': 'bold', "fontSize": UI_FRONTSIZE}),
                 dcc.Dropdown(
                     id='props-dropdown',
                     options=[{'label': name, 'value': name} for name in self.all_datasets],
-                    value=default_dataset
+                    value=default_dataset,
+                    style={"fontSize": UI_FRONTSIZE}
                 ),
                 html.Br(),
-                dcc.Graph(id='graph', style={'display': 'block'}, className='graph-container'),
+                dcc.Graph(id='graph', style={'display': 'block', "fontSize": UI_FRONTSIZE},
+                          className='graph-container'),
                 html.Div(id='table')
             ],
             style={'margin': '0 auto', 'maxWidth': '900px'}
@@ -190,7 +194,7 @@ class DashReportApp:
             for w_dimension, dataset in self.datasets.items():
                 table_title = html.H3(f"{w_dimension} - {selected_prop}")
                 clip_id = f"clip-{table_index}"
-                clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": 20})
+                clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": UI_FRONTSIZE})
                 table = RelaxationReport.dash_table(dataset)
                 table.id = f"table-{table_index}"
                 tables.append(html.Div([table_title, clipboard, table],
@@ -206,7 +210,7 @@ class DashReportApp:
                     propCls = return_prop_class(prop_type)
                     table_title = html.H3(
                         f"{w_dimension} - {selected_confs} - {selected_prop}",
-                        style={"fontSize": 16}
+                        style={"fontSize": UI_FRONTSIZE}
                     )
                     table, df = propCls.dash_table(data)
                     table.id = f"table-{table_index}"
@@ -216,7 +220,7 @@ class DashReportApp:
                             'backgroundColor': 'rgb(248, 248, 248)'}]
                     # add clipboards
                     clip_id = f"clip-{table_index}"
-                    clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": 20})
+                    clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": UI_FRONTSIZE})
                     tables.append(
                         html.Div([table_title, clipboard, table],
                                  style={'width': '50%', 'display': 'inline-block'})
