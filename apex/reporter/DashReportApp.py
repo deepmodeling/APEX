@@ -215,9 +215,10 @@ class DashReportApp:
                     table, df = propCls.dash_table(data)
                     table.id = f"table-{table_index}"
                     # add strips to table
-                    table.style_data_conditional = \
-                        [{'if': {'row_index': 'odd'},
-                            'backgroundColor': 'rgb(248, 248, 248)'}]
+                    table.style_data_conditional = [
+                        {'if': {'row_index': 'odd'},
+                            'backgroundColor': 'rgb(248, 248, 248)'}
+                    ]
                     # add clipboards
                     clip_id = f"clip-{table_index}"
                     clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": UI_FRONTSIZE})

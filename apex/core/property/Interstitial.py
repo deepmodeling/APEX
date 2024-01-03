@@ -6,7 +6,7 @@ import re
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
-from pymatgen.analysis.defects.generators import InterstitialGenerator
+from pymatgen.analysis.defects.generators import InterstitialGenerator, VoronoiInterstitialGenerator
 from pymatgen.core.structure import Structure
 
 from apex.core.calculator.lib import abacus_utils
@@ -16,8 +16,10 @@ from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
+
 upload_packages.append(__file__)
 
+PREDEFINED_LIST = ['bcc', 'fcc', 'hcp']
 
 class Interstitial(Property):
     def __init__(self, parameter, inter_param=None):
@@ -93,7 +95,7 @@ class Interstitial(Property):
         path_to_equi = os.path.abspath(path_to_equi)
 
         if "start_confs_path" in self.parameter and os.path.exists(
-            self.parameter["start_confs_path"]
+                self.parameter["start_confs_path"]
         ):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
@@ -201,6 +203,11 @@ class Interstitial(Property):
                 st = StructureInfo(same_type_ss, symprec=0.1, angle_tolerance=5)
                 # indication of structure type
                 self.structure_type = st.lattice_structure
+                # get conventional standard structure to ss
+                orig_st = StructureInfo(ss, symprec=0.1, angle_tolerance=5)
+                conv_ss = orig_st.conventional_structure
+                conv_ss.to("POSCAR_conv", "POSCAR")
+                ss = conv_ss
                 if self.lattice_type:
                     logging.info(msg=f'Adopt user indicated lattice type: {self.lattice_type}')
                     self.structure_type = self.lattice_type
@@ -213,16 +220,19 @@ class Interstitial(Property):
                     os.remove(self.insert_element_task)
 
                 for ii in self.insert_ele:
-                    pre_vds = InterstitialGenerator()
-                    vds = pre_vds.generate(ss, {ii: [[0.1, 0.1, 0.1]]})
+                    pre_vds = VoronoiInterstitialGenerator()
+                    vds = pre_vds.generate(ss, [ii])
+                    if self.structure_type in PREDEFINED_LIST:
+                        pre_vds = InterstitialGenerator()
+                        vds = pre_vds.generate(ss, {ii: [[0.1, 0.1, 0.1]]})
                     for jj in vds:
                         temp = jj.get_supercell_structure(
                             sc_mat=np.diag(self.supercell, k=0)
                         )
                         smallest_distance = list(set(temp.distance_matrix.ravel()))[1]
                         if (
-                            "conf_filters" in self.parameter
-                            and "min_dist" in self.parameter["conf_filters"]
+                                "conf_filters" in self.parameter
+                                and "min_dist" in self.parameter["conf_filters"]
                         ):
                             min_dist = self.parameter["conf_filters"]["min_dist"]
                             if smallest_distance >= min_dist:
@@ -233,7 +243,7 @@ class Interstitial(Property):
                             dss.append(temp)
                             with open(self.insert_element_task, "a+") as fout:
                                 print(ii, file=fout)
-                #            dss.append(jj.generate_defect_structure(self.supercell))
+                        #            dss.append(jj.generate_defect_structure(self.supercell))
                         self.dss = dss
 
                 print(
@@ -268,113 +278,137 @@ class Interstitial(Property):
                     dss[ii].to("POSCAR", "POSCAR")
                     # np.savetxt('supercell.out', self.supercell, fmt='%d')
                     dumpfn(self.supercell, "supercell.json")
+                    dumpfn(f'VoronoiType_{ii}', 'interstitial_type.json')
                 os.chdir(cwd)
 
                 super_size = (
                         self.supercell[0] * self.supercell[1] * self.supercell[2]
                 )
                 num_atom = super_size * 2
-                #chl = -num_atom - 2
+                # chl = -num_atom - 2
                 os.chdir(self.path_to_work)
 
-                if not os.path.isfile("task.000000/POSCAR"):
-                    raise RuntimeError("need task.000000 structure as reference")
+                # create pre-defined special SIA structure for bcc fcc and hcp
+                if self.structure_type in PREDEFINED_LIST:
+                    if not os.path.isfile("task.000000/POSCAR"):
+                        raise RuntimeError("need task.000000 structure as reference")
 
-                with open('POSCAR', "r") as fin:
-                    fin.readline()
-                    scale = float(fin.readline().split()[0])
-                    self.latt_param = float(fin.readline().split()[0])
-                    self.latt_param *= scale
+                    with open('POSCAR', "r") as fin:
+                        fin.readline()
+                        scale = float(fin.readline().split()[0])
+                        self.latt_param = float(fin.readline().split()[0])
+                        self.latt_param *= scale
 
-                with open("task.000000/POSCAR", "r") as fin:
-                    self.pos_line = fin.read().split("\n")
+                    with open("task.000000/POSCAR", "r") as fin:
+                        self.pos_line = fin.read().split("\n")
 
-
-                self.super_latt_param = float(self.pos_line[2].split()[0])
-                self.unit_frac = self.latt_param / self.super_latt_param
-
-                for idx, ii in enumerate(self.pos_line):
-                    ss = ii.split()
-                    if len(ss) > 3:
-                        if (
-                                abs(self.unit_frac * 0.1 - float(ss[0])) < 1e-5
-                                and abs(self.unit_frac * 0.1 - float(ss[1])) < 1e-5
-                                and abs(self.unit_frac * 0.1 - float(ss[2])) < 1e-5
-                        ):
-                            chl = idx
-
-                os.chdir(cwd)
-                # specify interstitial structures
-                if self.structure_type == 'bcc':
                     for idx, ii in enumerate(self.pos_line):
                         ss = ii.split()
                         if len(ss) > 3:
                             if (
-                                    abs(self.unit_frac * 0.5 - float(ss[0])) < 1e-5
-                                    and abs(self.unit_frac * 0.5 - float(ss[1])) < 1e-5
-                                    and abs(self.unit_frac * 0.5 - float(ss[2])) < 1e-5
+                                    abs(0.1 / self.supercell[0] - float(ss[0])) < 1e-5
+                                    and abs(0.1 / self.supercell[1] - float(ss[1])) < 1e-5
+                                    and abs(0.1 / self.supercell[2] - float(ss[2])) < 1e-5
                             ):
-                                center = idx
-                    bcc_interstital_dict = {
-                        'tetrahedral':   {chl: [0.25, 0.5, 0]},
-                        'octahedral':    {chl: [0.5, 0.5, 0]},
-                        'crowdion':      {chl: [0.25, 0.25, 0]},
-                        '<111>dumbbell': {chl: [1/3, 1/3, 1/3],
-                                          center: [2/3, 2/3, 2/3]},
-                        '<110>dumbbell': {chl: [1/4, 3/4, 1/2],
-                                          center: [3/4, 1/4, 1/2]},
-                        '<100>dumbbell': {chl: [1/2, 1/2, 1/6],
-                                          center: [1/2, 1/2, 5/6]}
-                    }
-                    total_task = self.__gen_tasks(bcc_interstital_dict)
+                                chl = idx
 
-                elif self.structure_type == 'fcc':
-                    for idx, ii in enumerate(self.pos_line):
-                        ss = ii.split()
-                        if len(ss) > 3:
-                            if (
-                                    abs(self.unit_frac * 1 - float(ss[0])) < 1e-5
-                                    and abs(self.unit_frac * 0.5 - float(ss[1])) < 1e-5
-                                    and abs(self.unit_frac * 0.5 - float(ss[2])) < 1e-5
-                            ):
-                                face = idx
+                    os.chdir(cwd)
+                    # specify interstitial structures
+                    if self.structure_type == 'bcc':
+                        for idx, ii in enumerate(self.pos_line):
+                            ss = ii.split()
+                            if len(ss) > 3:
+                                if (
+                                        abs(0.5 / self.supercell[0] - float(ss[0])) < 1e-5
+                                        and abs(0.5 / self.supercell[1] - float(ss[1])) < 1e-5
+                                        and abs(0.5 / self.supercell[2] - float(ss[2])) < 1e-5
+                                ):
+                                    center = idx
+                        bcc_interstital_dict = {
+                            'tetrahedral': {chl: [0.25, 0.5, 0]},
+                            'octahedral': {chl: [0.5, 0.5, 0]},
+                            'crowdion': {chl: [0.25, 0.25, 0]},
+                            '<111>dumbbell': {chl: [1 / 3, 1 / 3, 1 / 3],
+                                              center: [2 / 3, 2 / 3, 2 / 3]},
+                            '<110>dumbbell': {chl: [1 / 4, 3 / 4, 1 / 2],
+                                              center: [3 / 4, 1 / 4, 1 / 2]},
+                            '<100>dumbbell': {chl: [1 / 2, 1 / 2, 1 / 6],
+                                              center: [1 / 2, 1 / 2, 5 / 6]}
+                        }
+                        total_task = self.__gen_tasks(bcc_interstital_dict)
 
-                            if (
-                                    abs(self.unit_frac * 1 - float(ss[0])) < 1e-5
-                                    and abs(self.unit_frac * 1 - float(ss[1])) < 1e-5
-                                    and abs(self.unit_frac * 1 - float(ss[2])) < 1e-5
-                            ):
-                                corner = idx
+                    elif self.structure_type == 'fcc':
+                        for idx, ii in enumerate(self.pos_line):
+                            ss = ii.split()
+                            if len(ss) > 3:
+                                if (
+                                        abs(1 / self.supercell[0] - float(ss[0])) < 1e-5
+                                        and abs(0.5 / self.supercell[1] - float(ss[1])) < 1e-5
+                                        and abs(0.5 / self.supercell[2] - float(ss[2])) < 1e-5
+                                ):
+                                    face = idx
 
-                    fcc_interstital_dict = {
-                        'tetrahedral':      {chl: [0.75, 0.25, 0.25]},
-                        'octahedral':       {chl: [1, 0, 0.5]},
-                        'crowdion':         {chl: [1, 0.25, 0.25]},
-                        '<111>dumbbell':    {
-                            chl: [1-0.3/np.sqrt(3),
-                                    1-0.3/np.sqrt(3),
-                                    1-0.3/np.sqrt(3)],
-                            corner: [0.3/np.sqrt(3),
-                                    0.3/np.sqrt(3),
-                                    0.3/np.sqrt(3)]
-                        },
-                        '<110>dumbbell': {
-                            chl: [1,
-                                    0.5+(0.3/np.sqrt(2)),
-                                    0.5+(0.3/np.sqrt(2))],
-                            face: [1,
-                                    0.5-(0.3/np.sqrt(2)),
-                                    0.5-(0.3/np.sqrt(2))]
-                        },
-                        '<100>dumbbell': {
-                            chl: [1, 0.2, 0.5],
-                            face: [1, 0.8, 0.5]
-                        },
-                    }
-                    total_task = self.__gen_tasks(fcc_interstital_dict)
+                                if (
+                                        abs(1 / self.supercell[0] - float(ss[0])) < 1e-5
+                                        and abs(1 / self.supercell[1] - float(ss[1])) < 1e-5
+                                        and abs(1 / self.supercell[2] - float(ss[2])) < 1e-5
+                                ):
+                                    corner = idx
 
-                elif self.structure_type == 'hcp':
-                    pass
+                        fcc_interstital_dict = {
+                            'tetrahedral': {chl: [0.75, 0.25, 0.25]},
+                            'octahedral': {chl: [1, 0, 0.5]},
+                            'crowdion': {chl: [1, 0.25, 0.25]},
+                            '<111>dumbbell': {
+                                chl: [1 - 0.3 / np.sqrt(3),
+                                      1 - 0.3 / np.sqrt(3),
+                                      1 - 0.3 / np.sqrt(3)],
+                                corner: [0.3 / np.sqrt(3),
+                                         0.3 / np.sqrt(3),
+                                         0.3 / np.sqrt(3)]
+                            },
+                            '<110>dumbbell': {
+                                chl: [1,
+                                      0.5 + (0.3 / np.sqrt(2)),
+                                      0.5 + (0.3 / np.sqrt(2))],
+                                face: [1,
+                                       0.5 - (0.3 / np.sqrt(2)),
+                                       0.5 - (0.3 / np.sqrt(2))]
+                            },
+                            '<100>dumbbell': {
+                                chl: [1, 0.2, 0.5],
+                                face: [1, 0.8, 0.5]
+                            },
+                        }
+                        total_task = self.__gen_tasks(fcc_interstital_dict)
+
+                    elif self.structure_type == 'hcp':
+                        for idx, ii in enumerate(self.pos_line):
+                            ss = ii.split()
+                            if len(ss) > 3:
+                                if (
+                                        abs(1/3 / self.supercell[0] - float(ss[0])) < 1e-5
+                                        and abs(2/3 / self.supercell[1] - float(ss[1])) < 1e-5
+                                        and abs(0.25 / self.supercell[2] - float(ss[2])) < 1e-5
+                                ):
+                                    center = idx
+                        hcp_interstital_dict = {
+                            'O': {chl: [0, 0, 0.5]},
+                            'BO': {chl: [0, 0, 0.25]},
+                            'C': {chl: [0.5, 0.5, 0.5]},
+                            'BC': {chl: [5/6, 2/3, 0.25]},
+                            'S': {
+                                chl: [1/3, 2/3, 0.475],
+                                center: [1/3, 2/3, 0.025]
+                            },
+                            'BS': {
+                                chl: [2/3, 2/3, 0.25],
+                                center: [0, 2/3, 0.25]
+                            },
+                            'T': {chl: [2/3, 1/3, 0.375]},
+                            'BT': {chl: [2/3, 1/3, 0.25]},
+                        }
+                        total_task = self.__gen_tasks(hcp_interstital_dict)
                 else:
                     total_task = len(dss)
 
@@ -387,7 +421,6 @@ class Interstitial(Property):
                     os.chdir(cwd)
 
         return self.task_list
-
 
     def __gen_tasks(self, interstitial_dict):
         cwd = os.getcwd()
@@ -406,11 +439,11 @@ class Interstitial(Property):
             new_pos_line = self.pos_line.copy()
             for line, pos in adjust_dict.items():
                 new_pos_line[line] = (
-                        "%.6f" % float(self.unit_frac * pos[0])
+                        "%.6f" % float(pos[0] / self.supercell[0])
                         + " "
-                        + "%.6f" % float(self.unit_frac * pos[1])
+                        + "%.6f" % float(pos[1] / self.supercell[1])
                         + " "
-                        + "%.6f" % float(self.unit_frac * pos[2])
+                        + "%.6f" % float(pos[2] / self.supercell[2])
                         + " "
                         + self.insert_ele[0]
                 )
@@ -441,11 +474,11 @@ class Interstitial(Property):
                         type_num = type_map[insert_ele] + 1
                         conf_line[2] = str(len(type_map_list)) + " atom types"
                         conf_line[-2] = (
-                            "%6.d" % int(insert_line.split()[0])
-                            + "%7.d" % type_num
-                            + "%16.10f" % float(insert_line.split()[2])
-                            + "%16.10f" % float(insert_line.split()[3])
-                            + "%16.10f" % float(insert_line.split()[4])
+                                "%6.d" % int(insert_line.split()[0])
+                                + "%7.d" % type_num
+                                + "%16.10f" % float(insert_line.split()[2])
+                                + "%16.10f" % float(insert_line.split()[3])
+                                + "%16.10f" % float(insert_line.split()[4])
                         )
                         with open(conf, "w+") as fout:
                             for jj in conf_line:
@@ -465,7 +498,7 @@ class Interstitial(Property):
 
         if not self.reprod:
             with open(
-                os.path.join(os.path.dirname(output_file), "element.out"), "r"
+                    os.path.join(os.path.dirname(output_file), "element.out"), "r"
             ) as fin:
                 fc = fin.read().split("\n")
             ptr_data += "Insert_ele-Struct:          \tInter_E(eV)    \tE(eV)     \tequi_E(eV)\n"
@@ -499,7 +532,7 @@ class Interstitial(Property):
                 )
                 res_data[
                     insert_ele + "_" + str(interstitial_type) + "_" + structure_dir
-                ] = [evac, task_result["energies"][-1], equi_epa * natoms]
+                    ] = [evac, task_result["energies"][-1], equi_epa * natoms]
 
         else:
             if "init_data_path" not in self.parameter:
