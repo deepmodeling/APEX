@@ -91,8 +91,8 @@ class TestInterstitial(unittest.TestCase):
             st1 = inter.get_supercell_structure(
                 sc_mat=np.eye(3) * self.prop_param[0]["supercell"]
             )
-            st0_coords = [list(st0.sites[ii].coords) for ii in range(3)]
-            st1_coords = [list(st1.sites[ii].coords) for ii in range(3)]
+            st0_coords = [list(np.around(st0.sites[ii].coords, decimals=6)) for ii in range(3)]
+            st1_coords = [list(np.around(st1.sites[ii].coords, decimals=6)) for ii in range(3)]
             self.assertEqual(st0_coords, st1_coords)
 
         for ii in dfm_dirs[4:]:

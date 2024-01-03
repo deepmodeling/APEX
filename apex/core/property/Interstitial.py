@@ -195,7 +195,7 @@ class Interstitial(Property):
 
                 # get structure type
                 os.chdir(self.path_to_work)
-                ss.to("POSCAR", "POSCAR")
+                #ss.to("POSCAR", "POSCAR")
                 # convert site element into same type for a pseudo-structure just for simple lattice type judgment
                 same_type_ss = ss.copy()
                 species_mapping = {str(specie): "Ni" for specie in same_type_ss.composition.elements}
@@ -206,7 +206,7 @@ class Interstitial(Property):
                 # get conventional standard structure to ss
                 orig_st = StructureInfo(ss, symprec=0.1, angle_tolerance=5)
                 conv_ss = orig_st.conventional_structure
-                conv_ss.to("POSCAR_conv", "POSCAR")
+                conv_ss.to("POSCAR", "POSCAR")
                 ss = conv_ss
                 if self.lattice_type:
                     logging.info(msg=f'Adopt user indicated lattice type: {self.lattice_type}')
