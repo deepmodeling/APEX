@@ -11,12 +11,14 @@ from apex.core.calculator.lib.lammps_utils import (
     inter_eam_alloy,
     inter_eam_fs,
     inter_meam,
+    inter_meam_spline
 )
 from .Task import Task
 from dflow.python import upload_packages
+from . import LAMMPS_INTER_TYPE
 upload_packages.append(__file__)
 
-supported_inter = ["deepmd", "meam", "eam_fs", "eam_alloy"]
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
 
 
 class Lammps(Task):
@@ -30,20 +32,19 @@ class Lammps(Task):
         else:
             self.model = os.path.abspath(inter_parameter["model"])
         self.path_to_poscar = path_to_poscar
-        assert self.inter_type in supported_inter
+        assert self.inter_type in LAMMPS_INTER_TYPE
         self.set_inter_type_func()
 
     def set_inter_type_func(self):
 
         if self.inter_type == "deepmd":
             self.inter_func = inter_deepmd
-
         elif self.inter_type == "meam":
             self.inter_func = inter_meam
-
         elif self.inter_type == "eam_fs":
             self.inter_func = inter_eam_fs
-
+        elif self.inter_type == "meam_spline":
+            self.inter_func = inter_meam_spline
         else:
             self.inter_func = inter_eam_alloy
 

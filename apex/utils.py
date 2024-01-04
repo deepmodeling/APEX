@@ -10,11 +10,12 @@ from dflow.python import upload_packages
 from fpop.vasp import RunVasp
 from fpop.abacus import RunAbacus
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.core.calculator import LAMMPS_INTER_TYPE
 
 upload_packages.append(__file__)
 
 MaxLength = 70
-
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
 
 def simplify_paths(path_list: list) -> dict:
     # Split all paths into components
@@ -123,7 +124,7 @@ def get_task_type(d: dict) -> (str, Type[OP]):
     elif interaction_type == 'abacus':
         task_type = 'abacus'
         run_op = RunAbacus
-    elif interaction_type in ['deepmd', 'eam_alloy']:
+    elif interaction_type in LAMMPS_INTER_TYPE:
         task_type = 'lammps'
         run_op = RunLAMMPS
     else:

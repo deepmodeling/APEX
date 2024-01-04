@@ -10,7 +10,7 @@ from pathlib import Path
 from pymatgen.core.structure import Structure
 
 from apex.core.structure import StructureInfo
-from apex.core.calculator.calculator import LAMMPS_TYPE
+from apex.core.calculator.calculator import LAMMPS_INTER_TYPE
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property
@@ -315,7 +315,7 @@ class Phonon(Property):
                     os.chdir(cwd)
                     return task_list
                 # ----------make for lammps-------------
-                elif self.inter_param["type"] in LAMMPS_TYPE:
+                elif self.inter_param["type"] in LAMMPS_INTER_TYPE:
                     task_path = os.path.join(path_to_work, 'task.000000')
                     os.makedirs(task_path, exist_ok=True)
                     os.chdir(task_path)
@@ -336,7 +336,7 @@ class Phonon(Property):
     def post_process(self, task_list):
         cwd = os.getcwd()
         inter_type = self.inter_param["type"]
-        if inter_type in LAMMPS_TYPE:
+        if inter_type in LAMMPS_INTER_TYPE:
             # prepare in.lammps
             for ii in task_list:
                 os.chdir(ii)
@@ -438,7 +438,7 @@ class Phonon(Property):
                         self.supercell_size[2]))
                     os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
 
-            elif self.inter_param["type"] in LAMMPS_TYPE:
+            elif self.inter_param["type"] in LAMMPS_INTER_TYPE:
                 os.chdir(all_tasks[0])
                 assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
                 os.system('phonopy --dim="%s %s %s" -c POSCAR band.conf' % (

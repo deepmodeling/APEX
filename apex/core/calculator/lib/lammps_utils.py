@@ -141,6 +141,17 @@ def inter_meam(param):
     return ret
 
 
+def inter_meam_spline(param):
+    ret = ""
+    line = "pair_style      meam/spline \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
 def inter_eam_fs(param):  # 06/08 eam.fs interaction
     ret = ""
     line = "pair_style      eam/fs \n"
