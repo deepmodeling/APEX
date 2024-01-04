@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import shutil
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
@@ -311,6 +312,8 @@ class Interstitial(Property):
                                     and abs(0.1 / self.supercell[2] - float(ss[2])) < 1e-5
                             ):
                                 chl = idx
+                    # pseudo-task only run original POSCAR to save calculation resources
+                    shutil.copyfile("POSCAR", "task.000000/POSCAR")
 
                     os.chdir(cwd)
                     # specify interstitial structures
