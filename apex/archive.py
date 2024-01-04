@@ -42,6 +42,7 @@ class ResultStorage:
             relax_task = os.path.join(ii, 'relaxation/relax_task')
             inter = os.path.join(relax_task, 'inter.json')
             task = os.path.join(relax_task, 'task.json')
+            structure = os.path.join(relax_task, 'structure.json')
             result = os.path.join(relax_task, 'result.json')
             if not (
                 os.path.isfile(inter)
@@ -56,6 +57,7 @@ class ResultStorage:
             conf_key = os.path.relpath(ii, self.work_dir)
             conf_dict = {"interaction": loadfn(inter),
                          "parameter": loadfn(task),
+                         "structure_info": loadfn(structure),
                          "result": loadfn(result)}
             new_dict = {conf_key: {"relaxation": conf_dict}}
             update_dict(self.result_dict, new_dict)

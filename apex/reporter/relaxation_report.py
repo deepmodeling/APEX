@@ -20,9 +20,15 @@ class RelaxationReport:
         cell_vec_a = []
         cell_vec_b = []
         cell_vec_c = []
+        space_group_symbol = []
+        space_group_number = []
+        point_group_symbol = []
+        crystal_system = []
+        lattice_type = []
         for conf, dataset in res_data.items():
             try:
                 class_data = dataset['relaxation']['result']
+                struct_info = dataset['relaxation']['structure_info']
             except KeyError:
                 pass
             else:
@@ -36,7 +42,11 @@ class RelaxationReport:
                 cell_vec_a.append(vec_a_length)
                 cell_vec_b.append(vec_b_length)
                 cell_vec_c.append(vec_c_length)
-
+                space_group_symbol.append(struct_info["space_group_symbol"])
+                space_group_number.append(struct_info["space_group_number"])
+                point_group_symbol.append(struct_info["point_group_symbol"])
+                crystal_system.append(struct_info["crystal_system"])
+                lattice_type.append(struct_info["lattice_type"])
 
         # round numbers in table
         # rounded_tensor = round_2d_format(data, decimal)
@@ -47,6 +57,11 @@ class RelaxationReport:
             "Cell Vector length a (\AA)": cell_vec_a,
             "Cell Vector length b (\AA)": cell_vec_b,
             "Cell Vector length c (\AA)": cell_vec_c,
+            "Space Group Symbol": space_group_symbol,
+            "Space Group Number": space_group_number,
+            "Point Group Symbol": point_group_symbol,
+            "Crystal System": crystal_system,
+            "Lattice Type": lattice_type,
         })
 
         table = dash_table.DataTable(

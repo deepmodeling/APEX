@@ -17,21 +17,26 @@ upload_packages.append(__file__)
 MaxLength = 70
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
 
+
 def simplify_paths(path_list: list) -> dict:
-    # Split all paths into components
-    split_paths = [os.path.normpath(p).split(os.sep) for p in path_list]
+    # only one path, return it with only basename
+    if len(path_list) == 1:
+        return {path_list[0]: '.../' + os.path.basename(path_list[0])}
+    else:
+        # Split all paths into components
+        split_paths = [os.path.normpath(p).split(os.sep) for p in path_list]
 
-    # Find common prefix
-    common_prefix = os.path.commonprefix(split_paths)
-    common_prefix_len = len(common_prefix)
+        # Find common prefix
+        common_prefix = os.path.commonprefix(split_paths)
+        common_prefix_len = len(common_prefix)
 
-    # Remove common prefix from each path and create dictionary
-    simplified_paths_dict = {
-        os.sep.join(p): '.../' + os.sep.join(p[common_prefix_len:]) if common_prefix_len else os.sep.join(p)
-        for p in split_paths
-    }
+        # Remove common prefix from each path and create dictionary
+        simplified_paths_dict = {
+            os.sep.join(p): '.../' + os.sep.join(p[common_prefix_len:]) if common_prefix_len else os.sep.join(p)
+            for p in split_paths
+        }
 
-    return simplified_paths_dict
+        return simplified_paths_dict
 
 
 def is_json_file(filename):
