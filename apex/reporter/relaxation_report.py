@@ -54,9 +54,9 @@ class RelaxationReport:
         df = pd.DataFrame({
             "Conf": conf_list,
             "Equi E (eV)": equi_en,
-            "Cell Vector length a (\AA)": cell_vec_a,
-            "Cell Vector length b (\AA)": cell_vec_b,
-            "Cell Vector length c (\AA)": cell_vec_c,
+            "Cell Vector length a (Å)": cell_vec_a,
+            "Cell Vector length b (Å)": cell_vec_b,
+            "Cell Vector length c (Å)": cell_vec_c,
             "Space Group Symbol": space_group_symbol,
             "Space Group Number": space_group_number,
             "Point Group Symbol": point_group_symbol,

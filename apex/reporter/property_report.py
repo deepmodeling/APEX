@@ -396,21 +396,25 @@ class GammaReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
         displ = []
+        displ_length = []
         fault_en = []
         struct_en = []
         equi_en = []
         for k, v in res_data.items():
             displ.append(k)
-            fault_en.append(v[0])
-            struct_en.append((v[1]))
-            equi_en.append(v[2])
+            displ_length.append(v[0])
+            fault_en.append(v[1])
+            struct_en.append((v[2]))
+            equi_en.append(v[3])
         df = pd.DataFrame({
             "displacement": displ,
+            "displace_length": displ_length,
             "fault_en": fault_en
         })
         trace = go.Scatter(
             name=name,
             x=df['displacement'],
+            # x=df['displace_length'],
             y=df['fault_en'],
             mode='lines+markers'
         )
@@ -418,6 +422,7 @@ class GammaReport(PropertyReport):
             title='Stacking Fault Energy (Gamma Line)',
             xaxis=dict(
                 title_text="Displacement",
+                # title_text="Displace_Length (Å)",
                 title_font=dict(
                     size=18,
                     color="#7f7f7f"
@@ -437,16 +442,19 @@ class GammaReport(PropertyReport):
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
         displ = []
+        displ_length = []
         fault_en = []
         struct_en = []
         equi_en = []
         for k, v in res_data.items():
             displ.append(float(k))
-            fault_en.append(v[0])
-            struct_en.append((v[1]))
-            equi_en.append(v[2])
+            displ_length.append(v[0])
+            fault_en.append(v[1])
+            struct_en.append((v[2]))
+            equi_en.append(v[3])
         df = pd.DataFrame({
             "Displace": round_format(displ, decimal),
+            "Slip_Length (Å)": round_format(displ_length, decimal),
             "E_Fault (J/m^2)": round_format(fault_en, decimal),
             "E_Slab (eV)": round_format(struct_en, decimal),
             "E_Equilib (eV)": round_format(equi_en, decimal)

@@ -267,11 +267,12 @@ class Gamma(Property):
                                                             np.array([relax_a, relax_b, relax_c]))
                         norm_length = np.linalg.norm(slip_vector_cartesian, 2)
                         frac_slip_vec = np.array([norm_length, 0, 0])
-                    except:
+                    except Exception:
                         raise RuntimeError(
                             'Only int | float or '
                             'Sequence[int | float, int | float, int | float] is allowed for the input_length'
                         )
+                self.slip_length = frac_slip_vec[0]
                 # get displaced structure
                 for obtained_slab in self.__displace_slab_generator(slab,
                                                                     disp_vector=frac_slip_vec,
@@ -299,6 +300,7 @@ class Gamma(Property):
                     # vasp.perturb_xz('POSCAR', 'POSCAR', self.pert_xz)
                     # record miller
                     dumpfn(self.plane_miller, "miller.json")
+                    dumpfn(self.slip_length, 'slip_length.json')
                     count += 1
                 os.chdir(cwd)
 
@@ -546,12 +548,11 @@ class Gamma(Property):
                 + str(self.displace_direction)
             )
             """
-            ptr_data += "No_task: \tDisplacement \tStacking_Fault_E(J/m^2) EpA(eV) slab_equi_EpA(eV)\n"
+            ptr_data += "No_task: \tDisplacement \tDisplace_Length(\AA) \tStacking_Fault_E(J/m^2) EpA(eV) slab_equi_EpA(eV)\n"
             all_tasks.sort()
             n_steps = len(all_tasks) - 1
-            task_result_slab_equi = loadfn(
-                os.path.join(all_tasks[0], "result_task.json")
-            )
+            task_result_slab_equi = loadfn(os.path.join(all_tasks[0], "result_task.json"))
+            slip_length = loadfn(os.path.join(all_tasks[0], "slip_length.json"))
             for ii in all_tasks:
                 task_result = loadfn(os.path.join(ii, "result_task.json"))
                 natoms = np.sum(task_result["atom_numbs"])
@@ -581,16 +582,17 @@ class Gamma(Property):
                         / AA
                         * Cf
                 )
-
+                frac = int(ii[-4:]) / n_steps
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
-                ptr_data += "%-25s     %7.2f   %7.3f    %8.3f %8.3f\n" % (
+                ptr_data += "%-25s    %7.2f   %7.3f  %7.3f    %8.3f %8.3f\n" % (
                     str(miller_index) + "-" + structure_dir + ":",
-                    int(ii[-4:]) / n_steps,
+                    frac,
+                    (slip_length * frac),
                     sfe,
                     epa,
                     equi_epa_slab,
                 )
-                res_data[int(ii[-4:]) / n_steps] = [sfe, epa, equi_epa]
+                res_data[frac] = [(slip_length * frac), sfe, epa, equi_epa]
 
         else:
             if "init_data_path" not in self.parameter:
