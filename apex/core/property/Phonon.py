@@ -5,8 +5,12 @@ import os
 import shutil
 import re
 import subprocess
+from typing import List, Dict, Any
+
 import dpdata
+import seekpath
 from pathlib import Path
+from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 
 from apex.core.structure import StructureInfo
@@ -32,12 +36,16 @@ class Phonon(Property):
                 self.approach = parameter["approach"]
                 parameter["supercell_size"] = parameter.get('supercell_size', [2, 2, 2])
                 self.supercell_size = parameter["supercell_size"]
+                parameter["seekpath_from_original"] = parameter.get('seekpath_from_original', False)
+                self.seekpath_from_original = parameter["seekpath_from_original"]
                 parameter["MESH"] = parameter.get('MESH', None)
                 self.MESH = parameter["MESH"]
                 parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', None)
                 self.PRIMITIVE_AXES = parameter["PRIMITIVE_AXES"]
                 parameter["BAND"] = parameter.get('BAND', None)
                 self.BAND = parameter["BAND"]
+                parameter["BAND_LABELS"] = parameter.get('BAND_LABELS', None)
+                self.BAND_LABELS = parameter["BAND_LABELS"]
                 parameter["BAND_POINTS"] = parameter.get('BAND_POINTS', None)
                 self.BAND_POINTS = parameter["BAND_POINTS"]
                 parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
@@ -195,8 +203,27 @@ class Phonon(Property):
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
 
+                # get band path
                 if not self.BAND:
-                    raise RuntimeError('No band_path input for phonon calculation!')
+                    if self.seekpath_from_original:
+                        logging.info(msg='Band path (BAND) not indicated, using seekpath from original cell')
+                        sp = seekpath.get_path_orig_cell(
+                            self.get_seekpath_structure(ss)
+                        )
+                    else:
+                        logging.info(msg='Band path (BAND) not indicated, using seekpath for it')
+                        sp = seekpath.get_path(
+                            self.get_seekpath_structure(ss)
+                        )
+                    band_list = self.extract_seekpath_band(sp)
+                    self.BAND, self.BAND_LABELS = self.band_list_2_phonopy_band_string(band_list)
+                else:
+                    logging.info(msg=f'Band path (BAND) indicated, using: {self.BAND}')
+                    band_list = self.phonopy_band_string_2_band_list(self.BAND, self.BAND_LABELS)
+
+                dumpfn(band_list, os.path.join(path_to_work, "band_path.json"), indent=4)
+
+                # prepare phonopy input head
                 ret = ""
                 ret += "ATOM_NAME ="
                 for ii in ptypes:
@@ -214,6 +241,8 @@ class Phonon(Property):
                 if self.PRIMITIVE_AXES:
                     ret += "PRIMITIVE_AXES = %s\n" % self.PRIMITIVE_AXES
                 ret += "BAND = %s\n" % self.BAND
+                if self.BAND_LABELS:
+                    ret += "BAND_LABELS = %s\n" % self.BAND_LABELS
                 if self.BAND_POINTS:
                     ret += "BAND_POINTS = %s\n" % self.BAND_POINTS
                 if self.BAND_CONNECTION:
@@ -385,12 +414,108 @@ class Phonon(Property):
             unpacked_branch_list.append(unpacked_segment_list)
         return unpacked_branch_list
 
+    @staticmethod
+    def get_seekpath_structure(ss: Structure) -> list:
+        """
+        Convert pymatgen structure to seekpath structure
+        """
+        seekpath_structure = [
+            ss.lattice.matrix,
+            ss.frac_coords,
+            ss.atomic_numbers
+        ]
+        return seekpath_structure
+
+    @staticmethod
+    def extract_seekpath_band(seekpath_data: dict) -> list[list[dict[Any, Any]]]:
+        point_coords = seekpath_data['point_coords']
+        band_path = seekpath_data['path']
+        extracted_path = []
+        phonopy_band = []
+        pre_seg_end = None
+        for segment in band_path:
+            seg0 = segment[0]
+            seg1 = segment[1]
+            coord0 = point_coords[segment[0]]
+            coord1 = point_coords[segment[1]]
+            if not pre_seg_end:
+                long_branch = [{seg0: coord0}, {seg1: coord1}]
+            elif pre_seg_end == seg0:
+                long_branch.append({seg1: coord1})
+            else:
+                extracted_path.append(long_branch)
+                long_branch = [{seg0: coord0}, {seg1: coord1}]
+            pre_seg_end = seg1
+        extracted_path.append(long_branch)
+
+        return extracted_path
+
+    @staticmethod
+    def band_list_2_phonopy_band_string(band_list: list[list[dict[Any, Any]]]) -> [str, str]:
+        band_string = ""
+        band_label = ""
+        for branch in band_list:
+            for point in branch:
+                name = list(point.keys())[0]
+                coord = list(point.values())[0]
+                coord_str = " ".join([str(ii) for ii in coord])
+                band_string += f"{coord_str}  "
+                band_label += f"{name}  "
+            band_string = band_string[:-2]
+            band_label = band_label[:-2]
+            band_string += ", "
+            band_label += ", "
+        band_string = band_string[:-2]
+        band_label = band_label[:-2]
+
+        return band_string, band_label
+
+    @staticmethod
+    def phonopy_band_string_2_band_list(band_str: str, band_label: str = None) -> list[list[dict[Any, Any]]]:
+        band_list = []
+        branch_list = band_str.split(',')
+        point_num = 0
+        do_label = False
+
+        for branch in branch_list:
+            point_list = branch.split()
+            point_num += len(point_list)
+
+        if band_label:
+            label_branch_list = band_label.split(',')
+            label_num = 0
+            all_labels = []
+            for branch in label_branch_list:
+                label_point_list = branch.split()
+                all_labels.extend(label_point_list)
+                label_num += len(label_point_list)
+            if point_num == label_num:
+                do_label = True
+            else:
+                logging.warning("band string and label string have different length, skip labelling the band")
+
+        for branch in branch_list:
+            point_list = branch.split()
+            point_dict_list = []
+            if len(point_list) % 3 != 0:
+                raise ValueError("Input BAND List length is not a multiple of 3.")
+            if do_label:
+                label_iter = iter(all_labels)
+                seg_list = [{f'{next(label_iter)}': point_list[i:i+3]} for i in range(0, len(point_list), 3)]
+            else:
+                seg_list = [{f'{i}': point_list[ii:ii+3]} for i, ii in enumerate(range(0, len(point_list), 3))]
+            band_list.append(seg_list)
+
+        return band_list
+
     def _compute_lower(self, output_file, all_tasks, all_res):
         cwd = Path.cwd()
         work_path = Path(output_file).parent.absolute()
         output_file = os.path.abspath(output_file)
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
+
+        band_path = loadfn(os.path.join(work_path, "band_path.json"))
 
         if not self.reprod:
             os.chdir(work_path)
@@ -466,7 +591,8 @@ class Phonon(Property):
         result_points = ptr_data.split('\n')[1][4:].split()
         result_lines = ptr_data.split('\n')[2:]
         unpacked_lines = self.unpack_band('\n'.join(result_lines))
-        res_data['band_path'] = result_points
+        res_data['segment'] = result_points
+        res_data['band_path'] = band_path
         res_data['band'] = unpacked_lines
 
         with open(output_file, "w") as fp:

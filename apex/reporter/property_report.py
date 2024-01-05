@@ -476,6 +476,7 @@ class PhononReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         bands = res_data['band']
+
         band_path_list = []
         for seg in bands[0]:
             seg_list = [k for k in seg.keys()]
@@ -505,10 +506,69 @@ class PhononReport(PropertyReport):
             )
             traces.append(trace)
 
+        segment_value_list = res_data['segment']
+        band_path_info = res_data['band_path']
+        segment_value_iter = iter(segment_value_list)
+
+        x_label_list = []
+        connect_seg = False
+        pre_k = None
+        for seg in band_path_info:
+            for point in seg:
+                k = list(point.keys())[0]
+                if connect_seg:
+                    #pre_k = list(x_label_list[-1].keys())[0]
+                    new_k = f'{pre_k}/{k}'
+                    x_label_list[-1][0] = new_k
+                    connect_seg = False
+                else:
+                    x_label_list.append([k, float(next(segment_value_iter))])
+            pre_k = k
+            connect_seg = True
+
+        # label special points
+        x_label_values_list = [x[1] for x in x_label_list]
+        annotations = []
+        shapes = []
+
+        for x_label in x_label_list:
+            # add label
+            annotations.append(go.layout.Annotation(
+                x=x_label[1],
+                y=1.08,
+                xref="x",
+                yref="paper",
+                text=x_label[0],  # label text
+                showarrow=False,
+                yshift=0,  # label position
+                xanchor='center'
+            ))
+
+            # add vertical line
+            shapes.append({
+                'type': 'line',
+                'x0': x_label[1],
+                'y0': 0,
+                'x1': x_label[1],
+                'y1': 1,
+                'xref': 'x',
+                'yref': 'paper',
+                'line': {
+                    'color': 'grey',
+                    'width': 1,
+                    'dash': 'dot',
+                },
+            })
+
         layout = go.Layout(
             title='Phonon Spectrum',
+            annotations=annotations,
+            shapes=shapes,
             autotypenumbers='convert types',
             xaxis=dict(
+                tickmode='array',
+                tickvals=x_label_values_list,
+                ticktext=[f'{float(val):.3f}' for val in x_label_values_list],
                 title_text="Band Path",
                 title_font=dict(
                     size=18,

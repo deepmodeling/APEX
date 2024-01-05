@@ -149,7 +149,7 @@ class DashReportApp:
         if prop_type not in NO_GRAPH_LIST:
             for w_dimension, dataset in self.datasets.items():
                 try:
-                    data = dataset[selected_confs][selected_prop]
+                    _ = dataset[selected_confs][selected_prop]
                 except KeyError:
                     pass
                 else:
