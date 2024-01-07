@@ -351,7 +351,7 @@ The parameters related to Gamma line calculation are listed below:
   It should be noted that for various crystal structures, **users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption**. In above example, the slip system configuration within the "hcp" dictionary will be utilized.
 
 ##### 3.1.2.7. Phonon Spectrum
-This function incorporates part of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) codes into APEX to make it more complete. This workflow is realized via [Phonopy](https://github.com/phonopy/phonopy), and plus [phonoLAMMPS](https://github.com/abelcarreras/phonolammps) for LAMMPS calculation. 
+This function incorporates part of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) codes into APEX to make it more complete. This workflow is realized via [Phonopy](https://github.com/phonopy/phonopy), and plus [phonoLAMMPS](https://github.com/abelcarreras/phonolammps) for LAMMPS calculation. In APEX, this part includes the [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatically high-symmetry points searching for phonon calculation.
 
 *IMPORTANT!!*: it should be noticed that one will need the **phonoLAMMPS** package pre-installed within one's `run_image` for proper `LAMMPS` calculation of phonon spectrum.
 
@@ -363,9 +363,12 @@ The parameters related to `Phonon` calculation are listed below:
   | supercell_size | Sequence[Int] | [2, 2, 2] | Size of supercell created for calculation |
   | MESH | Sequence[Int] | None | Specify the dimensions of the grid in reciprocal space for which the phonon frequencies and eigenvectors are to be calculated. For example: [8, 8, 8]; Refer to [Phonopy MESH](http://phonopy.github.io/phonopy/setting-tags.html#mesh-sampling-tags) |
   | PRIMITIVE_AXES | String | None | To define the basis vectors of a primitive cell in terms of the basis vectors of a conventional cell for input cell transformation. For example: "0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0"; Refer to [Phonopy PRIMITIVE_AXES](http://phonopy.github.io/phonopy/setting-tags.html#primitive-axes-or-primitive-axis) |
-  | BAND | String | None | Indicate band path in reciprocal space as format of [Phonopy BAND](http://phonopy.github.io/phonopy/setting-tags.html#band-and-band-points); For example: "0 0 0 1/2 0 1/2, 1/2 1/2 1 0 0 0 1/2 1/2 1/2" |
+  | BAND | String | None | (Optional) Indicate band path in reciprocal space as format of [Phonopy BAND](http://phonopy.github.io/phonopy/setting-tags.html#band-and-band-points); For example: "0 0 0 1/2 0 1/2, 1/2 1/2 1 0 0 0 1/2 1/2 1/2". If not specified, the [seekpath](https://seekpath.readthedocs.io/en/latest/#) package will be adopted to automatically determine band path according to relaxed structure. |
+  | BAND_LABELS | String | None | (Optional) Indication of band path labels for report plot. |
   | BAND_POINTS | Int | 51 | Number of sampling points including the path ends |
   | BAND_CONNECTION | Bool | True | With this option, band connections are estimated from eigenvectors and band structure is drawn considering band crossings. In sensitive cases, to obtain better band connections, it requires to increase number of points calculated in band segments by the `BAND_POINTS` tag. |
+  | seekpath_from_original | Bool | False | Whether to re-seek standard primitive cell for relaxed structure for band path via the seekpath package. If True: `seekpath.get_path_orig_cell` will be adopted, else: `seekpath.get_path`. Refer to [link](https://seekpath.readthedocs.io/en/latest/maindoc.html#k-point-path-for-non-standard-unit-cells) |
+  | seekpath_param | Dict | None | (Optional) Other parameters to be specified for `seekpath.get_path` and `seekpath.get_path`. Refer to [link](https://seekpath.readthedocs.io/en/latest/maindoc.html#k-point-path-for-non-standard-unit-cells) |
 
 When utilize the `VASP`, you have **two** primary calculation methods at your disposal: the **Linear Response Method** and the **Finite Displacement Method**.
 

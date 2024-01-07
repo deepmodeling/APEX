@@ -47,7 +47,10 @@ class Phonon(Property):
                 parameter["BAND"] = parameter.get('BAND', None)
                 self.BAND = parameter["BAND"]
                 parameter["BAND_LABELS"] = parameter.get('BAND_LABELS', None)
-                self.BAND_LABELS = parameter["BAND_LABELS"]
+                if self.BAND:
+                    self.BAND_LABELS = parameter["BAND_LABELS"]
+                else:
+                    self.BAND_LABELS = None
                 parameter["BAND_POINTS"] = parameter.get('BAND_POINTS', None)
                 self.BAND_POINTS = parameter["BAND_POINTS"]
                 parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
