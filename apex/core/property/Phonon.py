@@ -455,9 +455,10 @@ class Phonon(Property):
         return extracted_path
 
     @staticmethod
-    def band_list_2_phonopy_band_string(band_list: list[list[dict[Any, Any]]]) -> [str, str]:
+    def band_list_2_phonopy_band_string(band_list) -> [str, str]:
         band_string = ""
         band_label = ""
+        # type of band_list: list[list[dict[Any, Any]]]
         for branch in band_list:
             for point in branch:
                 name = list(point.keys())[0]
