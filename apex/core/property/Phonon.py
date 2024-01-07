@@ -431,7 +431,7 @@ class Phonon(Property):
         return seekpath_structure
 
     @staticmethod
-    def extract_seekpath_band(seekpath_data: dict) -> list[list[dict[Any, Any]]]:
+    def extract_seekpath_band(seekpath_data: dict):
         point_coords = seekpath_data['point_coords']
         band_path = seekpath_data['path']
         extracted_path = []
@@ -451,7 +451,7 @@ class Phonon(Property):
                 long_branch = [{seg0: coord0}, {seg1: coord1}]
             pre_seg_end = seg1
         extracted_path.append(long_branch)
-
+        # return type: list[list[dict[Any, Any]]]
         return extracted_path
 
     @staticmethod
