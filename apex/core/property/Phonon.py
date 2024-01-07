@@ -479,7 +479,7 @@ class Phonon(Property):
         return band_string, band_label
 
     @staticmethod
-    def phonopy_band_string_2_band_list(band_str: str, band_label: str = None) -> list[list[dict[Any, Any]]]:
+    def phonopy_band_string_2_band_list(band_str: str, band_label: str = None):
         band_list = []
         branch_list = band_str.split(',')
         point_num = 0
@@ -513,7 +513,7 @@ class Phonon(Property):
             else:
                 seg_list = [{f'{i}': point_list[ii:ii+3]} for i, ii in enumerate(range(0, len(point_list), 3))]
             band_list.append(seg_list)
-
+        # return type -> list[list[dict[Any, Any]]]
         return band_list
 
     def _compute_lower(self, output_file, all_tasks, all_res):
