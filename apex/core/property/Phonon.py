@@ -38,6 +38,8 @@ class Phonon(Property):
                 self.supercell_size = parameter["supercell_size"]
                 parameter["seekpath_from_original"] = parameter.get('seekpath_from_original', False)
                 self.seekpath_from_original = parameter["seekpath_from_original"]
+                parameter["seekpath_param"] = parameter.get('seekpath_param', {})
+                self.seekpath_param = parameter["seekpath_param"]
                 parameter["MESH"] = parameter.get('MESH', None)
                 self.MESH = parameter["MESH"]
                 parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', None)
@@ -208,12 +210,14 @@ class Phonon(Property):
                     if self.seekpath_from_original:
                         logging.info(msg='Band path (BAND) not indicated, using seekpath from original cell')
                         sp = seekpath.get_path_orig_cell(
-                            self.get_seekpath_structure(ss)
+                            self.get_seekpath_structure(ss),
+                            **self.seekpath_param
                         )
                     else:
                         logging.info(msg='Band path (BAND) not indicated, using seekpath for it')
                         sp = seekpath.get_path(
-                            self.get_seekpath_structure(ss)
+                            self.get_seekpath_structure(ss),
+                            **self.seekpath_param
                         )
                     band_list = self.extract_seekpath_band(sp)
                     self.BAND, self.BAND_LABELS = self.band_list_2_phonopy_band_string(band_list)
