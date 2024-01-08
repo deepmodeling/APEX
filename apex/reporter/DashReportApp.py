@@ -96,6 +96,25 @@ class DashReportApp:
             [Input('confs-radio', 'value')]
         )(self.update_dropdown_options)
 
+    @staticmethod
+    def plotly_color_cycle():
+        # https://plotly.com/python/discrete-color/
+        colors = [
+            '#636EFA',  # blue
+            '#EF553B',  # red
+            '#00CC96',  # green
+            '#AB63FA',  # purple
+            '#FFA15A',  # orange
+            '#19D3F3',  # cyan
+            '#FF6692',  # pink
+            '#B6E880',  # lime
+            '#FF97FF',  # magenta
+            '#FECB52',  # yellow
+        ]
+        while True:
+            for color in colors:
+                yield color
+
     def generate_layout(self):
         for w in self.datasets.values():
             self.all_dimensions.update(w.keys())
@@ -170,6 +189,7 @@ class DashReportApp:
     def update_graph(self, selected_prop, selected_confs):
         fig = go.Figure()
         prop_type = return_prop_type(selected_prop)
+        color_generator = self.plotly_color_cycle()
         if prop_type not in NO_GRAPH_LIST:
             for w_dimension, dataset in self.datasets.items():
                 try:
@@ -180,7 +200,10 @@ class DashReportApp:
                     propCls = return_prop_class(prop_type)
                     # trace_name = f"{w_dimension} - {selected_confs} - {selected_prop}"
                     trace_name = w_dimension
-                    traces, layout = propCls.plotly_graph(data, trace_name)
+                    traces, layout = propCls.plotly_graph(
+                        data, trace_name,
+                        color=next(color_generator)
+                    )
                     fig.add_traces(traces)
                     fig.layout = layout
                     fig.update_layout(autotypenumbers='convert types')

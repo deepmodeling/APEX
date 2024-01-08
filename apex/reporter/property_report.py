@@ -493,7 +493,8 @@ class PhononReport(PropertyReport):
             pd_dict['Band %02d' % (ii + 1)] = band_list[ii]
         df = pd.DataFrame(pd_dict)
         traces = []
-        color = random_color()
+
+
         for ii in range(len(band_list)):
             trace = go.Scatter(
                 x=df['Band Path'],
@@ -502,7 +503,7 @@ class PhononReport(PropertyReport):
                 legendgroup=name,
                 legendgrouptitle_text=name,
                 mode='lines+markers',
-                line=dict(color=color)
+                line=dict(color=kwargs["color"])
             )
             traces.append(trace)
 
@@ -517,7 +518,6 @@ class PhononReport(PropertyReport):
             for point in seg:
                 k = list(point.keys())[0]
                 if connect_seg:
-                    #pre_k = list(x_label_list[-1].keys())[0]
                     new_k = f'{pre_k}/{k}'
                     x_label_list[-1][0] = new_k
                     connect_seg = False
