@@ -87,8 +87,8 @@ class Lammps(Task):
                 if not os.path.abspath(link_file) == self.model[1]:
                     os.remove(model_file)
                     os.symlink(os.path.relpath(self.model[1]), model_file)
-            elif os.path.isfile(model_lib):
-                os.remove(model_lib)
+            elif os.path.isfile(model_file):
+                os.remove(model_file)
                 os.symlink(os.path.relpath(self.model[1]), model_file)
             else:
                 os.symlink(os.path.relpath(self.model[1]), model_file)
