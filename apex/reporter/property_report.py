@@ -535,7 +535,7 @@ class PhononReport(PropertyReport):
             # add label
             annotations.append(go.layout.Annotation(
                 x=x_label[1],
-                y=1.08,
+                y=1.07,
                 xref="x",
                 yref="paper",
                 text=x_label[0],  # label text
