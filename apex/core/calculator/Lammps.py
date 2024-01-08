@@ -70,6 +70,7 @@ class Lammps(Task):
         if self.inter_type == "meam":
             model_lib = os.path.basename(self.model[0])
             model_file = os.path.basename(self.model[1])
+
             os.chdir(os.path.join(output_dir, "../../"))
             if os.path.islink(model_lib):
                 link_lib = os.readlink(model_lib)
@@ -92,6 +93,7 @@ class Lammps(Task):
                 os.symlink(os.path.relpath(self.model[1]), model_file)
             else:
                 os.symlink(os.path.relpath(self.model[1]), model_file)
+
             os.chdir(output_dir)
             if not os.path.islink(model_lib):
                 os.symlink(os.path.join("../..", model_lib), model_lib)
