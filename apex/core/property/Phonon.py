@@ -486,8 +486,12 @@ class Phonon(Property):
         do_label = False
 
         for branch in branch_list:
-            point_list = branch.split()
-            point_num += len(point_list)
+            unit_list = branch.split()
+            unit_num = len(unit_list)
+            if unit_num % 3 != 0:
+                raise ValueError("Input BAND List length is not a multiple of 3.")
+            else:
+                point_num += unit_num // 3
 
         if band_label:
             label_branch_list = band_label.split(',')
@@ -503,15 +507,12 @@ class Phonon(Property):
                 logging.warning("band string and label string have different length, skip labelling the band")
 
         for branch in branch_list:
-            point_list = branch.split()
-            point_dict_list = []
-            if len(point_list) % 3 != 0:
-                raise ValueError("Input BAND List length is not a multiple of 3.")
+            unit_list = branch.split()
             if do_label:
                 label_iter = iter(all_labels)
-                seg_list = [{f'{next(label_iter)}': point_list[i:i+3]} for i in range(0, len(point_list), 3)]
+                seg_list = [{f'{next(label_iter)}': unit_list[i:i+3]} for i in range(0, len(unit_list), 3)]
             else:
-                seg_list = [{f'{i}': point_list[ii:ii+3]} for i, ii in enumerate(range(0, len(point_list), 3))]
+                seg_list = [{f'{i}': unit_list[ii:ii+3]} for i, ii in enumerate(range(0, len(unit_list), 3))]
             band_list.append(seg_list)
         # return type -> list[list[dict[Any, Any]]]
         return band_list
