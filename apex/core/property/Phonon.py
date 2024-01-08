@@ -210,6 +210,7 @@ class Phonon(Property):
 
                 # get band path
                 if not self.BAND:
+                    # use seekpath to get band path
                     if self.seekpath_from_original:
                         logging.info(msg='Band path (BAND) not indicated, using seekpath from original cell')
                         sp = seekpath.get_path_orig_cell(
@@ -225,6 +226,7 @@ class Phonon(Property):
                     band_list = self.extract_seekpath_band(sp)
                     self.BAND, self.BAND_LABELS = self.band_list_2_phonopy_band_string(band_list)
                 else:
+                    # use user input band path
                     logging.info(msg=f'Band path (BAND) indicated, using: {self.BAND}')
                     band_list = self.phonopy_band_string_2_band_list(self.BAND, self.BAND_LABELS)
 
