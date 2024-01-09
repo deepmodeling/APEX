@@ -5,4 +5,5 @@ LAMMPS_INTER_TYPE = [
     'eam_fs',
     'meam_spline',
     'snap',
+    'gap',
 ]
