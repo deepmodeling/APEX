@@ -104,12 +104,12 @@ def _get_conf_natom(conf):
     raise RuntimeError("cannot find line indicate atom types in ", conf)
 
 
-def inter_deepmd(param, **kwargs):
+def inter_deepmd(param):
     models = param["model_name"]
     deepmd_version = param["deepmd_version"]
     ret = "pair_style deepmd "
     model_list = ""
-    type_map_list = kwargs["type_map_list"]
+    type_map_list = [i for i in param["param_type"]]
     type_map_list_str = " ".join(type_map_list)
     for ii in models:
         model_list += ii + " "
@@ -129,7 +129,19 @@ def inter_deepmd(param, **kwargs):
     return ret
 
 
-def inter_meam(param, **kwargs):
+def inter_snap(param):
+    ret = ""
+    line = "pair_style      snap \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    line += "%s " % param["model_name"][1]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
+def inter_meam(param):
     ret = ""
     line = "pair_style      meam \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -143,7 +155,7 @@ def inter_meam(param, **kwargs):
     return ret
 
 
-def inter_meam_spline(param, **kwargs):
+def inter_meam_spline(param):
     ret = ""
     line = "pair_style      meam/spline \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -154,7 +166,7 @@ def inter_meam_spline(param, **kwargs):
     return ret
 
 
-def inter_eam_fs(param, **kwargs):  # 06/08 eam.fs interaction
+def inter_eam_fs(param):  # 06/08 eam.fs interaction
     ret = ""
     line = "pair_style      eam/fs \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -165,7 +177,7 @@ def inter_eam_fs(param, **kwargs):  # 06/08 eam.fs interaction
     return ret
 
 
-def inter_eam_alloy(param, **kwargs):  # 06/08 eam.alloy interaction
+def inter_eam_alloy(param):  # 06/08 eam.alloy interaction
     ret = ""
     line = "pair_style      eam/alloy \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -203,7 +215,7 @@ def make_lammps_eval(conf, type_map, interaction, param):
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param, type_map_list=type_map_list)
+    ret += interaction(param)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -261,7 +273,7 @@ def make_lammps_equi(
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param, type_map_list=type_map_list)
+    ret += interaction(param)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -318,7 +330,7 @@ def make_lammps_elastic(
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param, type_map_list=type_map_list)
+    ret += interaction(param)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -385,7 +397,7 @@ def make_lammps_press_relax(
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param, type_map_list=type_map_list)
+    ret += interaction(param)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
