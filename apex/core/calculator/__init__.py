@@ -3,5 +3,6 @@ LAMMPS_INTER_TYPE = [
     'eam_alloy',
     'meam',
     'eam_fs',
-    'meam_spline'
+    'meam_spline',
+    'snap',
 ]

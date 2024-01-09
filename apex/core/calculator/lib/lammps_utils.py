@@ -104,11 +104,13 @@ def _get_conf_natom(conf):
     raise RuntimeError("cannot find line indicate atom types in ", conf)
 
 
-def inter_deepmd(param):
+def inter_deepmd(param, **kwargs):
     models = param["model_name"]
     deepmd_version = param["deepmd_version"]
     ret = "pair_style deepmd "
     model_list = ""
+    type_map_list = kwargs["type_map_list"]
+    type_map_list_str = " ".join(type_map_list)
     for ii in models:
         model_list += ii + " "
     if Version(deepmd_version) < Version("1"):
@@ -123,11 +125,11 @@ def inter_deepmd(param):
             ret += "%s out_freq 10 out_file model_devi.out\n" % model_list
         else:
             ret += models[0] + "\n"
-    ret += "pair_coeff * *\n"
+    ret += "pair_coeff * * %s\n" % type_map_list_str
     return ret
 
 
-def inter_meam(param):
+def inter_meam(param, **kwargs):
     ret = ""
     line = "pair_style      meam \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -141,7 +143,7 @@ def inter_meam(param):
     return ret
 
 
-def inter_meam_spline(param):
+def inter_meam_spline(param, **kwargs):
     ret = ""
     line = "pair_style      meam/spline \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -152,7 +154,7 @@ def inter_meam_spline(param):
     return ret
 
 
-def inter_eam_fs(param):  # 06/08 eam.fs interaction
+def inter_eam_fs(param, **kwargs):  # 06/08 eam.fs interaction
     ret = ""
     line = "pair_style      eam/fs \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -163,7 +165,7 @@ def inter_eam_fs(param):  # 06/08 eam.fs interaction
     return ret
 
 
-def inter_eam_alloy(param):  # 06/08 eam.alloy interaction
+def inter_eam_alloy(param, **kwargs):  # 06/08 eam.alloy interaction
     ret = ""
     line = "pair_style      eam/alloy \n"
     line += "pair_coeff      * * %s " % param["model_name"][0]
@@ -201,7 +203,7 @@ def make_lammps_eval(conf, type_map, interaction, param):
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param)
+    ret += interaction(param, type_map_list=type_map_list)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -259,7 +261,7 @@ def make_lammps_equi(
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param)
+    ret += interaction(param, type_map_list=type_map_list)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -316,7 +318,7 @@ def make_lammps_elastic(
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param)
+    ret += interaction(param, type_map_list=type_map_list)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -383,7 +385,7 @@ def make_lammps_press_relax(
     for ii in range(len(type_map)):
         ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
     ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param)
+    ret += interaction(param, type_map_list=type_map_list)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
@@ -414,13 +416,10 @@ def make_lammps_press_relax(
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     return ret
 
-
+"""
 def make_lammps_phonon(
     conf, masses, interaction, param, etol=0, ftol=1e-10, maxiter=5000, maxeval=500000
 ):
-    """
-    make lammps input for elastic calculation
-    """
     ret = ""
     ret += "clear\n"
     ret += "units 	metal\n"
@@ -435,7 +434,7 @@ def make_lammps_phonon(
     ret += "neigh_modify    every 1 delay 0 check no\n"
     ret += interaction(param)
     return ret
-
+"""
 
 def _get_epa(lines):
     for ii in lines:
