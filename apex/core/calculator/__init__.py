@@ -6,4 +6,5 @@ LAMMPS_INTER_TYPE = [
     'meam_spline',
     'snap',
     'gap',
+    'rann',
 ]

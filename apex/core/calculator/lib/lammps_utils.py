@@ -152,6 +152,17 @@ def inter_gap(param):
     return ret
 
 
+def inter_rann(param):
+    ret = ""
+    line = "pair_style      rann \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
 def inter_meam(param):
     ret = ""
     line = "pair_style      meam \n"
