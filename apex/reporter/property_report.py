@@ -502,8 +502,8 @@ class PhononReport(PropertyReport):
                 name='Band %02d' % (ii + 1),
                 legendgroup=name,
                 legendgrouptitle_text=name,
-                mode='lines+markers',
-                line=dict(color=kwargs["color"])
+                mode='lines',
+                line=dict(color=kwargs["color"], width=1.5)
             )
             traces.append(trace)
 

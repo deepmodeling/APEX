@@ -34,6 +34,8 @@ class Interstitial(Property):
                 self.insert_ele = parameter["insert_ele"]
                 parameter["lattice_type"] = parameter.get("lattice_type", None)
                 self.lattice_type = parameter["lattice_type"]
+                parameter["voronoi_param"] = parameter.get("voronoi_param", {})
+                self.voronoi_param = parameter["voronoi_param"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             self.cal_type = parameter["cal_type"]
             default_cal_setting = {
@@ -221,7 +223,7 @@ class Interstitial(Property):
                     os.remove(self.insert_element_task)
 
                 for ii in self.insert_ele:
-                    pre_vds = VoronoiInterstitialGenerator()
+                    pre_vds = VoronoiInterstitialGenerator(**self.voronoi_param)
                     vds = pre_vds.generate(ss, [ii])
                     if self.structure_type in PREDEFINED_LIST:
                         pre_vds = InterstitialGenerator()
