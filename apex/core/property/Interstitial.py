@@ -7,8 +7,10 @@ import shutil
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
-from pymatgen.analysis.defects.generators import InterstitialGenerator, VoronoiInterstitialGenerator
+from pymatgen.analysis.defects.generators import VoronoiInterstitialGenerator
+from pymatgen.analysis.defects.core import Interstitial as pmgInterstitial
 from pymatgen.core.structure import Structure
+from pymatgen.core.sites import PeriodicSite
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import lammps_utils
@@ -221,13 +223,13 @@ class Interstitial(Property):
                 self.insert_element_task = os.path.join(self.path_to_work, "element.out")
                 if os.path.isfile(self.insert_element_task):
                     os.remove(self.insert_element_task)
-
                 for ii in self.insert_ele:
-                    pre_vds = VoronoiInterstitialGenerator(**self.voronoi_param)
-                    vds = pre_vds.generate(ss, [ii])
                     if self.structure_type in PREDEFINED_LIST:
-                        pre_vds = InterstitialGenerator()
-                        vds = pre_vds.generate(ss, {ii: [[0.1, 0.1, 0.1]]})
+                        # produce a pseudo interstitial structure for later modification
+                        vds = [pmgInterstitial(ss, PeriodicSite(ii, [0.12, 0.13, 0.14], ss.lattice))]
+                    else:
+                        pre_vds = VoronoiInterstitialGenerator(**self.voronoi_param)
+                        vds = pre_vds.generate(ss, [ii])
                     for jj in vds:
                         temp = jj.get_supercell_structure(
                             sc_mat=np.diag(self.supercell, k=0)
@@ -262,7 +264,6 @@ class Interstitial(Property):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
-
                 for ii in range(len(dss)):
                     output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                     os.makedirs(output_task, exist_ok=True)
@@ -309,9 +310,9 @@ class Interstitial(Property):
                         ss = ii.split()
                         if len(ss) > 3:
                             if (
-                                    abs(0.1 / self.supercell[0] - float(ss[0])) < 1e-5
-                                    and abs(0.1 / self.supercell[1] - float(ss[1])) < 1e-5
-                                    and abs(0.1 / self.supercell[2] - float(ss[2])) < 1e-5
+                                    abs(0.12 / self.supercell[0] - float(ss[0])) < 1e-5
+                                    and abs(0.13 / self.supercell[1] - float(ss[1])) < 1e-5
+                                    and abs(0.14 / self.supercell[2] - float(ss[2])) < 1e-5
                             ):
                                 chl = idx
                     # pseudo-task only run original POSCAR to save calculation resources
