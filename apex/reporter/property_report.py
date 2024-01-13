@@ -309,7 +309,7 @@ class InterstitialReport(PropertyReport):
             struct_e.append(float(v[1]))
             equi_e.append(float(v[2]))
         df = pd.DataFrame({
-            "Interstitial type": inter_struct,
+            "Initial configuration ": inter_struct,
             "E_form (eV)": round_format(inter_form_e, decimal),
             "E_defect (eV)": round_format(struct_e, decimal),
             "E_equi (eV)": round_format(equi_e, decimal),
