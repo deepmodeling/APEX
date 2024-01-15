@@ -7,9 +7,7 @@ from multiprocessing import Pool
 import apex
 import dpdata
 import fpop
-import phonolammps
 from dflow import config, s3_config
-from monty.serialization import loadfn
 
 from apex.archive import archive_workdir
 from apex.config import Config

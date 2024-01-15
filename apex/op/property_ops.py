@@ -260,11 +260,12 @@ class PropsPost(OP):
             abs_path_to_prop,
         )
         # remove potential files in each md task
-        os.chdir(abs_path_to_prop)
-        inter_files_name = inter_param["model"]
-        for file in inter_files_name:
-            cmd = f"for kk in task.*; do cd $kk; rm -f {file}; cd ..; done"
-            subprocess.call(cmd, shell=True)
+        if calculator == 'lammps':
+            os.chdir(abs_path_to_prop)
+            inter_files_name = inter_param["model"]
+            for file in inter_files_name:
+                cmd = f"for kk in task.*; do cd $kk; rm -f {file}; cd ..; done"
+                subprocess.call(cmd, shell=True)
 
         os.chdir(cwd)
         out_path = Path(cwd) / 'retrieve_pool'
