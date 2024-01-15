@@ -266,6 +266,10 @@ class PropsPost(OP):
             for file in inter_files_name:
                 cmd = f"for kk in task.*; do cd $kk; rm -f {file}; cd ..; done"
                 subprocess.call(cmd, shell=True)
+        elif calculator == 'vasp':
+            os.chdir(abs_path_to_prop)
+            cmd = f"for kk in task.*; do cd $kk; rm -f POTCAR; cd ..; done"
+            subprocess.call(cmd, shell=True)
 
         os.chdir(cwd)
         out_path = Path(cwd) / 'retrieve_pool'
