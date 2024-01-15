@@ -259,7 +259,7 @@ class PropsPost(OP):
             os.path.join(abs_path_to_prop, "result.out"),
             abs_path_to_prop,
         )
-        # remove potential files in each md task
+        # remove potential files in each task
         if calculator == 'lammps':
             os.chdir(abs_path_to_prop)
             inter_files_name = inter_param["model"]
