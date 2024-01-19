@@ -20,7 +20,7 @@ def random_color():
 class PropertyReport(ABC):
     @staticmethod
     @abstractmethod
-    def plotly_graph(res_data: dict, name: str) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str) -> [list[go], go.layout]:
         """
         Plot plotly graph.
 
@@ -30,7 +30,7 @@ class PropertyReport(ABC):
             The dict storing the result of the props
         Returns:
         -------
-        plotly.graph_objs
+        list[plotly.graph_objs]
             The list of plotly graph object
         plotly.graph_objs.layout
             the layout
@@ -58,7 +58,7 @@ class PropertyReport(ABC):
 
 class EOSReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         vpa = []
         epa = []
         for k, v in res_data.items():
@@ -120,7 +120,7 @@ class EOSReport(PropertyReport):
 
 class ElasticReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         elastic_tensor = res_data['elastic_tensor']
         c11 = elastic_tensor[0][0]
         c12 = elastic_tensor[0][1]
@@ -156,7 +156,7 @@ class ElasticReport(PropertyReport):
             title='Elastic Property'
         )
 
-        return polar, layout
+        return [polar], layout
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
@@ -196,7 +196,7 @@ class ElasticReport(PropertyReport):
 
 class SurfaceReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         miller = []
         surf_e = []
         epa = []
@@ -228,7 +228,7 @@ class SurfaceReport(PropertyReport):
             title='Surface Forming Energy'
         )
 
-        return polar, layout
+        return [polar], layout
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
@@ -262,7 +262,7 @@ class SurfaceReport(PropertyReport):
 
 class InterstitialReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         inter_struct = []
         inter_form_e = []
         struct_e = []
@@ -295,7 +295,7 @@ class InterstitialReport(PropertyReport):
             title='Interstitial Forming Energy'
         )
 
-        return polar, layout
+        return [polar], layout
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
@@ -329,13 +329,13 @@ class InterstitialReport(PropertyReport):
 
 class VacancyReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         v = list(res_data.values())[0]
         vac_form_e = float(v[0])
         struct_e = float(v[1])
         equi_e = float(v[2])
 
-        polar = go.Bar(
+        bar = go.Bar(
             name=name,
             # x=[vac_form_e, struct_e, equi_e],
             # y=['E_form (eV)', 'E_defect (eV)', 'E_equi (eV)'],
@@ -363,7 +363,7 @@ class VacancyReport(PropertyReport):
             showlegend=True
         )
 
-        return polar, layout
+        return [bar], layout
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
@@ -394,7 +394,7 @@ class VacancyReport(PropertyReport):
 
 class GammaReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [go, go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs) -> [list[go], go.layout]:
         displ = []
         displ_length = []
         fault_en = []

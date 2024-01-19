@@ -204,6 +204,15 @@ class DashReportApp:
                         data, trace_name,
                         color=next(color_generator)
                     )
+                    # set color and width of reference lines
+                    if prop_type != 'vacancy':
+                        for trace in iter(traces):
+                            if trace_name.split('/')[-1] in ['DFT', 'REF']:
+                                trace.update({'line': {'color': 'black', 'width': 3},
+                                              'marker': {'color': 'black', 'size': 8}})
+                            else:
+                                trace.update({'line': {'width': 1.5}},
+                                            marker={'size': 5})
                     fig.add_traces(traces)
                     fig.layout = layout
                     fig.update_layout(autotypenumbers='convert types')
