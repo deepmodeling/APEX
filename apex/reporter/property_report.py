@@ -72,7 +72,7 @@ class EOSReport(PropertyReport):
             name=name,
             x=df['VpA(A^3)'],
             y=df['EpA(eV)'],
-            mode='lines+markers',
+            mode='lines',
         )
         layout = go.Layout(
             title='Energy of State',
@@ -421,7 +421,7 @@ class GammaReport(PropertyReport):
         layout = go.Layout(
             title='Stacking Fault Energy (Gamma Line)',
             xaxis=dict(
-                title_text="Displacement",
+                title_text="Slip Fraction",
                 # title_text="Displace_Length (Å)",
                 title_font=dict(
                     size=18,
@@ -453,7 +453,7 @@ class GammaReport(PropertyReport):
             struct_en.append((v[2]))
             equi_en.append(v[3])
         df = pd.DataFrame({
-            "Displace": round_format(displ, decimal),
+            "Slip_frac": round_format(displ, decimal),
             "Slip_Length (Å)": round_format(displ_length, decimal),
             "E_Fault (J/m^2)": round_format(fault_en, decimal),
             "E_Slab (eV)": round_format(struct_en, decimal),

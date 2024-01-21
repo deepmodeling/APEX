@@ -63,6 +63,7 @@ class DistributeProps(OP):
         do_refine_list = []
         for conf in confs:
             conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
         conf_dirs.sort()
         for ii in conf_dirs:
             for jj in properties:
@@ -225,6 +226,8 @@ class PropsPost(OP):
         copy_dir_list = []
         for ii in copy_dir_list_input:
             copy_dir_list.extend(glob.glob(ii))
+        copy_dir_list = list(set(copy_dir_list))
+        copy_dir_list.sort()
 
         # find path of finished tasks
         os.chdir(op_in['input_post'])
@@ -316,6 +319,8 @@ class CollectProps(OP):
         copy_dir_list = []
         for ii in copy_dir_list_input:
             copy_dir_list.extend(glob.glob(ii))
+        copy_dir_list = list(set(copy_dir_list))
+        copy_dir_list.sort()
         os.chdir(input_post)
 
         src_path = recursive_search(copy_dir_list)

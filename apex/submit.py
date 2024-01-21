@@ -1,5 +1,7 @@
-import glob
+import os
 import os.path
+import glob
+import shutil
 import tempfile
 import logging
 from multiprocessing import Pool
@@ -12,7 +14,75 @@ from dflow import config, s3_config
 from apex.archive import archive_workdir
 from apex.config import Config
 from apex.flow import FlowGenerator
-from apex.utils import judge_flow, load_config_file
+from apex.utils import (
+    judge_flow,
+    load_config_file,
+    json2dict,
+    copy_all_other_files,
+    sepline,
+    handle_prop_suffix,
+    backup_path
+)
+
+
+@json2dict
+def pack_upload_dir(
+        work_dir: os.PathLike,
+        upload_dir: os.PathLike,
+        relax_param: dict,
+        prop_param: dict,
+        flow_type: str
+):
+    """
+    Pack the necessary files and directories into temp dir and upload it to dflow
+    """
+    cwd = os.getcwd()
+    os.chdir(work_dir)
+    confs = relax_param["structures"] + prop_param["structures"]
+    property_list = prop_param["properties"]
+    conf_dirs = []
+    for conf in confs:
+        conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
+    conf_dirs.sort()
+    # backup all existing property work directories
+    if flow_type in ['props', 'joint']:
+        for ii in conf_dirs:
+            sepline(ch=ii, screen=True)
+            for jj in property_list:
+                do_refine, suffix = handle_prop_suffix(jj)
+                if not suffix:
+                    continue
+                property_type = jj["type"]
+                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                backup_path(path_to_prop)
+
+    # copy necessary files and directories into temp upload directory
+    conf_root_list = [conf.split('/')[0] for conf in conf_dirs]
+    conf_root_list = list(set(conf_root_list))
+    conf_root_list.sort()
+    ignore_copy_list = conf_root_list
+    ignore_copy_list.append("all_result.json")
+    if flow_type in ['relax', 'joint']:
+        copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
+        for ii in conf_dirs:
+            build_conf_path = os.path.join(upload_dir, ii)
+            copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
+            target_poscar_path = os.path.join(build_conf_path, "POSCAR")
+            os.makedirs(build_conf_path, exist_ok=True)
+            shutil.copy(copy_poscar_path, target_poscar_path)
+    elif flow_type == 'props':
+        copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
+        for ii in conf_dirs:
+            build_conf_path = os.path.join(upload_dir, ii)
+            copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
+            target_poscar_path = os.path.join(build_conf_path, "POSCAR")
+            copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
+            target_relaxation_path = os.path.join(build_conf_path, "relaxation")
+            os.makedirs(build_conf_path, exist_ok=True)
+            shutil.copy(copy_poscar_path, target_poscar_path)
+            shutil.copytree(copy_relaxation_path, target_relaxation_path)
+    os.chdir(cwd)
 
 
 def submit(
@@ -36,26 +106,39 @@ def submit(
     else:
         print(f'Working on: {work_dir}')
 
-    flow_id = None
-    if flow_type == 'relax':
-        flow_id = flow.submit_relax(
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        logging.debug(msg=f'Temp upload directory:{tmp_dir}')
+        pack_upload_dir(
             work_dir=work_dir,
-            relax_parameter=relax_param,
-            labels=labels
+            upload_dir=tmp_dir,
+            relax_param=relax_param,
+            prop_param=props_param,
+            flow_type=flow_type
         )
-    elif flow_type == 'props':
-        flow_id = flow.submit_props(
-            work_dir=work_dir,
-            props_parameter=props_param,
-            labels=labels
-        )
-    elif flow_type == 'joint':
-        flow_id = flow.submit_joint(
-            work_dir=work_dir,
-            props_parameter=props_param,
-            relax_parameter=relax_param,
-            labels=labels
-        )
+
+        flow_id = None
+        if flow_type == 'relax':
+            flow_id = flow.submit_relax(
+                upload_path=tmp_dir,
+                download_path=work_dir,
+                relax_parameter=relax_param,
+                labels=labels
+            )
+        elif flow_type == 'props':
+            flow_id = flow.submit_props(
+                upload_path=tmp_dir,
+                download_path=work_dir,
+                props_parameter=props_param,
+                labels=labels
+            )
+        elif flow_type == 'joint':
+            flow_id = flow.submit_joint(
+                upload_path=tmp_dir,
+                download_path=work_dir,
+                props_parameter=props_param,
+                relax_parameter=relax_param,
+                labels=labels
+            )
     # auto archive results
     print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
     archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)

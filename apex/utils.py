@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import logging
 import os
+import shutil
 import json
 from typing import Type
 from monty.serialization import loadfn
@@ -16,6 +17,45 @@ upload_packages.append(__file__)
 
 MaxLength = 70
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
+
+
+def backup_path(path) -> None:
+    path += "/"
+    if os.path.isdir(path):
+        dirname = os.path.dirname(path)
+        counter = 0
+        while True:
+            bk_dirname = dirname + ".bk%03d" % counter
+            if not os.path.isdir(bk_dirname):
+                shutil.move(dirname, bk_dirname)
+                break
+            counter += 1
+
+
+def copy_all_other_files(src_dir, dst_dir, ignore_list=None) -> None:
+    """
+    Copies all files from the source directory to the destination directory with some files excluded.
+
+    :param src_dir: The path to the source directory.
+    :param dst_dir: The path to the destination directory.
+    :ignore_list: files to be ignored.
+    """
+    if not os.path.exists(src_dir):
+        raise FileNotFoundError(f"Source directory {src_dir} does not exist.")
+
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
+    for item in os.listdir(src_dir):
+        if ignore_list and item in ignore_list:
+            continue
+        src_path = os.path.join(src_dir, item)
+        dst_path = os.path.join(dst_dir, item)
+
+        if os.path.isfile(src_path):
+            shutil.copy2(src_path, dst_path)
+        elif os.path.isdir(src_path):
+            shutil.copytree(src_path, dst_path)
 
 
 def simplify_paths(path_list: list) -> dict:

@@ -63,7 +63,7 @@ class FlowGenerator:
             wf,
             step_name: str,
             artifacts_key: str,
-            work_dir: Union[os.PathLike, str] = '.'
+            download_path: Union[os.PathLike, str] = '.'
     ):
         while wf.query_status() in ["Pending", "Running"]:
             time.sleep(4)
@@ -73,7 +73,7 @@ class FlowGenerator:
         step = wf.query_step(name=step_name)[0]
         download_artifact(
             step.outputs.artifacts[artifacts_key],
-            path=work_dir
+            path=download_path
         )
 
     def _set_relax_flow(
@@ -147,13 +147,14 @@ class FlowGenerator:
     @json2dict
     def submit_relax(
             self,
-            work_dir: Union[os.PathLike, str],
+            upload_path: Union[os.PathLike, str],
+            download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             labels: Optional[dict] = None
     ):
         wf = Workflow(name='relaxation', labels=labels)
         relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(work_dir),
+            input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
         )
         wf.add(relaxation)
@@ -161,20 +162,21 @@ class FlowGenerator:
         self.download(
             wf, step_name='relaxation-cal',
             artifacts_key='retrieve_path',
-            work_dir=work_dir
+            download_path=download_path
         )
         return wf.id
 
     @json2dict
     def submit_props(
             self,
-            work_dir: Union[os.PathLike, str],
+            upload_path: Union[os.PathLike, str],
+            download_path: Union[os.PathLike, str],
             props_parameter: dict,
             labels: Optional[dict] = None
     ):
         wf = Workflow(name='property', labels=labels)
         properties = self._set_props_flow(
-            input_work_dir=upload_artifact(work_dir),
+            input_work_dir=upload_artifact(upload_path),
             props_parameter=props_parameter
         )
         wf.add(properties)
@@ -182,21 +184,22 @@ class FlowGenerator:
         self.download(
             wf, step_name='property-cal',
             artifacts_key='retrieve_path',
-            work_dir=work_dir
+            download_path=download_path
         )
         return wf.id
 
     @json2dict
     def submit_joint(
             self,
-            work_dir: Union[os.PathLike, str],
+            upload_path: Union[os.PathLike, str],
+            download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             props_parameter: dict,
             labels: Optional[dict] = None
     ):
         wf = Workflow(name='joint', labels=labels)
         relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(work_dir),
+            input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
         )
         properties = self._set_props_flow(
@@ -209,7 +212,7 @@ class FlowGenerator:
         self.download(
             wf, step_name='property-cal',
             artifacts_key='retrieve_path',
-            work_dir=work_dir
+            download_path=download_path
         )
         return wf.id
 

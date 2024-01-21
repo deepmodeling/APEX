@@ -52,6 +52,7 @@ def make_property(confs, inter_param, property_list):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     for ii in conf_dirs:
         sepline(ch=ii, screen=True)
@@ -135,6 +136,7 @@ def run_property(confs, inter_param, property_list, mdata):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     task_list = []
     work_path_list = []
@@ -212,6 +214,7 @@ def post_property(confs, inter_param, property_list):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     for ii in conf_dirs:
         for jj in property_list:

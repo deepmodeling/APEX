@@ -13,6 +13,11 @@ from .property_report import *
 
 NO_GRAPH_LIST = ['relaxation']
 UI_FRONTSIZE = 18
+PLOT_FRONTSIZE = 18
+LINE_SIZE = 3
+MARKER_SIZE = 7
+REF_LINE_SIZE = 5
+REF_MARKER_SIZE = 11
 
 
 def return_prop_class(prop_type: str):
@@ -208,14 +213,22 @@ class DashReportApp:
                     if prop_type != 'vacancy':
                         for trace in iter(traces):
                             if trace_name.split('/')[-1] in ['DFT', 'REF']:
-                                trace.update({'line': {'color': 'black', 'width': 3},
-                                              'marker': {'color': 'black', 'size': 8}})
+                                trace.update({'line': {'color': 'black', 'width': REF_LINE_SIZE},
+                                              'marker': {'color': 'black', 'size': REF_MARKER_SIZE}})
                             else:
-                                trace.update({'line': {'width': 1.5}},
-                                            marker={'size': 5})
+                                trace.update({'line': {'width': LINE_SIZE}}, marker={'size': MARKER_SIZE})
                     fig.add_traces(traces)
                     fig.layout = layout
-                    fig.update_layout(autotypenumbers='convert types')
+                    fig.update_layout(
+                        font=dict(
+                            family="Arial, sans-serif",
+                            size=PLOT_FRONTSIZE,
+                            color="Black"
+                        ),
+                        xaxis_title=dict(font=dict(size=PLOT_FRONTSIZE)),
+                        yaxis_title=dict(font=dict(size=PLOT_FRONTSIZE)),
+                        autotypenumbers='convert types'
+                    )
         return fig
 
     def update_table(self, selected_prop, selected_confs):

@@ -58,6 +58,7 @@ class RelaxMake(OP):
         conf_dirs = []
         for conf in structures:
             conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
         conf_dirs.sort()
 
         task_list = []
@@ -137,6 +138,7 @@ class RelaxPost(OP):
             conf_dirs = []
             for conf in conf_list:
                 conf_dirs.extend(glob.glob(conf))
+            conf_dirs = list(set(conf_dirs))
             conf_dirs.sort()
             for ii in conf_dirs:
                 cmd = 'rm *.pb'

@@ -30,6 +30,7 @@ def make_equi(confs, inter_param, relax_param):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
 
     # generate a list of task names like mp-xxx/relaxation/relax_task
@@ -143,6 +144,7 @@ def run_equi(confs, inter_param, mdata):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
 
     processes = len(conf_dirs)
@@ -193,6 +195,7 @@ def post_equi(confs, inter_param):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     task_dirs = []
     for ii in conf_dirs:
