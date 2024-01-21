@@ -72,7 +72,7 @@ class EOSReport(PropertyReport):
             name=name,
             x=df['VpA(A^3)'],
             y=df['EpA(eV)'],
-            mode='lines',
+            mode='lines+markers'
         )
         layout = go.Layout(
             title='Energy of State',
