@@ -38,7 +38,10 @@ def pack_upload_dir(
     """
     cwd = os.getcwd()
     os.chdir(work_dir)
-    confs = relax_param["structures"] + prop_param["structures"]
+    relax_confs = prop_param.get("structures", []) if relax_param else []
+    prop_confs = prop_param.get("structures", []) if prop_param else []
+    confs = relax_confs + prop_confs
+    assert len(confs) > 0, "No configuration path indicated!"
     property_list = prop_param["properties"]
     conf_dirs = []
     for conf in confs:
