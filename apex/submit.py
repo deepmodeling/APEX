@@ -48,43 +48,48 @@ def pack_upload_dir(
         conf_dirs.extend(glob.glob(conf))
     conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
+    refine_init_name_list = []
     # backup all existing property work directories
     if flow_type in ['props', 'joint']:
         for ii in conf_dirs:
             sepline(ch=ii, screen=True)
             for jj in property_list:
                 do_refine, suffix = handle_prop_suffix(jj)
+                property_type = jj["type"]
                 if not suffix:
                     continue
-                property_type = jj["type"]
+                if do_refine:
+                    refine_init_suffix = jj['init_from_suffix']
+                    refine_init_name_list.append(property_type + "_" + refine_init_suffix)
                 path_to_prop = os.path.join(ii, property_type + "_" + suffix)
                 backup_path(path_to_prop)
 
-    # copy necessary files and directories into temp upload directory
+    """copy necessary files and directories into temp upload directory"""
+    # exclude 'all_result.json' from copy
     conf_root_list = [conf.split('/')[0] for conf in conf_dirs]
     conf_root_list = list(set(conf_root_list))
     conf_root_list.sort()
     ignore_copy_list = conf_root_list
     ignore_copy_list.append("all_result.json")
-    if flow_type in ['relax', 'joint']:
-        copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
-        for ii in conf_dirs:
-            build_conf_path = os.path.join(upload_dir, ii)
-            copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
-            target_poscar_path = os.path.join(build_conf_path, "POSCAR")
-            os.makedirs(build_conf_path, exist_ok=True)
-            shutil.copy(copy_poscar_path, target_poscar_path)
-    elif flow_type == 'props':
-        copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
-        for ii in conf_dirs:
-            build_conf_path = os.path.join(upload_dir, ii)
-            copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
-            target_poscar_path = os.path.join(build_conf_path, "POSCAR")
+    copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
+    for ii in conf_dirs:
+        build_conf_path = os.path.join(upload_dir, ii)
+        copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
+        target_poscar_path = os.path.join(build_conf_path, "POSCAR")
+        os.makedirs(build_conf_path, exist_ok=True)
+        shutil.copy(copy_poscar_path, target_poscar_path)
+        if flow_type == 'props':
             copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
             target_relaxation_path = os.path.join(build_conf_path, "relaxation")
-            os.makedirs(build_conf_path, exist_ok=True)
-            shutil.copy(copy_poscar_path, target_poscar_path)
             shutil.copytree(copy_relaxation_path, target_relaxation_path)
+            # copy refine from init path to upload dir
+            if refine_init_name_list:
+                for jj in refine_init_name_list:
+                    copy_init_path = os.path.abspath(os.path.join(ii, jj))
+                    assert os.path.exists(copy_init_path), f'refine from init path {copy_init_path} does not exist!'
+                    target_init_path = os.path.join(build_conf_path, jj)
+                    shutil.copytree(copy_init_path, target_init_path)
+
     os.chdir(cwd)
 
 
@@ -110,7 +115,7 @@ def submit(
         print(f'Working on: {work_dir}')
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        logging.debug(msg=f'Temp upload directory:{tmp_dir}')
+        logging.debug(msg=f'Temporary upload directory:{tmp_dir}')
         pack_upload_dir(
             work_dir=work_dir,
             upload_dir=tmp_dir,

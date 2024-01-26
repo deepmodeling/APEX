@@ -70,9 +70,10 @@ class FlowGenerator:
         assert (wf.query_status() == 'Succeeded')
         print(f'Workflow finished (ID: {wf.id}, UID: {wf.uid})')
         print('Retrieving finished tasks to local...')
-        step = wf.query_step(name=step_name)[0]
+        final_step = wf.query_step(name=step_name)[0]
+
         download_artifact(
-            step.outputs.artifacts[artifacts_key],
+            final_step.outputs.artifacts[artifacts_key],
             path=download_path
         )
 
