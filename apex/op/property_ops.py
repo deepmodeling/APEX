@@ -9,90 +9,10 @@ from dflow.python import (
     upload_packages
 )
 from monty.serialization import dumpfn
-from apex.utils import handle_prop_suffix, recursive_search
+from apex.utils import recursive_search
 from apex.core.lib.utils import create_path
 
 upload_packages.append(__file__)
-
-
-class DistributeProps(OP):
-    """
-    OP class for distribution
-    of individual property test steps
-    """
-    def __init__(self):
-        pass
-
-    @classmethod
-    def get_input_sign(cls):
-        return OPIOSign({
-            "input_work_path": Artifact(Path),
-            "param": dict
-        })
-
-    @classmethod
-    def get_output_sign(cls):
-        return OPIOSign({
-            "orig_work_path": Artifact(List[Path]),
-            "flow_id": List[str],
-            "path_to_prop": List[str],
-            "prop_param": List[dict],
-            "inter_param": List[dict],
-            "do_refine": List[bool],
-            "nflows": int
-        })
-
-    @OP.exec_sign_check
-    def execute(
-            self,
-            op_in: OPIO,
-    ) -> OPIO:
-        input_work_path = op_in["input_work_path"]
-        param = op_in["param"]
-
-        cwd = Path.cwd()
-        os.chdir(input_work_path)
-        confs = param["structures"]
-        interaction = param["interaction"]
-        properties = param["properties"]
-
-        conf_dirs = []
-        flow_id_list = []
-        path_to_prop_list = []
-        prop_param_list = []
-        do_refine_list = []
-        for conf in confs:
-            conf_dirs.extend(glob.glob(conf))
-        conf_dirs = list(set(conf_dirs))
-        conf_dirs.sort()
-        for ii in conf_dirs:
-            for jj in properties:
-                do_refine, suffix = handle_prop_suffix(jj)
-                if not suffix:
-                    continue
-                property_type = jj["type"]
-                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
-                path_to_prop_list.append(path_to_prop)
-                if os.path.exists(path_to_prop):
-                    shutil.rmtree(path_to_prop)
-                prop_param_list.append(jj)
-                do_refine_list.append(do_refine)
-                flow_id_list.append(ii + '-' + property_type + '-' + suffix)
-
-        nflow = len(path_to_prop_list)
-        orig_work_path_list = [input_work_path] * nflow
-        inter_param_list = [interaction] * nflow
-
-        op_out = OPIO({
-            "orig_work_path": orig_work_path_list,
-            "flow_id": flow_id_list,
-            "path_to_prop": path_to_prop_list,
-            "prop_param": prop_param_list,
-            "inter_param": inter_param_list,
-            "do_refine": do_refine_list,
-            "nflows": nflow
-        })
-        return op_out
 
 
 class PropsMake(OP):
@@ -207,7 +127,7 @@ class PropsPost(OP):
     @classmethod
     def get_output_sign(cls):
         return OPIOSign({
-            'output_post': Artifact(Path)
+            'retrieve_path': Artifact(List[Path])
         })
 
     @OP.exec_sign_check
@@ -275,63 +195,13 @@ class PropsPost(OP):
             subprocess.call(cmd, shell=True)
 
         os.chdir(cwd)
-        out_path = Path(cwd) / 'retrieve_pool'
-        os.mkdir(out_path)
-        shutil.copytree(input_all / path_to_prop,
-                        out_path / path_to_prop, dirs_exist_ok=True)
-
-        op_out = OPIO({
-            'output_post': abs_path_to_prop
-        })
-        return op_out
-
-
-class CollectProps(OP):
-    """
-    OP class for collect property tasks
-    """
-    def __init__(self):
-        pass
-
-    @classmethod
-    def get_input_sign(cls):
-        return OPIOSign({
-            'input_post': Artifact(Path, sub_path=False),
-            'input_all': Artifact(Path),
-            'param': dict
-        })
-
-    @classmethod
-    def get_output_sign(cls):
-        return OPIOSign({
-            'retrieve_path': Artifact(List[Path])
-        })
-
-    @OP.exec_sign_check
-    def execute(self, op_in: OPIO) -> OPIO:
-        cwd = os.getcwd()
-        input_post = op_in["input_post"]
-        input_all = op_in["input_all"]
-        param = op_in["param"]
-        confs = param["structures"]
-        copy_dir_list_input = [conf.split('/')[0] for conf in confs]
-        os.chdir(op_in['input_all'])
-        copy_dir_list = []
-        for ii in copy_dir_list_input:
-            copy_dir_list.extend(glob.glob(ii))
-        copy_dir_list = list(set(copy_dir_list))
-        copy_dir_list.sort()
-        os.chdir(input_post)
-
-        src_path = recursive_search(copy_dir_list)
-        if not src_path:
-            raise RuntimeError(f'Fail to find input work path after slices!')
-        shutil.copytree(src_path, input_all, dirs_exist_ok=True)
-
         for ii in copy_dir_list:
             shutil.copytree(input_all / ii, ii, dirs_exist_ok=True)
-
         retrieve_path = [Path(ii) for ii in copy_dir_list]
+        #out_path = Path(cwd) / 'retrieve_pool'
+        #os.mkdir(out_path)
+        #shutil.copytree(input_all / path_to_prop,
+        #                out_path / path_to_prop, dirs_exist_ok=True)
 
         op_out = OPIO({
             'retrieve_path': retrieve_path

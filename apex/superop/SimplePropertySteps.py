@@ -56,7 +56,7 @@ class SimplePropertySteps(Steps):
         }
         self._output_parameters = {}
         self._output_artifacts = {
-            "output_post": OutputArtifact(type=Path)
+            "retrieve_path": OutputArtifact(type=Path)
         }
 
         super().__init__(
@@ -256,5 +256,5 @@ class SimplePropertySteps(Steps):
         )
         self.add(post)
 
-        self.outputs.artifacts["output_post"]._from \
-            = post.outputs.artifacts["output_post"]
+        self.outputs.artifacts["retrieve_path"]._from \
+            = post.outputs.artifacts["retrieve_path"]

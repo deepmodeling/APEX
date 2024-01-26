@@ -19,6 +19,8 @@ MaxLength = 70
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
 
 
+# write a function to replace all '/' in the input string with '-'
+
 def backup_path(path) -> None:
     path += "/"
     if os.path.isdir(path):
