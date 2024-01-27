@@ -107,12 +107,12 @@ def submit(
 ):
     if is_sub:
         # reset dflow global config for sub-processes
-        print(f'Sub-process working on: {work_dir}')
+        logging.info(msg=f'Sub-process working on: {work_dir}')
         config.update(conf)
         s3_config.update(s3_conf)
         logging.basicConfig(level=logging.INFO)
     else:
-        print(f'Working on: {work_dir}')
+        logging.info(msg=f'Working on: {work_dir}')
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         logging.debug(msg=f'Temporary upload directory:{tmp_dir}')

@@ -46,6 +46,12 @@ class FlowGenerator:
             executor: Optional[DispatcherExecutor] = None,
             upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
+        self.download_path = None
+        self.upload_path = None
+        self.workflow = None
+        self.relax_param = None
+        self.props_param = None
+
         self.relax_make_op = relax_make_op
         self.relax_post_op = relax_post_op
         self.props_make_op = props_make_op
@@ -60,6 +66,48 @@ class FlowGenerator:
         self.pool_size = pool_size
         self.executor = executor
         self.upload_python_packages = upload_python_packages
+
+    def _monitor_relax(self):
+        print('Waiting for relaxation result...')
+        while True:
+            time.sleep(4)
+            step_info = self.workflow.query()
+            relax_post = step_info.get_step(name='relaxation-cal')[0]
+            if relax_post['phase'] == 'Succeeded':
+                print(f'Relaxation finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                print('Retrieving completed tasks to local...')
+                download_artifact(
+                    artifact=relax_post.outputs.artifacts['retrieve_path'],
+                    path=self.download_path
+                )
+                break
+
+    def _monitor_props(
+            self,
+            subprops_key_list: List[str],
+    ):
+        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
+        while True:
+            time.sleep(4)
+            step_info = self.workflow.query()
+            for kk in subprops_key_list:
+                try:
+                    step = step_info.get_step(key=kk)[0]
+                except IndexError:
+                    continue
+                if step['phase'] == 'Succeeded':
+                    print(f'Sub-workflow {kk} finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    print('Retrieving completed tasks to local...')
+                    download_artifact(
+                        artifact=step.outputs.artifacts['retrieve_path'],
+                        path=self.download_path
+                    )
+                    subprops_key_list.remove(kk)
+                    if subprops_key_list:
+                        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
+            if not subprops_key_list:
+                print(f'Workflow all finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                break
 
     def _set_relax_flow(
             self,
@@ -179,28 +227,21 @@ class FlowGenerator:
             download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             labels: Optional[dict] = None
-    ):
-        wf = Workflow(name='relaxation', labels=labels)
+    ) -> str:
+        self.upload_path = upload_path
+        self.download_path = download_path
+        self.relax_param = relax_parameter
+        self.workflow = Workflow(name='relaxation', labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
         )
-        wf.add(relaxation)
-        wf.submit()
+        self.workflow.add(relaxation)
+        self.workflow.submit()
+        # Wait for and retrieve relaxation
+        self._monitor_relax()
 
-        print('Waiting for relaxation result...')
-        while wf.query_status() in ["Pending", "Running"]:
-            time.sleep(4)
-        assert (wf.query_status() == 'Succeeded')
-        print(f'Relaxation Workflow finished (ID: {wf.id}, UID: {wf.uid})')
-        print('Retrieving completed tasks to local...')
-        final_step = wf.query_step(name='relaxation-cal')[0]
-
-        download_artifact(
-            final_step.outputs.artifacts['retrieve_path'],
-            path=download_path
-        )
-        return wf.id
+        return self.workflow.id
 
     @json2dict
     def submit_props(
@@ -209,40 +250,21 @@ class FlowGenerator:
             download_path: Union[os.PathLike, str],
             props_parameter: dict,
             labels: Optional[dict] = None
-    ):
-        wf = Workflow(name='property', labels=labels)
+    ) -> str:
+        self.upload_path = upload_path
+        self.download_path = download_path
+        self.props_param = props_parameter
+        self.workflow = Workflow(name='property', labels=labels)
         subprops_list, subprops_key_list = self._set_props_flow(
             input_work_dir=upload_artifact(upload_path),
             props_parameter=props_parameter
         )
-        wf.add(subprops_list)
-        wf.submit()
+        self.workflow.add(subprops_list)
+        self.workflow.submit()
+        # wait for and retrieve sub-property flows
+        self._monitor_props(subprops_key_list)
 
-        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
-        # Hearing sub-property flows
-        while True:
-            time.sleep(4)
-            step_info = wf.query()
-            for kk in subprops_key_list:
-                try:
-                    step = step_info.get_step(key=kk)[0]
-                except IndexError:
-                    continue
-                if step['phase'] == 'Succeeded':
-                    print(f'Sub-workflow {kk} finished (ID: {wf.id}, UID: {wf.uid})')
-                    print('Retrieving completed tasks to local...')
-                    download_artifact(
-                        artifact=step.outputs.artifacts['retrieve_path'],
-                        path=download_path
-                    )
-                    subprops_key_list.remove(kk)
-                    if subprops_key_list:
-                        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
-            if not subprops_key_list:
-                print(f'Workflow all finished (ID: {wf.id}, UID: {wf.uid})')
-                break
-
-        return wf.id
+        return self.workflow.id
 
     @json2dict
     def submit_joint(
@@ -252,57 +274,26 @@ class FlowGenerator:
             relax_parameter: dict,
             props_parameter: dict,
             labels: Optional[dict] = None
-    ):
-        wf = Workflow(name='joint', labels=labels)
+    ) -> str:
+        self.upload_path = upload_path
+        self.download_path = download_path
+        self.relax_param = relax_parameter
+        self.props_param = props_parameter
+        self.workflow = Workflow(name='joint', labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(upload_path),
-            relax_parameter=relax_parameter
+            relax_parameter=self.relax_param
         )
         subprops_list, subprops_key_list = self._set_props_flow(
             input_work_dir=relaxation.outputs.artifacts["output_all"],
-            props_parameter=props_parameter
+            props_parameter=self.props_param
         )
-        wf.add(relaxation)
-        wf.add(subprops_list)
-        wf.submit()
+        self.workflow.add(relaxation)
+        self.workflow.add(subprops_list)
+        self.workflow.submit()
+        # Wait for and retrieve relaxation
+        self._monitor_relax()
+        # Wait for and retrieve sub-property flows
+        self._monitor_props(subprops_key_list)
 
-        print('Waiting for relaxation result...')
-        # Hearing relaxation
-        while True:
-            time.sleep(4)
-            step_info = wf.query()
-            relax_post = step_info.get_step(name='relaxation-cal')[0]
-            if relax_post['phase'] == 'Succeeded':
-                print(f'Relaxation finished (ID: {wf.id}, UID: {wf.uid})')
-                print('Retrieving completed tasks to local...')
-                download_artifact(
-                    artifact=relax_post.outputs.artifacts['retrieve_path'],
-                    path=download_path
-                )
-                break
-
-        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
-        # Hearing sub-property flows
-        while True:
-            time.sleep(4)
-            step_info = wf.query()
-            for kk in subprops_key_list:
-                try:
-                    step = step_info.get_step(key=kk)[0]
-                except IndexError:
-                    continue
-                if step['phase'] == 'Succeeded':
-                    print(f'Sub-workflow {kk} finished (ID: {wf.id}, UID: {wf.uid})')
-                    print('Retrieving completed tasks to local...')
-                    download_artifact(
-                        artifact=step.outputs.artifacts['retrieve_path'],
-                        path=download_path
-                    )
-                    subprops_key_list.remove(kk)
-                    if subprops_key_list:
-                        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
-            if not subprops_key_list:
-                print(f'Workflow all finished (ID: {wf.id}, UID: {wf.uid})')
-                break
-
-        return wf.id
+        return self.workflow.id
