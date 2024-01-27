@@ -72,6 +72,9 @@ class FlowGenerator:
         while True:
             time.sleep(4)
             step_info = self.workflow.query()
+            wf_status = self.workflow.query_status()
+            if wf_status == 'Failed':
+                raise RuntimeError(f'Workflow failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
             relax_post = step_info.get_step(name='relaxation-cal')[0]
             if relax_post['phase'] == 'Succeeded':
                 print(f'Relaxation finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
@@ -86,11 +89,13 @@ class FlowGenerator:
             self,
             subprops_key_list: List[str],
     ):
-        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
+        subprops_left = subprops_key_list.copy()
+        subprops_failed_list = []
+        print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
         while True:
             time.sleep(4)
             step_info = self.workflow.query()
-            for kk in subprops_key_list:
+            for kk in subprops_left:
                 try:
                     step = step_info.get_step(key=kk)[0]
                 except IndexError:
@@ -102,11 +107,18 @@ class FlowGenerator:
                         artifact=step.outputs.artifacts['retrieve_path'],
                         path=self.download_path
                     )
-                    subprops_key_list.remove(kk)
-                    if subprops_key_list:
-                        print(f'Waiting for sub-property results ({len(subprops_key_list)} left)...')
-            if not subprops_key_list:
-                print(f'Workflow all finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    subprops_left.remove(kk)
+                    if subprops_left:
+                        print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
+                elif step['phase'] == 'Failed':
+                    print(f'Sub-workflow {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    subprops_failed_list.append(kk)
+                    subprops_left.remove(kk)
+                    if subprops_left:
+                        print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
+            if not subprops_left:
+                print(f'Workflow finished with {len(subprops_failed_list)} sub-property failed '
+                      f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
                 break
 
     def _set_relax_flow(

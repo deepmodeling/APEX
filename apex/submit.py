@@ -115,7 +115,7 @@ def submit(
         logging.info(msg=f'Working on: {work_dir}')
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        logging.debug(msg=f'Temporary upload directory:{tmp_dir}')
+        logging.info(msg=f'Temporary upload directory:{tmp_dir}')
         pack_upload_dir(
             work_dir=work_dir,
             upload_dir=tmp_dir,
