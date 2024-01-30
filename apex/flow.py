@@ -2,6 +2,7 @@ import os
 import glob
 import time
 import shutil
+import re
 from typing import (
     Optional,
     Type,
@@ -209,7 +210,7 @@ class FlowGenerator:
         subprops_list = []
         subprops_key_list = []
         for ii in range(nflow):
-            clean_subflow_id = flow_id_list[ii].replace("/", "-")
+            clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', flow_id_list[ii]).lower()
             subflow_key = f'propertycal-{clean_subflow_id}'
             subprops_key_list.append(subflow_key)
             subprops_list.append(
