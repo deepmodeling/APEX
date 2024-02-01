@@ -8,6 +8,7 @@ from apex.run_step import run_step
 from apex.submit import submit_workflow
 from apex.archive import archive_result
 from apex.report import report_result
+from apex.download import download_results
 
 
 def parse_args():
@@ -159,6 +160,28 @@ def parse_args():
         help="(Optional) Working directory or json file path to be reported",
     )
 
+    ##########################################
+    # Retrieve artifacts manually
+    parser_download = subparsers.add_parser(
+        "download",
+        help="Retrieve results of an workflow with key provided manually",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser_download.add_argument(
+        "workflow_id", type=str,
+        help='Workflow ID to be downloaded'
+    )
+    parser_download.add_argument(
+        "-p", "--path", type=str, default='./',
+        help='destination path to be downloaded to'
+    )
+    parser_download.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+
     parsed_args = parser.parse_args()
     # print help if no parser
     if not parsed_args.cmd:
@@ -202,6 +225,12 @@ def main():
         report_result(
             config_file=args.config,
             path_list=args.work,
+        )
+    elif args.cmd == 'download':
+        download_results(
+            workflow_id=args.workflow_id,
+            destination=args.path,
+            config_file=args.config,
         )
     else:
         raise RuntimeError(
