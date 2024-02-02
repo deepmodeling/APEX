@@ -33,8 +33,9 @@
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
       - [3.2.2. Single-Step Test](#322-single-step-test)
-      - [3.2.3. Archive Test Results](#323-archive-test-results)
-      - [3.2.4. Results Visualization Report](#324-results-visualization-report)
+      - [3.2.3. Retrieve Results Manually](#323-retrieve-results-manually)
+      - [3.2.4. Archive Test Results](#324-archive-test-results)
+      - [3.2.5. Results Visualization Report](#325-results-visualization-report)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
@@ -47,7 +48,7 @@ APEX adopts the functionality of the second-generation alloy properties calculat
 The comprehensive architecture of APEX is demonstrated below:
 
 <div>
-    <img src="./docs/images/apex_demo.png" alt="Fig1" style="zoom: 35%;">
+    <img src="./docs/images/flowchart.png" alt="Fig1" style="zoom: 40%;">
     <p style='font-size:1.0rem; font-weight:none'>Figure 1. APEX schematic diagram</p>
 </div>
 
@@ -435,13 +436,20 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```
 The property test can follow similar approach.
 
-#### 3.2.3. Archive Test Results
+#### 3.2.3. Retrieve Results Manually
+
+Sometimes when automatically results retrieving fails as workflow finished, you may try to obtained completed test results manually by `download` command with specific `workflow ID` provided:
+```shell
+apex download workflow_id [-w Destination_work_dir] [-c [CONFIG]]
+```
+where the `Destination` argument is defaulted to be `./`, and the `CONFIG` JSON is needed to connect to the remote storage.
+
+#### 3.2.4. Archive Test Results
 After completion of each workflow, the results and test parameters of corresponding property will be stored as `json` format automatically under respective work directory named as `all_result.json`. You can also do this manually to update this file based on the latest run by:
 
-```shell
+``shell
 apex archive [parameter …]
-```
-
+``
 Argument format of this sub-command is pretty similar to that of `submit` command. Please use `apex archive -h` for complete usage introduction. It should be noticed that each `archive` command will only update property information of those identified as **active** according to the parameter files and indication provided similar to the `submit` mode.
 
 This mode can also result archive to **NoSQL** database. We currently support two types of database client: [MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/). Below shows global configuration parameters for two database archive:
@@ -466,7 +474,7 @@ This mode can also result archive to **NoSQL** database. We currently support tw
   | dynamodb_table_name | String | apex_results | `Dynamodb` table name |
   | dynamodb_config | Dict | None | Complete parameter dictionary for [boto3 session](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource) |
 
-#### 3.2.4. Results Visualization Report
+#### 3.2.5. Results Visualization Report
 In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash APP](https://dash.plotly.com). You can invoke the report app simply under target work directory by:
 ```shell
 apex report
@@ -477,7 +485,7 @@ apex report -w MEAM.bk DP/all_result.json
 ```
 Once the report app is opened (or manully via http://127.0.0.1:8050/), one can select interesting configuration and type of property and the result plot and data table will be shown accordingly.
   <div>
-      <img src="./docs/images/report_app.png" alt="Fig3" style="zoom: 35%;">
+      <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 100%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
   </div>
 

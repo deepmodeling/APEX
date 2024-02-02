@@ -48,7 +48,7 @@ def parse_args():
         "-w", "--work",
         type=str, nargs='+',
         default='.',
-        help="(Optional) Working directory to be submitted",
+        help="(Optional) Work directories to be submitted",
     )
     parser_submit.add_argument(
         "-d", "--debug",
@@ -62,7 +62,7 @@ def parse_args():
     )
 
     ##########################################
-    # Single step local test
+    # Single step debug test
     parser_test = subparsers.add_parser(
         "test",
         help="Single step local test mode",
@@ -88,6 +88,28 @@ def parse_args():
         type=str, nargs='?',
         default='./global.json',
         help="The json file to config the dpdispatcher",
+    )
+
+    ##########################################
+    # Retrieve artifacts manually
+    parser_download = subparsers.add_parser(
+        "download",
+        help="Retrieve results of an workflow with key provided manually",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser_download.add_argument(
+        "workflow_id", type=str,
+        help='Workflow ID to be downloaded'
+    )
+    parser_download.add_argument(
+        "-w", "--work", type=str, default='./',
+        help='destination work directory to be downloaded to'
+    )
+    parser_download.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
     )
 
     ##########################################
@@ -160,28 +182,6 @@ def parse_args():
         help="(Optional) Working directory or json file path to be reported",
     )
 
-    ##########################################
-    # Retrieve artifacts manually
-    parser_download = subparsers.add_parser(
-        "download",
-        help="Retrieve results of an workflow with key provided manually",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser_download.add_argument(
-        "workflow_id", type=str,
-        help='Workflow ID to be downloaded'
-    )
-    parser_download.add_argument(
-        "-p", "--path", type=str, default='./',
-        help='destination path to be downloaded to'
-    )
-    parser_download.add_argument(
-        "-c", "--config",
-        type=str, nargs='?',
-        default='./global.json',
-        help="The json file to config workflow",
-    )
-
     parsed_args = parser.parse_args()
     # print help if no parser
     if not parsed_args.cmd:
@@ -210,6 +210,12 @@ def main():
             machine_file=args.machine,
             step=args.step
         )
+    elif args.cmd == 'download':
+        download_results(
+            workflow_id=args.workflow_id,
+            destination=args.work,
+            config_file=args.config,
+        )
     elif args.cmd == 'archive':
         archive_result(
             parameter=args.parameter,
@@ -225,12 +231,6 @@ def main():
         report_result(
             config_file=args.config,
             path_list=args.work,
-        )
-    elif args.cmd == 'download':
-        download_results(
-            workflow_id=args.workflow_id,
-            destination=args.path,
-            config_file=args.config,
         )
     else:
         raise RuntimeError(
