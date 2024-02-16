@@ -146,12 +146,6 @@ class ElasticReport(PropertyReport):
         )
 
         layout = go.Layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    autorange=True
-                )
-            ),
             showlegend=True,
             title='Elastic Property'
         )
@@ -535,7 +529,7 @@ class PhononReport(PropertyReport):
             # add label
             annotations.append(go.layout.Annotation(
                 x=x_label[1],
-                y=1.07,
+                y=2.08,
                 xref="x",
                 yref="paper",
                 text=x_label[0],  # label text
@@ -544,7 +538,8 @@ class PhononReport(PropertyReport):
                 xanchor='center'
             ))
 
-            # add vertical line
+            # add special vertical line
+            '''
             shapes.append({
                 'type': 'line',
                 'x0': x_label[1],
@@ -559,6 +554,7 @@ class PhononReport(PropertyReport):
                     'dash': 'dot',
                 },
             })
+            '''
 
         layout = go.Layout(
             title='Phonon Spectrum',

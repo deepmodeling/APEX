@@ -74,7 +74,7 @@ class DashReportApp:
             suppress_callback_exceptions=True,
             external_stylesheets=[dbc.themes.MATERIA, dbc_css]
         )
-        # load_figure_template("materia")
+        #load_figure_template("materia")
         self.app.layout = self.generate_layout()
 
         """define callbacks"""
@@ -225,8 +225,55 @@ class DashReportApp:
                             size=PLOT_FRONTSIZE,
                             color="Black"
                         ),
+                        plot_bgcolor='rgba(0, 0, 0, 0)',
+                        #plot_bgcolor='rgba(229, 229, 229, 100)',
+                        #paper_bgcolor='rgba(0, 0, 0, 0)',
                         xaxis_title=dict(font=dict(size=PLOT_FRONTSIZE)),
                         yaxis_title=dict(font=dict(size=PLOT_FRONTSIZE)),
+                        xaxis=dict(
+                            mirror=True,
+                            ticks='inside',
+                            tickwidth=2,
+                            showline=True,
+                            linewidth=2,
+                            linecolor='black',
+                            gridcolor='lightgrey',
+                            zerolinecolor='lightgrey',
+                            zerolinewidth=0.2
+                        ),
+                        yaxis=dict(
+                            mirror=True,
+                            ticks='inside',
+                            tickwidth=2,
+                            showline=True,
+                            linewidth=2,
+                            linecolor='black',
+                            gridcolor='lightgrey',
+                            zerolinecolor='lightgrey',
+                            zerolinewidth=0.2
+                        ),
+                        polar=dict(
+                            bgcolor='rgba(0, 0, 0, 0)',
+                            radialaxis=dict(
+                                visible=True,
+                                autorange=True,
+                                ticks='inside',
+                                tickwidth=2,
+                                showline=True,
+                                linewidth=2,
+                                linecolor='black',
+                                gridcolor='lightgrey',
+                            ),
+                            angularaxis=dict(
+                                visible=True,
+                                ticks='inside',
+                                tickwidth=2,
+                                showline=True,
+                                linewidth=2,
+                                linecolor='black',
+                                gridcolor='lightgrey',
+                            ),
+                        ),
                         autotypenumbers='convert types'
                     )
         return fig

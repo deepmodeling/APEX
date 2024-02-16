@@ -26,7 +26,7 @@ def download_results(
     download_keys = [key for key in all_keys if key.split('-')[0] == 'propertycal' or key == 'relaxationcal']
     task_left = len(download_keys)
     print(f'Retrieving {task_left} workflow results {workflow_id} to {destination}')
-    # use tqdm to show progress
+
     for key in download_keys:
         step = wf_info.get_step(key=key)[0]
         task_left -= 1
