@@ -20,6 +20,7 @@ class PropsMake(OP):
     """
     OP class for making calculation tasks (make property)
     """
+
     def __init__(self):
         pass
 
@@ -165,7 +166,7 @@ class PropsPost(OP):
             shutil.copytree(input_post, './', dirs_exist_ok=True)
         else:
             os.chdir(input_all)
-            #src_path = str(input_post) + str(local_path)
+            # src_path = str(input_post) + str(local_path)
             shutil.copytree(src_path, './', dirs_exist_ok=True)
 
         if ("cal_setting" in prop_param
@@ -187,7 +188,10 @@ class PropsPost(OP):
         if inter_type in LAMMPS_INTER_TYPE:
             os.chdir(abs_path_to_prop)
             inter_files_name = []
-            inter_files_name.extend([inter_param["model"]])
+            if type(inter_param["model"]) is str:
+                inter_files_name = [inter_param["model"]]
+            elif type(inter_param["model"]) is list:
+                inter_files_name.extend(inter_param["model"])
             for file in inter_files_name:
                 cmd = f"for kk in task.*; do rm -f $kk/{file}; done"
                 subprocess.call(cmd, shell=True)
@@ -200,13 +204,12 @@ class PropsPost(OP):
         for ii in copy_dir_list:
             shutil.copytree(input_all / ii, ii, dirs_exist_ok=True)
         retrieve_path = [Path(ii) for ii in copy_dir_list]
-        #out_path = Path(cwd) / 'retrieve_pool'
-        #os.mkdir(out_path)
-        #shutil.copytree(input_all / path_to_prop,
+        # out_path = Path(cwd) / 'retrieve_pool'
+        # os.mkdir(out_path)
+        # shutil.copytree(input_all / path_to_prop,
         #                out_path / path_to_prop, dirs_exist_ok=True)
 
         op_out = OPIO({
             'retrieve_path': retrieve_path
         })
         return op_out
-
