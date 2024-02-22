@@ -15,6 +15,7 @@ from apex.core.calculator.lib.lammps_utils import (
     inter_snap,
     inter_gap,
     inter_rann,
+    inter_mace
 )
 from .Task import Task
 from dflow.python import upload_packages
@@ -53,6 +54,8 @@ class Lammps(Task):
             self.inter_func = inter_gap
         elif self.inter_type == "rann":
             self.inter_func = inter_rann
+        elif self.inter_type == "mace":
+            self.inter_func = inter_mace
         else:
             self.inter_func = inter_eam_alloy
 
@@ -61,16 +64,25 @@ class Lammps(Task):
             model_name = os.path.basename(self.model)
             deepmd_version = self.inter.get("deepmd_version", "1.2.0")
             self.model_param = {
+                "type": self.inter_type,
                 "model_name": [model_name],
                 "param_type": self.type_map,
                 "deepmd_version": deepmd_version,
             }
         elif self.inter_type in ["meam", "snap"]:
             model_name = list(map(os.path.basename, self.model))
-            self.model_param = {"model_name": model_name, "param_type": self.type_map}
+            self.model_param = {
+                "type": self.inter_type,
+                "model_name": model_name,
+                "param_type": self.type_map
+            }
         else:
             model_name = os.path.basename(self.model)
-            self.model_param = {"model_name": [model_name], "param_type": self.type_map}
+            self.model_param = {
+                "type": self.inter_type,
+                "model_name": [model_name],
+                "param_type": self.type_map
+            }
 
     def make_potential_files(self, output_dir):
         cwd = os.getcwd()

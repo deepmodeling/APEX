@@ -7,4 +7,5 @@ LAMMPS_INTER_TYPE = [
     'snap',
     'gap',
     'rann',
+    'mace',
 ]

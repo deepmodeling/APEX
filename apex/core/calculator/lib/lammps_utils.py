@@ -129,6 +129,17 @@ def inter_deepmd(param):
     return ret
 
 
+def inter_mace(param):
+    ret = ""
+    line = "pair_style      mace no_domain_decomposition \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
 def inter_snap(param):
     ret = ""
     line = "pair_style      snap \n"
@@ -232,6 +243,9 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -290,6 +304,9 @@ def make_lammps_equi(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -347,6 +364,9 @@ def make_lammps_elastic(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -414,6 +434,9 @@ def make_lammps_press_relax(
     ret += "dimension   3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):

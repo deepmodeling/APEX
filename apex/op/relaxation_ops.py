@@ -113,7 +113,7 @@ class RelaxPost(OP):
         cwd = os.getcwd()
         param_argv = op_in['param']
         inter_param = param_argv["interaction"]
-        calculator = inter_param["type"]
+        inter_type = inter_param["type"]
         conf_list = param_argv["structures"]
         copy_dir_list_input = [conf.split('/')[0] for conf in conf_list]
         os.chdir(op_in['input_all'])
@@ -128,7 +128,7 @@ class RelaxPost(OP):
             raise RuntimeError(f'Fail to find input work path after slices!')
 
         os.chdir(op_in['input_all'])
-        if calculator in ['vasp', 'abacus']:
+        if inter_type in ['vasp', 'abacus']:
             shutil.copytree(op_in['input_post'], './', dirs_exist_ok=True)
             post_equi(conf_list, inter_param)
         else:

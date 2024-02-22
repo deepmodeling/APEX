@@ -11,6 +11,7 @@ from dflow.python import (
 from monty.serialization import dumpfn
 from apex.utils import recursive_search
 from apex.core.lib.utils import create_path
+from apex.core.calculator import LAMMPS_INTER_TYPE
 
 upload_packages.append(__file__)
 
@@ -140,7 +141,7 @@ class PropsPost(OP):
         inter_param = op_in["inter_param"]
         task_names = op_in["task_names"]
         path_to_prop = op_in["path_to_prop"]
-        calculator = inter_param["type"]
+        inter_type = inter_param["type"]
         copy_dir_list_input = [path_to_prop.split('/')[0]]
         os.chdir(input_all)
         copy_dir_list = []
@@ -155,7 +156,7 @@ class PropsPost(OP):
         if not src_path:
             raise RuntimeError(f'Fail to find input work path after slices!')
 
-        if calculator in ['vasp', 'abacus']:
+        if inter_type in ['vasp', 'abacus']:
             os.chdir(input_post)
             for ii in task_names:
                 shutil.copytree(os.path.join(ii, "backward_dir"), ii, dirs_exist_ok=True)
@@ -183,15 +184,16 @@ class PropsPost(OP):
             abs_path_to_prop,
         )
         # remove potential files in each task
-        if calculator == 'lammps':
+        if inter_type in LAMMPS_INTER_TYPE:
             os.chdir(abs_path_to_prop)
-            inter_files_name = inter_param["model"]
+            inter_files_name = []
+            inter_files_name.extend([inter_param["model"]])
             for file in inter_files_name:
-                cmd = f"for kk in task.*; do cd $kk; rm -f {file}; cd ..; done"
+                cmd = f"for kk in task.*; do rm -f $kk/{file}; done"
                 subprocess.call(cmd, shell=True)
-        elif calculator == 'vasp':
+        elif inter_type == 'vasp':
             os.chdir(abs_path_to_prop)
-            cmd = f"for kk in task.*; do cd $kk; rm -f POTCAR; cd ..; done"
+            cmd = f"for kk in task.*; do rm -f $kk/POTCAR; done"
             subprocess.call(cmd, shell=True)
 
         os.chdir(cwd)
