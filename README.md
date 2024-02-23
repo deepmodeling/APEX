@@ -440,7 +440,7 @@ The property test can follow similar approach.
 
 Sometimes when automatically results retrieving fails as workflow finished, you may try to obtained completed test results manually by `download` command with specific `workflow ID` provided:
 ```shell
-apex download workflow_id [-w Destination_work_dir] [-c [CONFIG]]
+apex retrieve workflow_id [-w Destination_work_dir] [-c [CONFIG]]
 ```
 where the `Destination` argument is defaulted to be `./`, and the `CONFIG` JSON is needed to connect to the remote storage.
 

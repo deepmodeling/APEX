@@ -7,7 +7,7 @@ from apex.config import Config
 from apex.utils import load_config_file
 
 
-def download_results(
+def retrieve_results(
         workflow_id,
         destination,
         config_file,

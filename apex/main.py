@@ -8,7 +8,7 @@ from apex.run_step import run_step
 from apex.submit import submit_workflow
 from apex.archive import archive_result
 from apex.report import report_result
-from apex.download import download_results
+from apex.retrieve import retrieve_results
 
 
 def parse_args():
@@ -92,20 +92,20 @@ def parse_args():
 
     ##########################################
     # Retrieve artifacts manually
-    parser_download = subparsers.add_parser(
-        "download",
+    parser_retrieve = subparsers.add_parser(
+        "retrieve",
         help="Retrieve results of an workflow with key provided manually",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser_download.add_argument(
+    parser_retrieve.add_argument(
         "workflow_id", type=str,
         help='Workflow ID to be downloaded'
     )
-    parser_download.add_argument(
+    parser_retrieve.add_argument(
         "-w", "--work", type=str, default='./',
         help='destination work directory to be downloaded to'
     )
-    parser_download.add_argument(
+    parser_retrieve.add_argument(
         "-c", "--config",
         type=str, nargs='?',
         default='./global.json',
@@ -210,8 +210,8 @@ def main():
             machine_file=args.machine,
             step=args.step
         )
-    elif args.cmd == 'download':
-        download_results(
+    elif args.cmd == 'retrieve':
+        retrieve_results(
             workflow_id=args.workflow_id,
             destination=args.work,
             config_file=args.config,
