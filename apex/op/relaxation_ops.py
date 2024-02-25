@@ -8,7 +8,7 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-
+from apex.core.calculator import LAMMPS_INTER_TYPE
 from apex.utils import recursive_search
 
 upload_packages.append(__file__)
@@ -140,8 +140,21 @@ class RelaxPost(OP):
                 conf_dirs.extend(glob.glob(conf))
             conf_dirs = list(set(conf_dirs))
             conf_dirs.sort()
+
+            # remove potential files
+            inter_files_name = []
+            if inter_type in LAMMPS_INTER_TYPE:
+                if type(inter_param["model"]) is str:
+                    inter_files_name = [inter_param["model"]]
+                elif type(inter_param["model"]) is list:
+                    inter_files_name.extend(inter_param["model"])
+            elif inter_type == 'vasp':
+                inter_files_name = ['POTCAR']
+
             for ii in conf_dirs:
-                cmd = 'rm *.pb'
+                cmd = 'rm -f'
+                for jj in inter_files_name:
+                    cmd += f' {jj}'
                 os.chdir(ii)
                 subprocess.call(cmd, shell=True)
                 os.chdir(op_in['input_all'])
