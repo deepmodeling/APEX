@@ -19,7 +19,6 @@ setuptools.setup(
         'pymatgen-analysis-defects>=2023.8.22',
         "dpdata>=0.2.13",
         "dpdispatcher",
-        "phonoLAMMPS",
         "phonopy",
         "matplotlib",
         "plotly",
