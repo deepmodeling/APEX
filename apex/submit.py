@@ -42,7 +42,6 @@ def pack_upload_dir(
     prop_confs = prop_param.get("structures", []) if prop_param else []
     confs = relax_confs + prop_confs
     assert len(confs) > 0, "No configuration path indicated!"
-    property_list = prop_param["properties"]
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
@@ -51,6 +50,7 @@ def pack_upload_dir(
     refine_init_name_list = []
     # backup all existing property work directories
     if flow_type in ['props', 'joint']:
+        property_list = prop_param["properties"]
         for ii in conf_dirs:
             sepline(ch=ii, screen=True)
             for jj in property_list:
