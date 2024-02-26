@@ -347,7 +347,7 @@ class DashReportApp:
 
     @staticmethod
     def open_webpage():
-        webbrowser.open_new('http://127.0.0.1:8050/')
+        webbrowser.open('http://127.0.0.1:8050/')
 
 
 if __name__ == "__main__":
