@@ -298,6 +298,9 @@ def make_lammps_equi(
     """
     make lammps input for equilibritation
     """
+    deepmd_version = param.get("deepmd_version", None)
+    if deepmd_version:
+        split_v = deepmd_version.split('.')
     ret = ""
     ret += "clear\n"
     ret += "units 	metal\n"
@@ -322,10 +325,13 @@ def make_lammps_equi(
     ret += "min_style       cg\n"
     if change_box:
         ret += "fix             1 all box/relax iso 0.0 \n"
-        ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-        ret += "fix             1 all box/relax aniso 0.0 \n"
-        ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-        ret += "fix             1 all box/relax tri 0.0 \n"
+        if deepmd_version and int(split_v[0]) >= 2 and int(split_v[1]) >= 1 and int(split_v[2]) >= 5:
+            pass
+        else:
+            ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
+            ret += "fix             1 all box/relax aniso 0.0 \n"
+            ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
+            ret += "fix             1 all box/relax tri 0.0 \n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
     ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
