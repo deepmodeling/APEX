@@ -7,11 +7,18 @@ from apex.utils import load_config_file, is_json_file, simplify_paths
 from apex.reporter.DashReportApp import DashReportApp
 
 
-def simplify_dataset(orig_dataset: dict) -> dict:
+def tag_dataset(orig_dataset: dict) -> dict:
     orig_work_path_list = [k for k in orig_dataset.keys()]
     simplified_path_dict = simplify_paths(orig_work_path_list)
     simplified_dataset = {simplified_path_dict[k]: v for k, v in orig_dataset.items()}
-    return simplified_dataset
+    # replace data id with tag specified in the dataset if exists
+    tagged_dataset = {}
+    for k, v in simplified_dataset.items():
+        if tag := v.pop('tag', None):
+            tagged_dataset[tag] = v
+        else:
+            tagged_dataset[k] = v
+    return tagged_dataset
 
 
 def report_local(input_path_list):
@@ -49,7 +56,7 @@ def report_local(input_path_list):
             all_data_dict[workdir_id] = data_dict
 
     # simplify the work path key for all datasets
-    simplified_dataset = simplify_dataset(all_data_dict)
+    simplified_dataset = tag_dataset(all_data_dict)
     DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=True)
 
 
