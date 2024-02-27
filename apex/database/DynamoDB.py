@@ -27,11 +27,11 @@ class DynamoDBClient(StorageBase):
                 )
                 # Wait until the table exists.
                 while True:
-                    logging.info(msg=f'waiting for creation of table...')
+                    logging.info(msg=f'Waiting for table to be created...')
                     response = self.dynamodb.meta.client.describe_table(TableName=table_name)
                     status = response['Table']['TableStatus']
                     if status == 'ACTIVE':
-                        logging.info(msg=f'table creation is successful (name: {table_name})')
+                        logging.info(msg=f'Table creation is successful (name: {table_name})')
                         break
                     time.sleep(2)  # Wait for 5 seconds before checking again
             else:
@@ -45,22 +45,22 @@ class DynamoDBClient(StorageBase):
         response = self.table.get_item(Key={'id': id_field})
         orig_dict = response.get('Item', None)
         if orig_dict is not None:
-            logging.info(msg=f'Synchronizing with exist dataset (id: {id_field})')
+            logging.info(msg=f'Synchronize data with exist dataset (id: {id_field})')
             update_dict(orig_dict, data, depth)
             self.table.put_item(Item=orig_dict)
         else:
-            logging.info(msg=f'Creating new dataset (id: {id_field})')
+            logging.info(msg=f'Creating new dataset... (id: {id_field})')
             data['id'] = id_field
             self.table.put_item(Item=data)
 
     def record(self, data: dict, id_field: str):
         """record dict data to DynamoDB"""
         data = convert_floats_to_decimals(data)
-        logging.info(msg=f'Synchronize data into DynamoDB {self.table}')
+        logging.info(msg=f'Record data into DynamoDB {self.table}')
         # get timestamp
         timestamp = datetime.datetime.now().isoformat()
         the_id = f'[{timestamp}]:{id_field}'
-        logging.info(msg=f'Creating new dataset (id: {the_id})')
+        logging.info(msg=f'Creating new dataset... (id: {the_id})')
         data['id'] = the_id
         self.table.put_item(Item=data)
 

@@ -33,6 +33,9 @@
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
       - [3.2.2. Single-Step Test](#322-single-step-test)
+      - [3.2.3. Retrieve Results Manually](#323-retrieve-results-manually)
+      - [3.2.4. Archive Test Results](#324-archive-test-results)
+      - [3.2.5. Results Visualization Report](#325-results-visualization-report)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
@@ -45,7 +48,7 @@ APEX adopts the functionality of the second-generation alloy properties calculat
 The comprehensive architecture of APEX is demonstrated below:
 
 <div>
-    <img src="./docs/images/apex_demo.png" alt="Fig1" style="zoom: 35%;">
+    <img src="./docs/images/flowchart.png" alt="Fig1" style="zoom: 40%;">
     <p style='font-size:1.0rem; font-weight:none'>Figure 1. APEX schematic diagram</p>
 </div>
 
@@ -349,7 +352,7 @@ The parameters related to Gamma line calculation are listed below:
   It should be noted that for various crystal structures, **users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption**. In above example, the slip system configuration within the "hcp" dictionary will be utilized.
 
 ##### 3.1.2.7. Phonon Spectrum
-This function incorporates part of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) codes into APEX to make it more complete. This workflow is realized via [Phonopy](https://github.com/phonopy/phonopy), and plus [phonoLAMMPS](https://github.com/abelcarreras/phonolammps) for LAMMPS calculation. 
+This function incorporates part of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) codes into APEX to make it more complete. This workflow is realized via [Phonopy](https://github.com/phonopy/phonopy), and plus [phonoLAMMPS](https://github.com/abelcarreras/phonolammps) for LAMMPS calculation. In APEX, this part includes the [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatically high-symmetry points searching for phonon calculation.
 
 *IMPORTANT!!*: it should be noticed that one will need the **phonoLAMMPS** package pre-installed within one's `run_image` for proper `LAMMPS` calculation of phonon spectrum.
 
@@ -361,9 +364,12 @@ The parameters related to `Phonon` calculation are listed below:
   | supercell_size | Sequence[Int] | [2, 2, 2] | Size of supercell created for calculation |
   | MESH | Sequence[Int] | None | Specify the dimensions of the grid in reciprocal space for which the phonon frequencies and eigenvectors are to be calculated. For example: [8, 8, 8]; Refer to [Phonopy MESH](http://phonopy.github.io/phonopy/setting-tags.html#mesh-sampling-tags) |
   | PRIMITIVE_AXES | String | None | To define the basis vectors of a primitive cell in terms of the basis vectors of a conventional cell for input cell transformation. For example: "0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0"; Refer to [Phonopy PRIMITIVE_AXES](http://phonopy.github.io/phonopy/setting-tags.html#primitive-axes-or-primitive-axis) |
-  | BAND | String | None | Indicate band path in reciprocal space as format of [Phonopy BAND](http://phonopy.github.io/phonopy/setting-tags.html#band-and-band-points); For example: "0 0 0 1/2 0 1/2, 1/2 1/2 1 0 0 0 1/2 1/2 1/2" |
+  | BAND | String | None | (Optional) Indicate band path in reciprocal space as format of [Phonopy BAND](http://phonopy.github.io/phonopy/setting-tags.html#band-and-band-points); For example: "0 0 0 1/2 0 1/2, 1/2 1/2 1 0 0 0 1/2 1/2 1/2". If not specified, the [seekpath](https://seekpath.readthedocs.io/en/latest/#) package will be adopted to automatically determine band path according to relaxed structure. |
+  | BAND_LABELS | String | None | (Optional) Indication of band path labels for report plot. |
   | BAND_POINTS | Int | 51 | Number of sampling points including the path ends |
   | BAND_CONNECTION | Bool | True | With this option, band connections are estimated from eigenvectors and band structure is drawn considering band crossings. In sensitive cases, to obtain better band connections, it requires to increase number of points calculated in band segments by the `BAND_POINTS` tag. |
+  | seekpath_from_original | Bool | False | Whether to re-seek standard primitive cell for relaxed structure for band path via the seekpath package. If True: `seekpath.get_path_orig_cell` will be adopted, else: `seekpath.get_path`. Refer to [link](https://seekpath.readthedocs.io/en/latest/maindoc.html#k-point-path-for-non-standard-unit-cells) |
+  | seekpath_param | Dict | None | (Optional) Other parameters to be specified for `seekpath.get_path` and `seekpath.get_path`. Refer to [link](https://seekpath.readthedocs.io/en/latest/maindoc.html#k-point-path-for-non-standard-unit-cells) |
 
 When utilize the `VASP`, you have **two** primary calculation methods at your disposal: the **Linear Response Method** and the **Finite Displacement Method**.
 
@@ -373,8 +379,6 @@ On the other hand, the **Finite Displacement Method**'s advantage lies in its ve
 
 
 ### 3.2. Command
-APEX currently supports two seperate run modes: **workflow submission** (running via dflow) and **single-step test** (running without dflow).
-
 #### 3.2.1. Workflow Submission
 APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by the user. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for help). Here is an example to submit a `joint` workflow:
 ```shell
@@ -426,11 +430,67 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
       }
     }
    ```
-3. Finally, as all tasks are finished, post process by
+3. Finally, as all tasks are finished, post-process by
    ```shell
    apex test param_relax.json post_relax
    ```
 The property test can follow similar approach.
+
+#### 3.2.3. Retrieve Results Manually
+
+Sometimes when automatically results retrieving fails as workflow finished, you may try to obtained completed test results manually by `download` command with specific `workflow ID` provided:
+```shell
+apex retrieve workflow_id [-w Destination_work_dir] [-c [CONFIG]]
+```
+where the `Destination` argument is defaulted to be `./`, and the `CONFIG` JSON is needed to connect to the remote storage.
+
+#### 3.2.4. Archive Test Results
+After completion of each workflow, the results and test parameters of corresponding property will be stored as `json` format automatically under respective work directory named as `all_result.json`. You can also do this manually to update this file based on the latest run by:
+
+``shell
+apex archive [parameter …]
+``
+Argument format of this sub-command is pretty similar to that of `submit` command. Please use `apex archive -h` for complete usage introduction. It should be noticed that each `archive` command will only update property information of those identified as **active** according to the parameter files and indication provided similar to the `submit` mode.
+
+This mode can also result archive to **NoSQL** database. We currently support two types of database client: [MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/). Below shows global configuration parameters for two database archive:
+
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | database_type | String | local | Database type, three chooses available: `local` (only archive to local `all_result.json`), `mongodb` and `dynamodb`. One can also indicate this by `-d` within `archive` command |
+  | archive_method | String | sync | Choose from `sync` and `record`. `sync` synchronize and update the result into same item based on work directory id; `record` record each archive result into a new item with unique timestamp. One can also indicate this by `-m` within `archive` command |
+
+  For `MongoDB`:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | mongodb_host | String | localhost | `Mongodb` host |
+  | mongodb_port | Int | 27017 | `Mongodb` port |
+  | mongodb_database | String | apex_results | `Mongodb` database name |
+  | mongodb_collection | String | apex_results | `Mongodb` collection name |
+  | mongodb_config | Dict | None | Complete parameter dictionary for [MongoClient](https://www.mongodb.com/blog/post/introducing-mongoclient) |
+
+  For `DynamoDB`:
+  | Key words | Data structure | Default | Description |
+  | :------------ | ----- | ----- | ------------------- |
+  | dynamodb_table_name | String | apex_results | `Dynamodb` table name |
+  | dynamodb_config | Dict | None | Complete parameter dictionary for [boto3 session](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource) |
+
+#### 3.2.5. Results Visualization Report
+In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash APP](https://dash.plotly.com). You can invoke the report app simply under target work directory by:
+```shell
+apex report
+```
+Or indicate multiple work directories or path of result file in `json` format by `-w` for cross-comparison. Here is an example:
+```shell
+apex report -w MEAM.bk DP/all_result.json
+```
+Once the report app is opened (or manully via http://127.0.0.1:8050/), one can select interesting configuration and type of property and the result plot and data table will be shown accordingly.
+  <div>
+      <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 100%;">
+      <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
+  </div>
+
+
+
 ## 4. Quick Start
 We present several case studies as introductory illustrations of APEX, tailored to distinct user scenarios. For our demonstration, we will utilize a [LAMMPS_example](./examples/lammps_demo) to compute the Equation of State (EOS) and elastic constants of molybdenum in both Body-Centered Cubic (BCC) and Face-Centered Cubic (FCC) phases. To begin, we will examine the files prepared within the working directory for this specific case.
 

@@ -1,5 +1,8 @@
 import os
+import glob
 import time
+import shutil
+import re
 from typing import (
     Optional,
     Type,
@@ -16,33 +19,40 @@ from dflow import (
 from dflow.python.op import OP
 from dflow.plugins.dispatcher import DispatcherExecutor
 from apex.superop.RelaxationFlow import RelaxationFlow
-from apex.superop.PropertyFlow import PropertyFlow
+from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
 from apex.op.property_ops import PropsMake, PropsPost
-from apex.utils import json2dict
+from apex.utils import json2dict, handle_prop_suffix
 
 from dflow.python import upload_packages
+
 upload_packages.append(__file__)
 
 
 class FlowGenerator:
     def __init__(
-        self,
-        make_image: str,
-        run_image: str,
-        post_image: str,
-        run_command: str,
-        calculator: str,
-        run_op: Type[OP],
-        relax_make_op: Type[OP] = RelaxMake,
-        relax_post_op: Type[OP] = RelaxPost,
-        props_make_op: Type[OP] = PropsMake,
-        props_post_op: Type[OP] = PropsPost,
-        group_size: Optional[int] = None,
-        pool_size: Optional[int] = None,
-        executor: Optional[DispatcherExecutor] = None,
-        upload_python_packages: Optional[List[os.PathLike]] = None,
+            self,
+            make_image: str,
+            run_image: str,
+            post_image: str,
+            run_command: str,
+            calculator: str,
+            run_op: Type[OP],
+            relax_make_op: Type[OP] = RelaxMake,
+            relax_post_op: Type[OP] = RelaxPost,
+            props_make_op: Type[OP] = PropsMake,
+            props_post_op: Type[OP] = PropsPost,
+            group_size: Optional[int] = None,
+            pool_size: Optional[int] = None,
+            executor: Optional[DispatcherExecutor] = None,
+            upload_python_packages: Optional[List[os.PathLike]] = None,
     ):
+        self.download_path = None
+        self.upload_path = None
+        self.workflow = None
+        self.relax_param = None
+        self.props_param = None
+
         self.relax_make_op = relax_make_op
         self.relax_post_op = relax_post_op
         self.props_make_op = props_make_op
@@ -58,30 +68,66 @@ class FlowGenerator:
         self.executor = executor
         self.upload_python_packages = upload_python_packages
 
-    @staticmethod
-    def download(
-            wf,
-            step_name: str,
-            artifacts_key: str,
-            work_dir: Union[os.PathLike, str] = '.'
-    ):
-        while wf.query_status() in ["Pending", "Running"]:
+    def _monitor_relax(self):
+        print('Waiting for relaxation result...')
+        while True:
             time.sleep(4)
-        assert (wf.query_status() == 'Succeeded')
-        print(f'Workflow finished (ID: {wf.id}, UID: {wf.uid})')
-        print('Retrieving finished tasks to local...')
-        step = wf.query_step(name=step_name)[0]
-        download_artifact(
-            step.outputs.artifacts[artifacts_key],
-            path=work_dir
-        )
+            step_info = self.workflow.query()
+            wf_status = self.workflow.query_status()
+            if wf_status == 'Failed':
+                raise RuntimeError(f'Workflow failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+            relax_post = step_info.get_step(name='relaxation-cal')[0]
+            if relax_post['phase'] == 'Succeeded':
+                print(f'Relaxation finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                print('Retrieving completed tasks to local...')
+                download_artifact(
+                    artifact=relax_post.outputs.artifacts['retrieve_path'],
+                    path=self.download_path
+                )
+                break
+
+    def _monitor_props(
+            self,
+            subprops_key_list: List[str],
+    ):
+        subprops_left = subprops_key_list.copy()
+        subprops_failed_list = []
+        print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
+        while True:
+            time.sleep(4)
+            step_info = self.workflow.query()
+            for kk in subprops_left:
+                try:
+                    step = step_info.get_step(key=kk)[0]
+                except IndexError:
+                    continue
+                if step['phase'] == 'Succeeded':
+                    print(f'Sub-workflow {kk} finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    print('Retrieving completed tasks to local...')
+                    download_artifact(
+                        artifact=step.outputs.artifacts['retrieve_path'],
+                        path=self.download_path
+                    )
+                    subprops_left.remove(kk)
+                    if subprops_left:
+                        print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
+                elif step['phase'] == 'Failed':
+                    print(f'Sub-workflow {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    subprops_failed_list.append(kk)
+                    subprops_left.remove(kk)
+                    if subprops_left:
+                        print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
+            if not subprops_left:
+                print(f'Workflow finished with {len(subprops_failed_list)} sub-property failed '
+                      f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                break
 
     def _set_relax_flow(
             self,
             input_work_dir: dflow.common.S3Artifact,
             relax_parameter: dict
     ) -> Step:
-        relaxation_flow = RelaxationFlow(
+        relaxationFlow = RelaxationFlow(
             name='relaxation-flow',
             make_op=self.relax_make_op,
             run_op=self.run_op,
@@ -98,7 +144,7 @@ class FlowGenerator:
         )
         relaxation = Step(
             name='relaxation-cal',
-            template=relaxation_flow,
+            template=relaxationFlow,
             artifacts={
                 "input_work_path": input_work_dir
             },
@@ -114,8 +160,9 @@ class FlowGenerator:
             self,
             input_work_dir: dflow.common.S3Artifact,
             props_parameter: dict
-    ) -> Step:
-        property_flow = PropertyFlow(
+    ) -> [list[Step], list[str]]:
+
+        simplePropertySteps = SimplePropertySteps(
             name='property-flow',
             make_op=self.props_make_op,
             run_op=self.run_op,
@@ -130,86 +177,136 @@ class FlowGenerator:
             executor=self.executor,
             upload_python_packages=self.upload_python_packages
         )
-        property = Step(
-            name='property-cal',
-            template=property_flow,
-            artifacts={
-                "input_work_path": input_work_dir
-            },
-            parameters={
-                "flow_id": "propertyflow",
-                "parameter": props_parameter
-            },
-            key="propertycal"
-        )
-        return property
+
+        confs = props_parameter["structures"]
+        interaction = props_parameter["interaction"]
+        properties = props_parameter["properties"]
+
+        conf_dirs = []
+        flow_id_list = []
+        path_to_prop_list = []
+        prop_param_list = []
+        do_refine_list = []
+        for conf in confs:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
+        conf_dirs.sort()
+        for ii in conf_dirs:
+            for jj in properties:
+                do_refine, suffix = handle_prop_suffix(jj)
+                if not suffix:
+                    continue
+                property_type = jj["type"]
+                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                path_to_prop_list.append(path_to_prop)
+                if os.path.exists(path_to_prop):
+                    shutil.rmtree(path_to_prop)
+                prop_param_list.append(jj)
+                do_refine_list.append(do_refine)
+                flow_id_list.append(ii + '-' + property_type + '-' + suffix)
+
+        nflow = len(path_to_prop_list)
+
+        subprops_list = []
+        subprops_key_list = []
+        for ii in range(nflow):
+            clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', flow_id_list[ii]).lower()
+            subflow_key = f'propertycal-{clean_subflow_id}'
+            subprops_key_list.append(subflow_key)
+            subprops_list.append(
+                Step(
+                    name=f'Subprop-cal-{clean_subflow_id}',
+                    template=simplePropertySteps,
+                    artifacts={
+                        "input_work_path": input_work_dir
+                    },
+                    parameters={
+                        "flow_id": flow_id_list[ii],
+                        "path_to_prop": path_to_prop_list[ii],
+                        "prop_param": prop_param_list[ii],
+                        "inter_param": interaction,
+                        "do_refine": do_refine_list[ii]
+                    },
+                    key=subflow_key
+                )
+            )
+
+        return subprops_list, subprops_key_list
 
     @json2dict
     def submit_relax(
             self,
-            work_dir: Union[os.PathLike, str],
+            upload_path: Union[os.PathLike, str],
+            download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             labels: Optional[dict] = None
-    ):
-        wf = Workflow(name='relaxation', labels=labels)
+    ) -> str:
+        self.upload_path = upload_path
+        self.download_path = download_path
+        self.relax_param = relax_parameter
+        self.workflow = Workflow(name='relaxation', labels=labels)
         relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(work_dir),
+            input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
         )
-        wf.add(relaxation)
-        wf.submit()
-        self.download(
-            wf, step_name='relaxation-cal',
-            artifacts_key='retrieve_path',
-            work_dir=work_dir
-        )
-        return wf.id
+        self.workflow.add(relaxation)
+        self.workflow.submit()
+        # Wait for and retrieve relaxation
+        self._monitor_relax()
+
+        return self.workflow.id
 
     @json2dict
     def submit_props(
             self,
-            work_dir: Union[os.PathLike, str],
+            upload_path: Union[os.PathLike, str],
+            download_path: Union[os.PathLike, str],
             props_parameter: dict,
             labels: Optional[dict] = None
-    ):
-        wf = Workflow(name='property', labels=labels)
-        properties = self._set_props_flow(
-            input_work_dir=upload_artifact(work_dir),
+    ) -> str:
+        self.upload_path = upload_path
+        self.download_path = download_path
+        self.props_param = props_parameter
+        self.workflow = Workflow(name='property', labels=labels)
+        subprops_list, subprops_key_list = self._set_props_flow(
+            input_work_dir=upload_artifact(upload_path),
             props_parameter=props_parameter
         )
-        wf.add(properties)
-        wf.submit()
-        self.download(
-            wf, step_name='property-cal',
-            artifacts_key='retrieve_path',
-            work_dir=work_dir
-        )
-        return wf.id
+        self.workflow.add(subprops_list)
+        self.workflow.submit()
+        # wait for and retrieve sub-property flows
+        self._monitor_props(subprops_key_list)
+
+        return self.workflow.id
 
     @json2dict
     def submit_joint(
             self,
-            work_dir: Union[os.PathLike, str],
+            upload_path: Union[os.PathLike, str],
+            download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             props_parameter: dict,
             labels: Optional[dict] = None
-    ):
-        wf = Workflow(name='joint', labels=labels)
+    ) -> str:
+        self.upload_path = upload_path
+        self.download_path = download_path
+        self.relax_param = relax_parameter
+        self.props_param = props_parameter
+        self.workflow = Workflow(name='joint', labels=labels)
         relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(work_dir),
-            relax_parameter=relax_parameter
+            input_work_dir=upload_artifact(upload_path),
+            relax_parameter=self.relax_param
         )
-        properties = self._set_props_flow(
+        subprops_list, subprops_key_list = self._set_props_flow(
             input_work_dir=relaxation.outputs.artifacts["output_all"],
-            props_parameter=props_parameter
+            props_parameter=self.props_param
         )
-        wf.add(relaxation)
-        wf.add(properties)
-        wf.submit()
-        self.download(
-            wf, step_name='property-cal',
-            artifacts_key='retrieve_path',
-            work_dir=work_dir
-        )
-        return wf.id
+        self.workflow.add(relaxation)
+        self.workflow.add(subprops_list)
+        self.workflow.submit()
+        # Wait for and retrieve relaxation
+        self._monitor_relax()
+        # Wait for and retrieve sub-property flows
+        self._monitor_props(subprops_key_list)
 
+        return self.workflow.id

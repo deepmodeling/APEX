@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import logging
 import os
+import shutil
+import json
 from typing import Type
 from monty.serialization import loadfn
 from decimal import Decimal
@@ -8,10 +11,96 @@ from dflow.python import upload_packages
 from fpop.vasp import RunVasp
 from fpop.abacus import RunAbacus
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.core.calculator import LAMMPS_INTER_TYPE
 
 upload_packages.append(__file__)
 
 MaxLength = 70
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
+
+
+# write a function to replace all '/' in the input string with '-'
+
+def backup_path(path) -> None:
+    path += "/"
+    if os.path.isdir(path):
+        dirname = os.path.dirname(path)
+        counter = 0
+        while True:
+            bk_dirname = dirname + ".bk%03d" % counter
+            if not os.path.isdir(bk_dirname):
+                shutil.move(dirname, bk_dirname)
+                break
+            counter += 1
+
+
+def copy_all_other_files(src_dir, dst_dir, ignore_list=None) -> None:
+    """
+    Copies all files from the source directory to the destination directory with some files excluded.
+
+    :param src_dir: The path to the source directory.
+    :param dst_dir: The path to the destination directory.
+    :ignore_list: files to be ignored.
+    """
+    if not os.path.exists(src_dir):
+        raise FileNotFoundError(f"Source directory {src_dir} does not exist.")
+
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
+    for item in os.listdir(src_dir):
+        if ignore_list and item in ignore_list:
+            continue
+        src_path = os.path.join(src_dir, item)
+        dst_path = os.path.join(dst_dir, item)
+
+        if os.path.isfile(src_path):
+            shutil.copy2(src_path, dst_path)
+        elif os.path.isdir(src_path):
+            shutil.copytree(src_path, dst_path)
+
+
+def simplify_paths(path_list: list) -> dict:
+    # only one path, return it with only basename
+    if len(path_list) == 1:
+        return {path_list[0]: '.../' + os.path.basename(path_list[0])}
+    else:
+        # Split all paths into components
+        split_paths = [os.path.normpath(p).split(os.sep) for p in path_list]
+
+        # Find common prefix
+        common_prefix = os.path.commonprefix(split_paths)
+        common_prefix_len = len(common_prefix)
+
+        # Remove common prefix from each path and create dictionary
+        simplified_paths_dict = {
+            os.sep.join(p): '.../' + os.sep.join(p[common_prefix_len:]) if common_prefix_len else os.sep.join(p)
+            for p in split_paths
+        }
+
+        return simplified_paths_dict
+
+
+def is_json_file(filename):
+    try:
+        with open(filename, 'r') as f:
+            json.load(f)
+        return True
+    except ValueError as e:
+        return False
+
+
+def load_config_file(config_file: str) -> dict:
+    try:
+        config_dict = loadfn(config_file)
+    except FileNotFoundError:
+        logging.warning(
+            msg='No global config file provided, will default all settings. '
+                'You may prepare global.json under current work direction '
+                'or use optional argument: -c to indicate a specific json file.'
+        )
+        config_dict = {}
+    return config_dict
 
 
 def recursive_search(directories, path='.'):
@@ -82,7 +171,7 @@ def get_task_type(d: dict) -> (str, Type[OP]):
     elif interaction_type == 'abacus':
         task_type = 'abacus'
         run_op = RunAbacus
-    elif interaction_type in ['deepmd', 'eam_alloy']:
+    elif interaction_type in LAMMPS_INTER_TYPE:
         task_type = 'lammps'
         run_op = RunLAMMPS
     else:

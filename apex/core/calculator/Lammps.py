@@ -11,12 +11,18 @@ from apex.core.calculator.lib.lammps_utils import (
     inter_eam_alloy,
     inter_eam_fs,
     inter_meam,
+    inter_meam_spline,
+    inter_snap,
+    inter_gap,
+    inter_rann,
+    inter_mace
 )
 from .Task import Task
 from dflow.python import upload_packages
+from . import LAMMPS_INTER_TYPE
 upload_packages.append(__file__)
 
-supported_inter = ["deepmd", "meam", "eam_fs", "eam_alloy"]
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
 
 
 class Lammps(Task):
@@ -25,50 +31,65 @@ class Lammps(Task):
         self.inter_type = inter_parameter["type"]
         self.type_map = inter_parameter["type_map"]
         self.in_lammps = inter_parameter.get("in_lammps", "auto")
-        if self.inter_type == "meam":
+        if self.inter_type in ["meam", "snap"]:
             self.model = list(map(os.path.abspath, inter_parameter["model"]))
         else:
             self.model = os.path.abspath(inter_parameter["model"])
         self.path_to_poscar = path_to_poscar
-        assert self.inter_type in supported_inter
+        assert self.inter_type in LAMMPS_INTER_TYPE
         self.set_inter_type_func()
 
     def set_inter_type_func(self):
-
         if self.inter_type == "deepmd":
             self.inter_func = inter_deepmd
-
-        elif self.inter_type == "meam":
-            self.inter_func = inter_meam
-
         elif self.inter_type == "eam_fs":
             self.inter_func = inter_eam_fs
-
+        elif self.inter_type == "meam":
+            self.inter_func = inter_meam
+        elif self.inter_type == "meam_spline":
+            self.inter_func = inter_meam_spline
+        elif self.inter_type == "snap":
+            self.inter_func = inter_snap
+        elif self.inter_type == "gap":
+            self.inter_func = inter_gap
+        elif self.inter_type == "rann":
+            self.inter_func = inter_rann
+        elif self.inter_type == "mace":
+            self.inter_func = inter_mace
         else:
             self.inter_func = inter_eam_alloy
 
     def set_model_param(self):
-
         if self.inter_type == "deepmd":
             model_name = os.path.basename(self.model)
             deepmd_version = self.inter.get("deepmd_version", "1.2.0")
             self.model_param = {
+                "type": self.inter_type,
                 "model_name": [model_name],
                 "param_type": self.type_map,
                 "deepmd_version": deepmd_version,
             }
-        elif self.inter_type == "meam":
+        elif self.inter_type in ["meam", "snap"]:
             model_name = list(map(os.path.basename, self.model))
-            self.model_param = {"model_name": model_name, "param_type": self.type_map}
+            self.model_param = {
+                "type": self.inter_type,
+                "model_name": model_name,
+                "param_type": self.type_map
+            }
         else:
             model_name = os.path.basename(self.model)
-            self.model_param = {"model_name": [model_name], "param_type": self.type_map}
+            self.model_param = {
+                "type": self.inter_type,
+                "model_name": [model_name],
+                "param_type": self.type_map
+            }
 
     def make_potential_files(self, output_dir):
         cwd = os.getcwd()
-        if self.inter_type == "meam":
+        if self.inter_type in ["meam", "snap"]:
             model_lib = os.path.basename(self.model[0])
             model_file = os.path.basename(self.model[1])
+
             os.chdir(os.path.join(output_dir, "../../"))
             if os.path.islink(model_lib):
                 link_lib = os.readlink(model_lib)
@@ -86,11 +107,12 @@ class Lammps(Task):
                 if not os.path.abspath(link_file) == self.model[1]:
                     os.remove(model_file)
                     os.symlink(os.path.relpath(self.model[1]), model_file)
-            elif os.path.isfile(model_lib):
-                os.remove(model_lib)
+            elif os.path.isfile(model_file):
+                os.remove(model_file)
                 os.symlink(os.path.relpath(self.model[1]), model_file)
             else:
                 os.symlink(os.path.relpath(self.model[1]), model_file)
+
             os.chdir(output_dir)
             if not os.path.islink(model_lib):
                 os.symlink(os.path.join("../..", model_lib), model_lib)
@@ -521,19 +543,19 @@ class Lammps(Task):
             return result_dict
 
     def forward_files(self, property_type="relaxation"):
-        if self.inter_type == "meam":
+        if self.inter_type in ["meam", "snap"]:
             return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
         else:
             return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
 
     def forward_common_files(self, property_type="relaxation"):
         if property_type not in ["eos"]:
-            if self.inter_type == "meam":
+            if self.inter_type in ["meam", "snap"]:
                 return ["in.lammps"] + list(map(os.path.basename, self.model))
             else:
                 return ["in.lammps", os.path.basename(self.model)]
         else:
-            if self.inter_type == "meam":
+            if self.inter_type in ["meam", "snap"]:
                 return list(map(os.path.basename, self.model))
             else:
                 return [os.path.basename(self.model)]

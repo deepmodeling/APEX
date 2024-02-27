@@ -9,8 +9,8 @@ class StructureInfo(object):
     Arg:
         structure: pymatgen.core.Structure object
     """
-    def __init__(self, structure: pymatgen.core.Structure):
-        analyzer = SpacegroupAnalyzer(structure)
+    def __init__(self, structure: pymatgen.core.Structure, **kwargs) -> None:
+        analyzer = SpacegroupAnalyzer(structure, **kwargs)
         self.__space_group_symbol = analyzer.get_space_group_symbol()
         self.__space_group_number = analyzer.get_space_group_number()
         self.__point_group_symbol = analyzer.get_point_group_symbol()

@@ -3,12 +3,14 @@ import os
 import shutil
 import logging
 from monty.serialization import dumpfn
+from pymatgen.core.structure import Structure
 from apex.core.calculator.lib import abacus_utils
 from apex.core.lib import crys
 from apex.core.calculator.calculator import make_calculator
 from apex.core.lib.utils import create_path
 from apex.core.lib.dispatcher import make_submission
 from apex.core.mpdb import get_structure
+from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
@@ -28,6 +30,7 @@ def make_equi(confs, inter_param, relax_param):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
 
     # generate a list of task names like mp-xxx/relaxation/relax_task
@@ -141,6 +144,7 @@ def run_equi(confs, inter_param, mdata):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
 
     processes = len(conf_dirs)
@@ -191,6 +195,7 @@ def post_equi(confs, inter_param):
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     task_dirs = []
     for ii in conf_dirs:
@@ -205,4 +210,19 @@ def post_equi(confs, inter_param):
         poscar = os.path.join(ii, "POSCAR")
         inter = make_calculator(inter_param, poscar)
         res = inter.compute(ii)
+        contcar = os.path.join(ii, "CONTCAR")
+        ss = Structure.from_file(contcar)
+        st = StructureInfo(ss)
+        struct_info_dict = {
+            "space_group_symbol": st.space_group_symbol,
+            "space_group_number": st.space_group_number,
+            "point_group_symbol": st.point_group_symbol,
+            "crystal_system": st.crystal_system,
+            "lattice_type": st.lattice_type,
+        }
+
+        dumpfn(struct_info_dict, os.path.join(ii, "structure.json"), indent=4)
         dumpfn(res, os.path.join(ii, "result.json"), indent=4)
+
+
+

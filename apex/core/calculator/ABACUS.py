@@ -1,6 +1,7 @@
 import os
 import logging
 
+import dpdata
 from dpdata import LabeledSystem
 from monty.serialization import dumpfn
 
@@ -201,6 +202,10 @@ class ABACUS(Task):
             logging.warning("cannot find INPUT in " + output_dir + " skip")
             return None
         ls = LabeledSystem(output_dir, fmt="abacus/relax")
+        stru_name = abacus_utils.final_stru(output_dir)
+        stru_path = os.path.join(output_dir, stru_name)
+        stru = dpdata.System(stru_path, fmt="stru")
+        stru.to("contcar", os.path.join(output_dir, "CONTCAR"))
         outcar_dict = ls.as_dict()
         return outcar_dict
 

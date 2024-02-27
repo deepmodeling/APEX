@@ -274,9 +274,11 @@ class Elastic(Property):
         )
         res_data["elastic_tensor"] = []
         for ii in range(6):
+            c_ii = []
             for jj in range(6):
-                res_data["elastic_tensor"].append(et.voigt[ii][jj] / 1e4)
+                c_ii.append(et.voigt[ii][jj] / 1e4)
                 ptr_data += "%7.2f " % (et.voigt[ii][jj] / 1e4)
+            res_data["elastic_tensor"].append(c_ii)
             ptr_data += "\n"
 
         BV = et.k_voigt / 1e4

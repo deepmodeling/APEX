@@ -68,6 +68,7 @@ class TestLammps(unittest.TestCase):
     def test_set_model_param(self):
         self.Lammps.set_model_param()
         model_param = {
+            "type": "deepmd",
             "model_name": ["frozen_model.pb"],
             "param_type": {"Al": 0},
             "deepmd_version": "1.1.0",

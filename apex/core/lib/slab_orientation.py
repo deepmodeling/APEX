@@ -120,6 +120,12 @@ class SlabSlipSystem(object):
             '-12-12x1-213': {'plane': plane_miller_bravais_to_miller([-1, 2, -1, 2]),
                              'x': direction_miller_bravais_to_miller([1, -2, 1, 3]),
                              'xy': direction_miller_bravais_to_miller([-1, 0, 1, 0]),
+                             'default_frac_slip_len': (1, 0, 1)},
+
+            # Pyramidal II, shear SF2 along x by climbing the hill
+            '-12-12x-12-1-3': {'plane': plane_miller_bravais_to_miller([-1, 2, -1, 2]),
+                             'x': direction_miller_bravais_to_miller([-1, 2, -1, -3]),
+                             'xy': direction_miller_bravais_to_miller([1, 0, -1, 0]),
                              'default_frac_slip_len': (1, 0, 1)}
         }
     }

@@ -64,15 +64,16 @@ class Config:
     abacus_image_name: str = None
     abacus_run_command: str = None
     is_bohrium_dflow: bool = False
-    database_type: str = None
+
+    database_type: str = 'local'
     archive_method: str = 'sync'
     archive_key: str = None
+    archive_tasks: bool = False
 
     # MongoDB config
     mongodb_config: dict = None
     mongodb_host: str = "localhost"
     mongodb_port: int = 27017
-
     mongodb_database: str = "apex_results"
     mongodb_collection: str = "default_collection"
 
@@ -94,7 +95,7 @@ class Config:
         if not (self.context_type or self.machine):
             self.machine_dict = None
         elif self.context_type in ["Bohrium", "bohrium",
-                                    "BohriumContext", "boriumcontext"]:
+                                   "BohriumContext", "boriumcontext"]:
             self.machine_dict = {
                 "batch_type": self.batch_type,
                 "context_type": self.context_type,
@@ -112,7 +113,7 @@ class Config:
             if self.machine:
                 update_dict(self.machine_dict, self.machine)
         elif self.context_type in ["SSHContext", "sshcontext",
-                                    "SSH", "ssh"]:
+                                   "SSH", "ssh"]:
             self.machine_dict = {
                 "batch_type": self.batch_type,
                 "context_type": self.context_type,
@@ -130,7 +131,7 @@ class Config:
             if self.machine:
                 update_dict(self.machine_dict, self.machine)
         elif self.context_type in ["LocalContext", "localcontext"
-                                    "Local", "local"]:
+                                                   "Local", "local"]:
             self.machine_dict = {
                 "batch_type": self.batch_type,
                 "context_type": self.context_type,
@@ -141,7 +142,7 @@ class Config:
             if self.machine:
                 update_dict(self.machine_dict, self.machine)
         elif self.context_type in ["LazyLocalContext", "lazylocalcontext"
-                                    "LazyLocal", "lazylocal"]:
+                                                       "LazyLocal", "lazylocal"]:
             self.machine_dict = {
                 "batch_type": self.batch_type,
                 "context_type": self.context_type,

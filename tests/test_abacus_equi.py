@@ -92,6 +92,10 @@ class TestEqui(unittest.TestCase):
             os.path.join(source_path, "STRU"), os.path.join(target_path, "STRU")
         )
         shutil.copy(
+            os.path.join(source_path, "STRU_ION_D"),
+            os.path.join(target_path, "OUT.ABACUS", "STRU_ION_D"),
+        )
+        shutil.copy(
             os.path.join(source_path, "running_cell-relax.log"),
             os.path.join(target_path, "OUT.ABACUS", "running_cell-relax.log"),
         )
