@@ -193,10 +193,14 @@ class PropsPost(OP):
             elif type(inter_param["model"]) is list:
                 inter_files_name.extend(inter_param["model"])
             for file in inter_files_name:
+                cmd = f"rm -f ../{file}"
+                subprocess.call(cmd, shell=True)
                 cmd = f"for kk in task.*; do rm -f $kk/{file}; done"
                 subprocess.call(cmd, shell=True)
         elif inter_type == 'vasp':
             os.chdir(abs_path_to_prop)
+            cmd = "rm -f ../POTCAR"
+            subprocess.call(cmd, shell=True)
             cmd = f"for kk in task.*; do rm -f $kk/POTCAR; done"
             subprocess.call(cmd, shell=True)
 
