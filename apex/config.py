@@ -18,7 +18,7 @@ class Config:
     mode: str = 'default'
     debug_copy_method: str = "copy"
     debug_pool_workers: int = 1
-    debug_workdir: str = '.'
+    debug_workdir: str = None
 
     # dflow s3 config
     dflow_s3_config: dict = None
