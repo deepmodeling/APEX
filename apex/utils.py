@@ -90,7 +90,7 @@ def is_json_file(filename):
         return False
 
 
-def load_config_file(config_file: str) -> dict:
+def load_config_file(config_file: os.PathLike) -> dict:
     try:
         config_dict = loadfn(config_file)
     except FileNotFoundError:
@@ -180,12 +180,12 @@ def get_task_type(d: dict) -> (str, Type[OP]):
     return task_type, run_op
 
 
-def judge_flow(parameter, specify) -> (Type[OP], str, str, dict, dict):
+def judge_flow(parameter: list[dict], specify: str) -> (Type[OP], str, str, dict, dict):
     # identify type of flow and input parameter file
     num_args = len(parameter)
     if num_args == 1:
-        task, run_op = get_task_type(loadfn(parameter[0]))
-        flow = get_flow_type(loadfn(parameter[0]))
+        task, run_op = get_task_type(parameter[0])
+        flow = get_flow_type(parameter[0])
         task_type = task
         if flow == 'relax':
             flow_type = 'relax'

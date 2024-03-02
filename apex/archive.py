@@ -203,17 +203,15 @@ def archive2db_from_json(config, json_file):
 
 
 def archive_result(
-        parameter,
-        config_file,
-        work_dir,
-        user_flow_type,
+        parameters: list[os.PathLike],
+        config_dict: dict,
+        work_dir: list[os.PathLike],
+        indicated_flow_type: str,
         database_type,
         method,
         archive_tasks,
         is_result
 ):
-    print('-------Archive result Mode-------')
-    config_dict = load_config_file(config_file)
     global_config = Config(**config_dict)
     # re-specify args
     if database_type:
@@ -227,14 +225,17 @@ def archive_result(
         # archive local results json file
         json_file_list = []
         # Parameter here stands for json files that store test results and be archived directly
-        for ii in parameter:
+        for ii in parameters:
             glob_list = glob.glob(os.path.abspath(ii))
             json_file_list.extend(glob_list)
             json_file_list.sort()
         for ii in json_file_list:
             archive2db_from_json(global_config, ii)
     else:
-        _, _, flow_type, relax_param, props_param = judge_flow(parameter, user_flow_type)
+        _, _, flow_type, relax_param, props_param = judge_flow(
+            [loadfn(jj) for jj in parameters],
+            indicated_flow_type
+        )
         # archive work directories
         work_dir_list = []
         for ii in work_dir:
@@ -244,4 +245,26 @@ def archive_result(
         for ii in work_dir_list:
             archive_workdir(relax_param, props_param, global_config, ii, flow_type)
 
+
+def archive_from_args(
+        parameters: list[os.PathLike],
+        config_file: os.PathLike,
+        work_dirs: list[os.PathLike],
+        indicated_flow_type: str,
+        database_type,
+        method,
+        archive_tasks,
+        is_result
+):
+    print('-------Archive result Mode-------')
+    archive_result(
+        parameters=parameters,
+        config_dict=load_config_file(config_file),
+        work_dir=work_dirs,
+        indicated_flow_type=indicated_flow_type,
+        database_type=database_type,
+        method=method,
+        archive_tasks=archive_tasks,
+        is_result=is_result
+    )
     print('Complete!')

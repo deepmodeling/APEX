@@ -4,11 +4,11 @@ from apex import (
     header,
     __version__,
 )
-from apex.run_step import run_step
-from apex.submit import submit_workflow
-from apex.archive import archive_result
-from apex.report import report_result
-from apex.retrieve import retrieve_results
+from apex.run import run_step_from_args
+from apex.submit import submit_from_args
+from apex.archive import archive_from_args
+from apex.report import report_from_args
+from apex.retrieve import retrieve_from_args
 
 
 def parse_args():
@@ -62,17 +62,17 @@ def parse_args():
     )
 
     ##########################################
-    # Single step debug test
-    parser_test = subparsers.add_parser(
-        "test",
-        help="Single step local test mode",
+    # Run single step locally
+    parser_run = subparsers.add_parser(
+        "run",
+        help="Run single step locally mode",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser_test.add_argument(
-        "parameter", type=str, nargs=1,
+    parser_run.add_argument(
+        "parameter", type=str,
         help='Json file to indicate calculation parameters'
     )
-    parser_test.add_argument(
+    parser_run.add_argument(
         "step",
         type=str,
         choices=[
@@ -83,8 +83,8 @@ def parse_args():
              "(make_relax | run_relax | post_relax |"
              " make_props | run_props | post_props)"
     )
-    parser_test.add_argument(
-        "-m", "--machine",
+    parser_run.add_argument(
+        "-c", "--config",
         type=str, nargs='?',
         default='./global.json',
         help="The json file to config the dpdispatcher",
@@ -120,7 +120,7 @@ def parse_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser_archive.add_argument(
-        "parameter", type=str, nargs='+',
+        "json", type=str, nargs='+',
         help='Json files to indicate calculation parameters '
              'or result json files that will be directly archived to database when -r flag is raised'
     )
@@ -197,38 +197,38 @@ def main():
     parser, args = parse_args()
     header()
     if args.cmd == 'submit':
-        submit_workflow(
-            parameter=args.parameter,
+        submit_from_args(
+            parameters=args.parameter,
             config_file=args.config,
-            work_dir=args.work,
-            user_flow_type=args.flow,
+            work_dirs=args.work,
+            indicated_flow_type=args.flow,
             is_debug=args.debug
         )
-    elif args.cmd == 'test':
-        run_step(
+    elif args.cmd == 'run':
+        run_step_from_args(
             parameter=args.parameter,
-            machine_file=args.machine,
+            machine_file=args.config,
             step=args.step
         )
     elif args.cmd == 'retrieve':
-        retrieve_results(
+        retrieve_from_args(
             workflow_id=args.workflow_id,
             destination=args.work,
             config_file=args.config,
         )
     elif args.cmd == 'archive':
-        archive_result(
-            parameter=args.parameter,
+        archive_from_args(
+            parameters=args.json,
             config_file=args.config,
-            work_dir=args.work,
-            user_flow_type=args.flow,
+            work_dirs=args.work,
+            indicated_flow_type=args.flow,
             database_type=args.database,
             method=args.method,
             archive_tasks=args.tasks,
             is_result=args.result
         )
     elif args.cmd == 'report':
-        report_result(
+        report_from_args(
             config_file=args.config,
             path_list=args.work,
         )

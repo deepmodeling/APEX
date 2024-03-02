@@ -4,9 +4,7 @@ from apex.core.common_prop import (make_property, run_property, post_property)
 from apex.utils import get_flow_type, return_prop_list
 
 
-def run_step(parameter, step, machine_file=None):
-    print('-------Singel Step Local Debug Mode--------')
-    param_dict = loadfn(parameter[0])
+def run_step(param_dict: dict, step: str, machine_dict: dict = None):
     # check input args
     json_type = get_flow_type(param_dict)
     mismatch1 = step in ['make_relax', 'run_relax', 'post_relax'] and json_type == 'props'
@@ -24,14 +22,14 @@ def run_step(parameter, step, machine_file=None):
             make_equi(structures, inter_parameter, param)
         elif step == 'run_relax':
             print('Run relaxation tasks locally...')
-            if not machine_file:
+            if not machine_dict:
                 raise RuntimeWarning(
                     'Miss configuration file for dpdispatcher (indicate by optional args -c).'
                     'Jobs will be running on the local shell.'
                 )
                 mdata = {}
             else:
-                mdata = loadfn(machine_file)
+                mdata = machine_dict
             run_equi(structures, inter_parameter, mdata)
         else:
             print('Posting relaxation results locally...')
@@ -44,15 +42,25 @@ def run_step(parameter, step, machine_file=None):
             make_property(structures, inter_parameter, param)
         elif step == 'run_props':
             print('Run property tasks locally...')
-            if not machine_file:
+            if not machine_dict:
                 raise RuntimeWarning(
                     'Miss configuration file for dpdispatcher (indicate by optional args -c).'
                     'Jobs will be running on the local shell.'
                 )
                 mdata = {}
             else:
-                mdata = loadfn(machine_file)
+                mdata = machine_dict
             run_property(structures, inter_parameter, param, mdata)
         else:
             print('Posting property results locally...')
             post_property(structures, inter_parameter, param)
+
+
+def run_step_from_args(parameter: str, step: str, machine_file: str = None):
+    print('-------Singel Step Local Debug Mode--------')
+    run_step(
+        param_dict=loadfn(parameter),
+        step=step,
+        machine_dict=loadfn(machine_file) if machine_file else None
+    )
+    print('Completed!')

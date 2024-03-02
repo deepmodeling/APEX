@@ -1,4 +1,6 @@
 import logging
+import os
+
 from dflow import (
     Workflow,
     download_artifact
@@ -8,12 +10,10 @@ from apex.utils import load_config_file
 
 
 def retrieve_results(
-        workflow_id,
-        destination,
-        config_file,
+        workflow_id: str,
+        destination: os.PathLike,
+        config_dict: dict,
 ):
-    print('-------Retrieve Results-------')
-    config_dict = load_config_file(config_file)
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
     wf_config.config_dflow(wf_config.dflow_config_dict)
@@ -39,4 +39,13 @@ def retrieve_results(
         else:
             logging.warning(f"Step {key} with status: {step['phase']} will be skipping...({task_left} more left)")
 
+
+def retrieve_from_args(workflow_id, destination, config_file):
+    print('-------Retrieve Results-------')
+    retrieve_results(
+        workflow_id=workflow_id,
+        destination=destination,
+        config_dict=load_config_file(config_file)
+    )
     print('Completed!')
+

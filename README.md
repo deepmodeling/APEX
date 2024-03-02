@@ -32,7 +32,7 @@
         - [3.1.2.7. Phonon Spectrum](#3127-phonon-spectrum)
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
-      - [3.2.2. Single-Step Test](#322-single-step-test)
+      - [3.2.2. Run Single-Step Locally](#322-run-single-step-locally)
       - [3.2.3. Retrieve Results Manually](#323-retrieve-results-manually)
       - [3.2.4. Archive Test Results](#324-archive-test-results)
       - [3.2.5. Results Visualization Report](#325-results-visualization-report)
@@ -386,15 +386,15 @@ apex submit param_relax.json param_props.json -c ./global_bohrium.json -w 'dp_de
 ```
 if no config JSON and work directory is specified, `./global.json` and `./` will be passed as default values respectively. 
 
-#### 3.2.2. Single-Step Test
-APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex test [-h] [-m [MACHINE]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex test -h` for help). Here is a example to do relaxation in this mode:
+#### 3.2.2. Run Single-Step Locally
+APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex run [-h] [-c [CONFIG]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex run -h` for help). Here is a example to do relaxation in this mode:
 1. Firstly, generate relaxation tasks by
    ```shell
-   apex test param_relax.json make_relax
+   apex run param_relax.json make_relax
    ```
 2. Then dispatch tasks by
    ```shell
-   apex test param_relax.json run_relax -m machine.json
+   apex run param_relax.json run_relax -c machine.json
    ```
    where `machine.json` is a JSON file to define dispatch method, containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a [Slurm](https://slurm.schedmd.com) managed remote HPC:
    ```json
@@ -432,7 +432,7 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```
 3. Finally, as all tasks are finished, post-process by
    ```shell
-   apex test param_relax.json post_relax
+   apex run param_relax.json post_relax
    ```
 The property test can follow similar approach.
 

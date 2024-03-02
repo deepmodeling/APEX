@@ -60,11 +60,15 @@ def report_local(input_path_list):
     DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=True)
 
 
-def report_result(config_file, path_list):
-    print('-------Report Visualization Mode-------')
-    config_dict = load_config_file(config_file)
+def report_result(config_dict: dict, path_list: list[os.PathLike]):
     config = Config(**config_dict)
-
     report_local(path_list)
 
+
+def report_from_args(config_file, path_list):
+    print('-------Report Visualization Mode-------')
+    report_result(
+        config_dict=load_config_file(config_file),
+        path_list=path_list
+    )
     print('Complete!')
