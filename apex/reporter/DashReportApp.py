@@ -15,9 +15,9 @@ NO_GRAPH_LIST = ['relaxation']
 UI_FRONTSIZE = 18
 PLOT_FRONTSIZE = 18
 LINE_SIZE = 2
-MARKER_SIZE = 5
-REF_LINE_SIZE = 3
-REF_MARKER_SIZE = 8
+MARKER_SIZE = 6
+REF_LINE_SIZE = 4
+REF_MARKER_SIZE = 9
 
 
 def return_prop_class(prop_type: str):
