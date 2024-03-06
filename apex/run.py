@@ -1,7 +1,9 @@
+import os
+
 from monty.serialization import loadfn
 from apex.core.common_equi import (make_equi, run_equi, post_equi)
 from apex.core.common_prop import (make_property, run_property, post_property)
-from apex.utils import get_flow_type, return_prop_list
+from apex.utils import get_flow_type, load_config_file
 
 
 def run_step(param_dict: dict, step: str, machine_dict: dict = None):
@@ -56,11 +58,11 @@ def run_step(param_dict: dict, step: str, machine_dict: dict = None):
             post_property(structures, inter_parameter, param)
 
 
-def run_step_from_args(parameter: str, step: str, machine_file: str = None):
+def run_step_from_args(parameter: str, step: str, machine_file: os.PathLike = None):
     print('-------Singel Step Local Debug Mode--------')
     run_step(
         param_dict=loadfn(parameter),
         step=step,
-        machine_dict=loadfn(machine_file) if machine_file else None
+        machine_dict=load_config_file(machine_file)
     )
     print('Completed!')
