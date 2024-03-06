@@ -545,7 +545,8 @@ class Phonon(Property):
 
             elif self.inter_param["type"] == 'vasp':
                 shutil.copyfile("task.000000/band.conf", "band.conf")
-                shutil.copyfile("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
+                if not os.path.samefile("task.000000/POSCAR-unitcell", "POSCAR-unitcell"):
+                    shutil.copyfile("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
 
                 if self.approach == "linear":
                     os.chdir(all_tasks[0])
