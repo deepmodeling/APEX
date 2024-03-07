@@ -6,11 +6,10 @@ import requests
 
 #from dpgen import dlog
 from apex.core.calculator.lib import abacus_utils, lammps_utils, vasp_utils
+from apex.core.calculator import LAMMPS_INTER_TYPE as lammps_task_type
 from apex.core.lib.utils import cmd_append_log
 from dflow.python import upload_packages
 upload_packages.append(__file__)
-
-lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]  # 06/13 revised
 
 
 def voigt_to_stress(inpt):
@@ -102,7 +101,7 @@ def collect_task(all_task, task_type):
         check_finished = vasp_utils.check_finished
     elif task_type in lammps_task_type:
         output_file = "log.lammps"
-        check_finished = lammps_task_type.check_finished
+        check_finished = lammps_utils.check_finished
     elif task_type == "abacus":
         output_file = "OUT.ABACUS/running_relax.log"
         check_finished = abacus_utils.check_finished
