@@ -475,6 +475,7 @@ This mode can also result archive to **NoSQL** database. We currently support tw
   | dynamodb_config | Dict | None | Complete parameter dictionary for [boto3 session](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource) |
 
 #### 3.2.5. Results Visualization Report
+Note that this mode **only** runs on computer with **interactive UI** frontend. 
 In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash APP](https://dash.plotly.com). You can invoke the report app simply under target work directory by:
 ```shell
 apex report
