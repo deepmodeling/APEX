@@ -261,5 +261,8 @@ class VASP(Task):
             return ["INCAR", "POTCAR"]
 
     def backward_files(self, property_type="relaxation"):
-        return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
+        if property_type == "phonon":
+            return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"]
+        else:
+            return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
 
