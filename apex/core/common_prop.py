@@ -171,7 +171,7 @@ def run_property(confs, inter_param, property_list, mdata):
             forward_common_files = virtual_calculator.forward_common_files(
                 property_type
             )
-            backward_files = virtual_calculator.backward_files(property_type, property_type)
+            backward_files = virtual_calculator.backward_files(property_type)
             #    backward_files += logs
             # ...
             task_type = get_task_type({"interaction": inter_param})
