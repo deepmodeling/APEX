@@ -203,9 +203,9 @@ def archive2db_from_json(config, json_file):
 
 
 def archive_result(
-        parameters: list[os.PathLike],
+        parameters: list,
         config_dict: dict,
-        work_dir: list[os.PathLike],
+        work_dir: list,
         indicated_flow_type: str,
         database_type,
         method,
