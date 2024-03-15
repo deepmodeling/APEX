@@ -247,9 +247,9 @@ def archive_result(
 
 
 def archive_from_args(
-        parameters: list[os.PathLike],
+        parameters: list,
         config_file: os.PathLike,
-        work_dirs: list[os.PathLike],
+        work_dirs: list,
         indicated_flow_type: str,
         database_type,
         method,
