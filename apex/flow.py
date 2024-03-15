@@ -160,7 +160,7 @@ class FlowGenerator:
             self,
             input_work_dir: dflow.common.S3Artifact,
             props_parameter: dict
-    ) -> [list[Step], list[str]]:
+    ) -> [List[Step], List[str]]:
 
         simplePropertySteps = SimplePropertySteps(
             name='property-flow',

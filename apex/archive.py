@@ -2,6 +2,7 @@ import glob
 import logging
 import json
 import os
+from typing import List
 from pathlib import Path
 from monty.json import MontyEncoder
 from monty.serialization import loadfn, dumpfn
@@ -203,9 +204,9 @@ def archive2db_from_json(config, json_file):
 
 
 def archive_result(
-        parameters: list,
+        parameters: List[os.PathLike],
         config_dict: dict,
-        work_dir: list,
+        work_dir: List[os.PathLike],
         indicated_flow_type: str,
         database_type,
         method,
@@ -247,9 +248,9 @@ def archive_result(
 
 
 def archive_from_args(
-        parameters: list,
+        parameters: List[os.PathLike],
         config_file: os.PathLike,
-        work_dirs: list,
+        work_dirs: List[os.PathLike],
         indicated_flow_type: str,
         database_type,
         method,

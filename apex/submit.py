@@ -1,266 +1,300 @@
-import os
-import os.path
-import glob
-import shutil
-import tempfile
+#!/usr/bin/env python3
 import logging
-from multiprocessing import Pool
+import os
+import shutil
+import json
+from typing import Type, List
 from monty.serialization import loadfn
+from decimal import Decimal
+from dflow.python import OP
+from dflow.python import upload_packages
+from fpop.vasp import RunVasp
+from fpop.abacus import RunAbacus
+from apex.op.RunLAMMPS import RunLAMMPS
+from apex.core.calculator import LAMMPS_INTER_TYPE
 
-import apex
-import dpdata
-import fpop
-from dflow import config, s3_config
+upload_packages.append(__file__)
 
-from apex.archive import archive_workdir
-from apex.config import Config
-from apex.flow import FlowGenerator
-from apex.utils import (
-    judge_flow,
-    load_config_file,
-    json2dict,
-    copy_all_other_files,
-    sepline,
-    handle_prop_suffix,
-    backup_path
-)
+MaxLength = 70
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
 
 
-def pack_upload_dir(
-        work_dir: os.PathLike,
-        upload_dir: os.PathLike,
-        relax_param: dict,
-        prop_param: dict,
-        flow_type: str
-):
+# write a function to replace all '/' in the input string with '-'
+
+def backup_path(path) -> None:
+    path += "/"
+    if os.path.isdir(path):
+        dirname = os.path.dirname(path)
+        counter = 0
+        while True:
+            bk_dirname = dirname + ".bk%03d" % counter
+            if not os.path.isdir(bk_dirname):
+                shutil.move(dirname, bk_dirname)
+                break
+            counter += 1
+
+
+def copy_all_other_files(src_dir, dst_dir, ignore_list=None) -> None:
     """
-    Pack the necessary files and directories into temp dir and upload it to dflow
+    Copies all files from the source directory to the destination directory with some files excluded.
+
+    :param src_dir: The path to the source directory.
+    :param dst_dir: The path to the destination directory.
+    :ignore_list: files to be ignored.
     """
-    cwd = os.getcwd()
-    os.chdir(work_dir)
-    relax_confs = relax_param.get("structures", []) if relax_param else []
-    prop_confs = prop_param.get("structures", []) if prop_param else []
-    confs = relax_confs + prop_confs
-    assert len(confs) > 0, "No configuration path indicated!"
-    conf_dirs = []
-    for conf in confs:
-        conf_dirs.extend(glob.glob(conf))
-    conf_dirs = list(set(conf_dirs))
-    conf_dirs.sort()
-    refine_init_name_list = []
-    # backup all existing property work directories
-    if flow_type in ['props', 'joint']:
-        property_list = prop_param["properties"]
-        for ii in conf_dirs:
-            sepline(ch=ii, screen=True)
-            for jj in property_list:
-                do_refine, suffix = handle_prop_suffix(jj)
-                property_type = jj["type"]
-                if not suffix:
-                    continue
-                if do_refine:
-                    refine_init_suffix = jj['init_from_suffix']
-                    refine_init_name_list.append(property_type + "_" + refine_init_suffix)
-                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
-                backup_path(path_to_prop)
+    if not os.path.exists(src_dir):
+        raise FileNotFoundError(f"Source directory {src_dir} does not exist.")
 
-    """copy necessary files and directories into temp upload directory"""
-    # exclude 'all_result.json' from copy
-    conf_root_list = [conf.split('/')[0] for conf in conf_dirs]
-    conf_root_list = list(set(conf_root_list))
-    conf_root_list.sort()
-    ignore_copy_list = conf_root_list
-    ignore_copy_list.append("all_result.json")
-    copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
-    for ii in conf_dirs:
-        build_conf_path = os.path.join(upload_dir, ii)
-        copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
-        target_poscar_path = os.path.join(build_conf_path, "POSCAR")
-        os.makedirs(build_conf_path, exist_ok=True)
-        shutil.copy(copy_poscar_path, target_poscar_path)
-        if flow_type == 'props':
-            copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
-            target_relaxation_path = os.path.join(build_conf_path, "relaxation")
-            shutil.copytree(copy_relaxation_path, target_relaxation_path)
-            # copy refine from init path to upload dir
-            if refine_init_name_list:
-                for jj in refine_init_name_list:
-                    copy_init_path = os.path.abspath(os.path.join(ii, jj))
-                    assert os.path.exists(copy_init_path), f'refine from init path {copy_init_path} does not exist!'
-                    target_init_path = os.path.join(build_conf_path, jj)
-                    shutil.copytree(copy_init_path, target_init_path)
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
 
-    os.chdir(cwd)
+    for item in os.listdir(src_dir):
+        if ignore_list and item in ignore_list:
+            continue
+        src_path = os.path.join(src_dir, item)
+        dst_path = os.path.join(dst_dir, item)
+
+        if os.path.isfile(src_path):
+            shutil.copy2(src_path, dst_path)
+        elif os.path.isdir(src_path):
+            shutil.copytree(src_path, dst_path)
 
 
-def submit(
-        flow,
-        flow_type,
-        work_dir,
-        relax_param,
-        props_param,
-        wf_config,
-        conf=config,
-        s3_conf=s3_config,
-        is_sub=False,
-        labels=None,
-):
-    if is_sub:
-        # reset dflow global config for sub-processes
-        logging.info(msg=f'Sub-process working on: {work_dir}')
-        config.update(conf)
-        s3_config.update(s3_conf)
-        logging.basicConfig(level=logging.INFO)
+def simplify_paths(path_list: list) -> dict:
+    # only one path, return it with only basename
+    if len(path_list) == 1:
+        return {path_list[0]: '.../' + os.path.basename(path_list[0])}
     else:
-        logging.info(msg=f'Working on: {work_dir}')
+        # Split all paths into components
+        split_paths = [os.path.normpath(p).split(os.sep) for p in path_list]
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        logging.info(msg=f'Temporary upload directory:{tmp_dir}')
-        pack_upload_dir(
-            work_dir=work_dir,
-            upload_dir=tmp_dir,
-            relax_param=relax_param,
-            prop_param=props_param,
-            flow_type=flow_type
+        # Find common prefix
+        common_prefix = os.path.commonprefix(split_paths)
+        common_prefix_len = len(common_prefix)
+
+        # Remove common prefix from each path and create dictionary
+        simplified_paths_dict = {
+            os.sep.join(p): '.../' + os.sep.join(p[common_prefix_len:]) if common_prefix_len else os.sep.join(p)
+            for p in split_paths
+        }
+
+        return simplified_paths_dict
+
+
+def is_json_file(filename):
+    try:
+        with open(filename, 'r') as f:
+            json.load(f)
+        return True
+    except ValueError as e:
+        return False
+
+
+def load_config_file(config_file: os.PathLike) -> dict:
+    try:
+        config_dict = loadfn(config_file)
+    except FileNotFoundError:
+        logging.warning(
+            msg='No global config file provided, will default all settings. '
+                'You may prepare global.json under current work direction '
+                'or use optional argument: -c to indicate a specific json file.'
         )
-
-        flow_id = None
-        if flow_type == 'relax':
-            flow_id = flow.submit_relax(
-                upload_path=tmp_dir,
-                download_path=work_dir,
-                relax_parameter=relax_param,
-                labels=labels
-            )
-        elif flow_type == 'props':
-            flow_id = flow.submit_props(
-                upload_path=tmp_dir,
-                download_path=work_dir,
-                props_parameter=props_param,
-                labels=labels
-            )
-        elif flow_type == 'joint':
-            flow_id = flow.submit_joint(
-                upload_path=tmp_dir,
-                download_path=work_dir,
-                props_parameter=props_param,
-                relax_parameter=relax_param,
-                labels=labels
-            )
-    # auto archive results
-    print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
-    archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)
+        config_dict = {}
+    return config_dict
 
 
-def submit_workflow(
-    parameter_dicts: list,
-    config_dict: dict,
-    work_dirs: list,
-    indicated_flow_type: str,
-    is_debug=False,
-    labels=None
-):
-    # config dflow_config and s3_config
-    wf_config = Config(**config_dict)
-    wf_config.config_dflow(wf_config.dflow_config_dict)
-    wf_config.config_bohrium(wf_config.bohrium_config_dict)
-    wf_config.config_s3(wf_config.dflow_s3_config_dict)
-    # set pre-defined dflow debug mode settings
-    if is_debug:
-        tmp_work_dir = tempfile.TemporaryDirectory()
-        config["mode"] = "debug"
-        config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
-        s3_config["storage_client"] = None
+def recursive_search(directories, path='.'):
+    """recursive search target directory"""
+    # list all directions
+    items = os.listdir(path)
+    directories_in_path = [
+        i for i in items if os.path.isdir(os.path.join(path, i)) and not i.startswith('.')
+    ]
 
-    # judge basic flow info from user indicated parameter files
-    (run_op, calculator, flow_type,
-     relax_param, props_param) = judge_flow(parameter_dicts, indicated_flow_type)
-    print(f'Running APEX calculation via {calculator}')
-    print(f'Submitting {flow_type} workflow...')
-    make_image = wf_config.basic_config_dict["apex_image_name"]
-    run_image = wf_config.basic_config_dict[f"{calculator}_image_name"]
-    if not run_image:
-        run_image = wf_config.basic_config_dict["run_image_name"]
-    run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
-    if not run_command:
-        run_command = wf_config.basic_config_dict["run_command"]
-    post_image = make_image
-    group_size = wf_config.basic_config_dict["group_size"]
-    pool_size = wf_config.basic_config_dict["pool_size"]
-    executor = wf_config.get_executor(wf_config.dispatcher_config_dict)
+    # check if target work direction is found
+    if set(directories) <= set(directories_in_path):
+        return os.path.abspath(path)
 
-    # upload necessary python dependencies
-    upload_python_packages = wf_config.basic_config_dict["upload_python_packages"]
-    upload_python_packages.extend(list(apex.__path__))
-    upload_python_packages.extend(list(fpop.__path__))
-    upload_python_packages.extend(list(dpdata.__path__))
-    #upload_python_packages.extend(list(phonolammps.__path__))
+    # recursive search in next direction
+    if len(directories_in_path) == 1:
+        return recursive_search(directories, os.path.join(path, directories_in_path[0]))
 
-    flow = FlowGenerator(
-        make_image=make_image,
-        run_image=run_image,
-        post_image=post_image,
-        run_command=run_command,
-        calculator=calculator,
-        run_op=run_op,
-        group_size=group_size,
-        pool_size=pool_size,
-        executor=executor,
-        upload_python_packages=upload_python_packages
-    )
-    # submit the workflows
-    work_dir_list = []
-    for ii in work_dirs:
-        glob_list = glob.glob(os.path.abspath(ii))
-        work_dir_list.extend(glob_list)
-        work_dir_list.sort()
-    if len(work_dir_list) > 1:
-        n_processes = len(work_dir_list)
-        print(f'Submitting via {n_processes} processes...')
-        pool = Pool(processes=n_processes)
-        for ii in work_dir_list:
-            res = pool.apply_async(
-                submit,
-                (flow,
-                 flow_type,
-                 ii,
-                 relax_param,
-                 props_param,
-                 wf_config,
-                 config,
-                 s3_config,
-                 True,
-                 labels)
-            )
-        pool.close()
-        pool.join()
-    elif len(work_dir_list) == 1:
-        submit(
-            flow,
-            flow_type,
-            work_dir_list[0],
-            relax_param,
-            props_param,
-            wf_config,
-            labels=labels,
-        )
+    # return False for failure
+    return False
+
+
+def handle_prop_suffix(parameter: dict):
+    if parameter.get('skip', False):
+        return None, None
+    if 'init_from_suffix' and 'output_suffix' in parameter:
+        do_refine = True
+        suffix = parameter['output_suffix']
+    elif 'reproduce' in parameter and parameter['reproduce']:
+        do_refine = False
+        suffix = 'reprod'
+    elif 'suffix' in parameter and parameter['suffix']:
+        do_refine = False
+        suffix = str(parameter['suffix'])
     else:
-        raise NotADirectoryError('Empty work directory indicated, please check your argument')
+        do_refine = False
+        suffix = '00'
+    return do_refine, suffix
 
 
-def submit_from_args(
-        parameters: list,
-        config_file: os.PathLike,
-        work_dirs: list,
-        indicated_flow_type: str,
-        is_debug=False,
-):
-    print('-------Submit Workflow Mode-------')
-    submit_workflow(
-        parameter_dicts=[loadfn(jj) for jj in parameters],
-        config_dict=load_config_file(config_file),
-        work_dirs=work_dirs,
-        indicated_flow_type=indicated_flow_type,
-        is_debug=is_debug,
-    )
-    print('Completed!')
+def return_prop_list(parameters: list) -> list:
+    prop_list = []
+    for ii in parameters:
+        _, suffix = handle_prop_suffix(ii)
+        if not suffix:
+            continue
+        prop_list.append(ii['type'] + '_' + suffix)
+    return prop_list
+
+
+def get_flow_type(d: dict) -> str:
+    if 'relaxation' in d and 'properties' not in d:
+        flow_type = 'relax'
+    elif 'properties' in d and 'relaxation' not in d:
+        flow_type = 'props'
+    elif 'relaxation' in d and 'properties' in d:
+        flow_type = 'joint'
+    else:
+        raise RuntimeError('Can not recognize type of the input json file')
+    return flow_type
+
+
+def get_task_type(d: dict) -> (str, Type[OP]):
+    interaction_type = d['interaction']['type']
+    if interaction_type == 'vasp':
+        task_type = 'vasp'
+        run_op = RunVasp
+    elif interaction_type == 'abacus':
+        task_type = 'abacus'
+        run_op = RunAbacus
+    elif interaction_type in LAMMPS_INTER_TYPE:
+        task_type = 'lammps'
+        run_op = RunLAMMPS
+    else:
+        raise RuntimeError(f'Unsupported interaction type: {interaction_type}')
+
+    return task_type, run_op
+
+
+def judge_flow(parameter: List[dict], specify: str) -> (Type[OP], str, str, dict, dict):
+    # identify type of flow and input parameter file
+    num_args = len(parameter)
+    if num_args == 1:
+        task, run_op = get_task_type(parameter[0])
+        flow = get_flow_type(parameter[0])
+        task_type = task
+        if flow == 'relax':
+            flow_type = 'relax'
+            if specify in ['props', 'joint']:
+                raise RuntimeError(
+                    'relaxation json file argument provided! Please check your jason file.'
+                )
+            relax_param = parameter[0]
+            props_param = None
+        elif flow == 'props':
+            if specify in ['relax', 'joint']:
+                raise RuntimeError(
+                    'property test json file argument provided! Please check your jason file.'
+                )
+            flow_type = 'props'
+            relax_param = None
+            props_param = parameter[0]
+        else:
+            if specify == 'relax':
+                flow_type = 'relax'
+            elif specify == 'props':
+                flow_type = 'props'
+            else:
+                flow_type = 'joint'
+            relax_param = parameter[0]
+            props_param = parameter[0]
+
+    elif num_args == 2:
+        task1, run_op1 = get_task_type(loadfn(parameter[0]))
+        flow1 = get_flow_type(loadfn(parameter[0]))
+        task2, run_op2 = get_task_type(loadfn(parameter[1]))
+        flow2 = get_flow_type(loadfn(parameter[1]))
+        if flow1 != flow2:
+            if specify == 'relax':
+                flow_type = 'relax'
+            elif specify == 'props':
+                flow_type = 'props'
+            else:
+                flow_type = 'joint'
+            if flow1 == 'relax' and flow2 == 'props':
+                relax_param = parameter[0]
+                props_param = parameter[1]
+            elif flow1 == 'props' and flow2 == 'relax':
+                relax_param = parameter[1]
+                props_param = parameter[0]
+            else:
+                raise RuntimeError(
+                    'confusion of jason arguments provided: '
+                    'joint type of jason conflicts with the other json argument'
+                )
+        else:
+            raise RuntimeError('Same type of input json files')
+        if task1 == task2:
+            task_type = task1
+            run_op = run_op1
+        else:
+            raise RuntimeError('interaction types given are not matched')
+    else:
+        raise ValueError('A maximum of two input arguments is allowed')
+
+    return run_op, task_type, flow_type, relax_param, props_param
+
+
+def sepline(ch="-", sp="-", screen=False):
+    r"""
+    seperate the output by '-'
+    """
+    ch.center(MaxLength, sp)
+
+
+def update_dict(d_base: dict, d_new: dict, depth=9999) -> None:
+    depth -= 1
+    if d_new is None:
+        return None
+    for k, v in d_new.items():
+        if isinstance(v, dict) and k in d_base and isinstance(d_base[k], dict) and depth >= 0:
+            update_dict(d_base[k], v, depth)
+        else:
+            d_base[k] = v
+
+
+def convert_floats_to_decimals(obj):
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: convert_floats_to_decimals(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [convert_floats_to_decimals(x) for x in obj]
+    else:
+        return obj
+
+
+def json2dict(function):
+    def wrapper(*args, **kwargs):
+        # try to convert json to dict for arguments passed as args
+        args = list(args)
+        for ii in range(len(args)):
+            if isinstance(args[ii], os.PathLike) or isinstance(args[ii], str):
+                try:
+                    args[ii] = loadfn(args[ii])
+                except Exception:
+                    pass
+        # try to convert json to dict for arguments passed as kwargs
+        for k, v in kwargs.items():
+            if isinstance(v, os.PathLike) or isinstance(v, str):
+                try:
+                    kwargs[k] = loadfn(v)
+                except Exception:
+                    pass
+        result = function(*tuple(args), **kwargs)
+        return result
+    return wrapper
