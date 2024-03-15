@@ -153,9 +153,9 @@ def submit(
 
 
 def submit_workflow(
-    parameter_dicts: list[dict],
+    parameter_dicts: list,
     config_dict: dict,
-    work_dirs: list[os.PathLike],
+    work_dirs: list,
     indicated_flow_type: str,
     is_debug=False,
     labels=None

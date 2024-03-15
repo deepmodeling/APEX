@@ -163,7 +163,7 @@ def get_flow_type(d: dict) -> str:
     return flow_type
 
 
-def get_task_type(d: dict) -> (str, Type[OP]):
+def get_task_type(d: dict):
     interaction_type = d['interaction']['type']
     if interaction_type == 'vasp':
         task_type = 'vasp'
@@ -180,7 +180,7 @@ def get_task_type(d: dict) -> (str, Type[OP]):
     return task_type, run_op
 
 
-def judge_flow(parameter: list[dict], specify: str) -> (Type[OP], str, str, dict, dict):
+def judge_flow(parameter: list, specify: str):
     # identify type of flow and input parameter file
     num_args = len(parameter)
     if num_args == 1:
