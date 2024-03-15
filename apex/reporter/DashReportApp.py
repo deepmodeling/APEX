@@ -1,9 +1,7 @@
-import logging
 import dash
 from dash import dcc, html, State
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
-from dash_bootstrap_templates import load_figure_template
 import plotly.graph_objects as go
 import webbrowser
 from threading import Timer
