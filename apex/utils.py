@@ -3,7 +3,7 @@ import logging
 import os
 import shutil
 import json
-from typing import Type
+from typing import Type, List
 from monty.serialization import loadfn
 from decimal import Decimal
 from dflow.python import OP
@@ -163,7 +163,7 @@ def get_flow_type(d: dict) -> str:
     return flow_type
 
 
-def get_task_type(d: dict):
+def get_task_type(d: dict) -> (str, Type[OP]):
     interaction_type = d['interaction']['type']
     if interaction_type == 'vasp':
         task_type = 'vasp'
@@ -180,7 +180,7 @@ def get_task_type(d: dict):
     return task_type, run_op
 
 
-def judge_flow(parameter: list, specify: str):
+def judge_flow(parameter: List[dict], specify: str) -> (Type[OP], str, str, dict, dict):
     # identify type of flow and input parameter file
     num_args = len(parameter)
     if num_args == 1:
