@@ -1,6 +1,7 @@
 import glob
 import os
 import logging
+from typing import List
 from monty.serialization import loadfn
 from apex.config import Config
 from apex.utils import load_config_file, is_json_file, simplify_paths
@@ -60,7 +61,7 @@ def report_local(input_path_list):
     DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=True)
 
 
-def report_result(config_dict: dict, path_list: list[os.PathLike]):
+def report_result(config_dict: dict, path_list: List[os.PathLike]):
     config = Config(**config_dict)
     report_local(path_list)
 

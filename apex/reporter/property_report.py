@@ -1,5 +1,4 @@
 import numpy as np
-from typing import List
 from abc import ABC, abstractmethod
 import plotly.graph_objs as go
 from dash import dash_table
@@ -21,7 +20,7 @@ def random_color():
 class PropertyReport(ABC):
     @staticmethod
     @abstractmethod
-    def plotly_graph(res_data: dict, name: str) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str):
         """
         Plot plotly graph.
 
@@ -59,7 +58,7 @@ class PropertyReport(ABC):
 
 class EOSReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         vpa = []
         epa = []
         for k, v in res_data.items():
@@ -121,7 +120,7 @@ class EOSReport(PropertyReport):
 
 class ElasticReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         elastic_tensor = res_data['elastic_tensor']
         c11 = elastic_tensor[0][0]
         c12 = elastic_tensor[0][1]
@@ -191,7 +190,7 @@ class ElasticReport(PropertyReport):
 
 class SurfaceReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         miller = []
         surf_e = []
         epa = []
@@ -257,7 +256,7 @@ class SurfaceReport(PropertyReport):
 
 class InterstitialReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         inter_struct = []
         inter_form_e = []
         struct_e = []
@@ -324,7 +323,7 @@ class InterstitialReport(PropertyReport):
 
 class VacancyReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         v = list(res_data.values())[0]
         vac_form_e = float(v[0])
         struct_e = float(v[1])
@@ -389,7 +388,7 @@ class VacancyReport(PropertyReport):
 
 class GammaReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         displ = []
         displ_length = []
         fault_en = []
@@ -469,7 +468,7 @@ class GammaReport(PropertyReport):
 
 class PhononReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs) -> [List[go], go.layout]:
+    def plotly_graph(res_data: dict, name: str, **kwargs):
         bands = res_data['band']
 
         band_path_list = []
@@ -619,5 +618,4 @@ class PhononReport(PropertyReport):
         )
 
         return table, df
-
 
