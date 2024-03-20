@@ -32,10 +32,11 @@
         - [3.1.2.7. Phonon Spectrum](#3127-phonon-spectrum)
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
-      - [3.2.2. Run Single-Step Locally](#322-run-single-step-locally)
-      - [3.2.3. Retrieve Results Manually](#323-retrieve-results-manually)
-      - [3.2.4. Archive Test Results](#324-archive-test-results)
-      - [3.2.5. Results Visualization Report](#325-results-visualization-report)
+      - [3.2.2. Workflow Inquiry \& Operations](#322-workflow-inquiry--operations)
+      - [3.2.3. Run Single-Step Locally](#323-run-single-step-locally)
+      - [3.2.4. Retrieve Results Manually](#324-retrieve-results-manually)
+      - [3.2.5. Archive Test Results](#325-archive-test-results)
+      - [3.2.6. Results Visualization Report](#326-results-visualization-report)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
@@ -384,9 +385,23 @@ APEX will execute a specific dflow workflow upon each invocation of the command 
 ```shell
 apex submit param_relax.json param_props.json -c ./global_bohrium.json -w 'dp_demo_0?' 'eam_demo'
 ```
-if no config JSON and work directory is specified, `./global.json` and `./` will be passed as default values respectively. 
+if no config JSON and work directory is specified, `./global.json` and `./` will be passed as default values respectively.
 
-#### 3.2.2. Run Single-Step Locally
+#### 3.2.2. Workflow Inquiry & Operations
+APEX supports several commonly used `dflow` inquiry and operation commands as listed below:
+- `list`: List all workflows information (usage: `apex list [-h] [-l LABEL] [-c [CONFIG]]`)
+- `get`: Get detailed information of a workflow (usage: `apex get [-h] [-c [CONFIG]] ID`)
+- `getsteps`: Get detailed steps information of a workflow (usage: `apex getsteps [-h] [-n NAME] [-k KEY] [-p PHASE] [-i ID] [-t TYPE] [-c [CONFIG]] ID`)
+- `getkeys`: Get keys of steps from a workflow (usage: `apex getkeys [-h] [-c [CONFIG]] ID`)
+- `delete`: Delete a workflow (usage: `apex delete [-h] [-c [CONFIG]] ID`)
+- `resubmit`: Resubmit a workflow (usage: `apex resubmit [-h] [-c [CONFIG]] ID`)
+- `retry`: Retry a workflow (usage: `apex retry [-h] [-s STEP] ID`)
+- `resume`: Resume a workflow (usage: `apex resume [-h] [-c [CONFIG]] ID`)
+- `stop`: Stop a workflow (usage: `apex stop [-h] [-c [CONFIG]] ID`)
+- `suspend`: Suspend a workflow (usage: `apex suspend [-h] [-c [CONFIG]] ID`)
+- `terminate` Terminate a workflow (usage: `apex terminate [-h] [-c [CONFIG]] ID`)
+
+#### 3.2.3. Run Single-Step Locally
 APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex run [-h] [-c [CONFIG]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex run -h` for help). Here is a example to do relaxation in this mode:
 1. Firstly, generate relaxation tasks by
    ```shell
@@ -436,15 +451,15 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```
 The property test can follow similar approach.
 
-#### 3.2.3. Retrieve Results Manually
+#### 3.2.4. Retrieve Results Manually
 
-Sometimes when automatically results retrieving fails as workflow finished, you may try to obtained completed test results manually by `download` command with specific `workflow ID` provided:
+Sometimes when automatically results retrieving fails as workflow finished, you may try to obtained completed test results manually by `retrieve` command with specific workflow `ID` provided:
 ```shell
-apex retrieve workflow_id [-w Destination_work_dir] [-c [CONFIG]]
+apex retrieve ID [-w Destination_work_dir] [-c [CONFIG]]
 ```
 where the `Destination` argument is defaulted to be `./`, and the `CONFIG` JSON is needed to connect to the remote storage.
 
-#### 3.2.4. Archive Test Results
+#### 3.2.5. Archive Test Results
 After completion of each workflow, the results and test parameters of corresponding property will be stored as `json` format automatically under respective work directory named as `all_result.json`. You can also do this manually to update this file based on the latest run by:
 
 ``shell
@@ -474,7 +489,7 @@ This mode can also result archive to **NoSQL** database. We currently support tw
   | dynamodb_table_name | String | apex_results | `Dynamodb` table name |
   | dynamodb_config | Dict | None | Complete parameter dictionary for [boto3 session](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource) |
 
-#### 3.2.5. Results Visualization Report
+#### 3.2.6. Results Visualization Report
 Note that this mode **only** runs on computer with **interactive UI** frontend. 
 In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash APP](https://dash.plotly.com). You can invoke the report app simply under target work directory by:
 ```shell
