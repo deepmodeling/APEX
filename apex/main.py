@@ -1,14 +1,20 @@
 import argparse
 import logging
+import os
+import datetime
+from typing import List
+from dflow import Workflow, query_workflows
 from apex import (
     header,
     __version__,
 )
+from apex.config import Config
 from apex.run import run_step_from_args
 from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
 from apex.retrieve import retrieve_from_args
+from apex.utils import load_config_file
 
 
 def parse_args():
@@ -98,7 +104,7 @@ def parse_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser_retrieve.add_argument(
-        "workflow_id", type=str,
+        "ID", type=str,
         help='Workflow ID to be downloaded'
     )
     parser_retrieve.add_argument(
@@ -106,6 +112,194 @@ def parse_args():
         help='destination work directory to be downloaded to'
     )
     parser_retrieve.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+
+    ##########################################
+    ### dflow operations
+    # list workflows
+    parser_list = subparsers.add_parser(
+        "list",
+        help="List workflows",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_list.add_argument(
+        "-l",
+        "--label",
+        type=str,
+        default=None,
+        help="query by labels",
+    )
+    parser_list.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # get workflow
+    parser_get = subparsers.add_parser(
+        "get",
+        help="Get a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_get.add_argument("ID", help="the workflow ID.")
+    parser_get.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # get steps of workflow
+    parser_getsteps = subparsers.add_parser(
+        "getsteps",
+        help="Get steps from a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_getsteps.add_argument("ID", help="the workflow ID.")
+    parser_getsteps.add_argument(
+        "-n",
+        "--name",
+        type=str,
+        default=None,
+        help="query by name",
+    )
+    parser_getsteps.add_argument(
+        "-k",
+        "--key",
+        type=str,
+        default=None,
+        help="query by key",
+    )
+    parser_getsteps.add_argument(
+        "-p",
+        "--phase",
+        type=str,
+        default=None,
+        help="query by phase",
+    )
+    parser_getsteps.add_argument(
+        "-i",
+        "--id",
+        type=str,
+        default=None,
+        help="query by ID",
+    )
+    parser_getsteps.add_argument(
+        "-t",
+        "--type",
+        type=str,
+        default=None,
+        help="query by type",
+    )
+    parser_getsteps.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    #  getkeys of workflow
+    parser_getkeys = subparsers.add_parser(
+        "getkeys",
+        help="Get keys of steps from a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_getkeys.add_argument("ID", type=str, help="the workflow ID.")
+    parser_getkeys.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # delete workflow
+    parser_delete = subparsers.add_parser(
+        "delete",
+        help="Delete a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_delete.add_argument("ID", help="the workflow ID.")
+    parser_delete.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # resubmit workflow
+    parser_resubmit = subparsers.add_parser(
+        "resubmit",
+        help="Resubmit a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_resubmit.add_argument("ID", help="the workflow ID.")
+    parser_resubmit.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # retry workflow
+    parser_retry = subparsers.add_parser(
+        "retry",
+        help="Retry a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_retry.add_argument("ID", help="the workflow ID.")
+    parser_retry.add_argument(
+        "-s",
+        "--step",
+        type=str,
+        default=None,
+        help="retry a step in a running workflow with step ID (experimental)",
+    )
+    # resume workflow
+    parser_resume = subparsers.add_parser(
+        "resume",
+        help="Resume a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_resume.add_argument("ID", help="the workflow ID.")
+    parser_resume.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # stop workflow
+    parser_stop = subparsers.add_parser(
+        "stop",
+        help="Stop a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_stop.add_argument("ID", help="the workflow ID.")
+    parser_stop.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # suspend workflow
+    parser_suspend = subparsers.add_parser(
+        "suspend",
+        help="Suspend a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_suspend.add_argument("ID", help="the workflow ID.")
+    parser_suspend.add_argument(
+        "-c", "--config",
+        type=str, nargs='?',
+        default='./global.json',
+        help="The json file to config workflow",
+    )
+    # terminate workflow
+    parser_terminate = subparsers.add_parser(
+        "terminate",
+        help="Terminate a workflow",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_terminate.add_argument("ID", help="the workflow ID.")
+    parser_terminate.add_argument(
         "-c", "--config",
         type=str, nargs='?',
         default='./global.json',
@@ -190,6 +384,37 @@ def parse_args():
     return parser, parsed_args
 
 
+def config_dflow(config_file: os.PathLike) -> None:
+    # config dflow_config and s3_config
+    config_dict = load_config_file(config_file)
+    wf_config = Config(**config_dict)
+    wf_config.config_dflow(wf_config.dflow_config_dict)
+    wf_config.config_bohrium(wf_config.bohrium_config_dict)
+    wf_config.config_s3(wf_config.dflow_s3_config_dict)
+
+
+def format_print_table(t: List[List[str]]):
+    ncol = len(t[0])
+    maxlen = [0] * ncol
+    for row in t:
+        for i, s in enumerate(row):
+            if len(str(s)) > maxlen[i]:
+                maxlen[i] = len(str(s))
+    for row in t:
+        for i, s in enumerate(row):
+            print(str(s) + " " * (maxlen[i]-len(str(s))+3), end="")
+        print()
+
+
+def format_time_delta(td: datetime.timedelta) -> str:
+    if td.days > 0:
+        return "%dd" % td.days
+    elif td.seconds >= 3600:
+        return "%dh" % (td.seconds // 3600)
+    else:
+        return "%ds" % td.seconds
+
+
 def main():
     # logging
     logging.basicConfig(level=logging.INFO)
@@ -204,6 +429,155 @@ def main():
             indicated_flow_type=args.flow,
             is_debug=args.debug
         )
+    elif args.cmd == "list":
+            config_dflow(args.config)
+            if args.label is not None:
+                labels = {}
+                for label in args.label.split(","):
+                    key, value = label.split("=")
+                    labels[key] = value
+            else:
+                labels = None
+            wfs = query_workflows(labels=labels)
+            t = [["NAME", "STATUS", "AGE", "DURATION"]]
+            for wf in wfs:
+                tc = datetime.datetime.strptime(wf.metadata.creationTimestamp,
+                                                "%Y-%m-%dT%H:%M:%SZ")
+                age = format_time_delta(datetime.datetime.now() - tc)
+                dur = format_time_delta(wf.get_duration())
+                t.append([wf.id, wf.status.phase, age, dur])
+            format_print_table(t)
+    elif args.cmd == "get":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        info = wf.query()
+        t = []
+        t.append(["Name:", info.id])
+        t.append(["Status:", info.status.phase])
+        t.append(["Created:", info.metadata.creationTimestamp])
+        t.append(["Started:", info.status.startedAt])
+        t.append(["Finished:", info.status.finishedAt])
+        t.append(["Duration", format_time_delta(info.get_duration())])
+        t.append(["Progress:", info.status.progress])
+        format_print_table(t)
+        print()
+        steps = info.get_step()
+        t = [["STEP", "ID", "KEY", "TYPE", "PHASE", "DURATION"]]
+        for step in steps:
+            if step.type in ["StepGroup"]:
+                continue
+            key = step.key if step.key is not None else ""
+            dur = format_time_delta(step.get_duration())
+            t.append([step.displayName, step.id, key, step.type, step.phase,
+                      dur])
+        format_print_table(t)
+    elif args.cmd == "getsteps":
+        config_dflow(args.config)
+        wf_id = args.ID
+        name = args.name
+        key = args.key
+        phase = args.phase
+        id = args.id
+        type = args.type
+        if name is not None:
+            name = name.split(",")
+        if key is not None:
+            key = key.split(",")
+        if phase is not None:
+            phase = phase.split(",")
+        if id is not None:
+            id = id.split(",")
+        if type is not None:
+            type = type.split(",")
+        wf = Workflow(id=wf_id)
+        if key is not None:
+            steps = wf.query_step_by_key(key, name, phase, id, type)
+        else:
+            steps = wf.query_step(name, key, phase, id, type)
+        for step in steps:
+            if step.type in ["StepGroup"]:
+                continue
+            key = step.key if step.key is not None else ""
+            dur = format_time_delta(step.get_duration())
+            t = []
+            t.append(["Step:", step.displayName])
+            t.append(["ID:", step.id])
+            t.append(["Key:", key])
+            t.append(["Type:", step.type])
+            t.append(["Phase:", step.phase])
+            format_print_table(t)
+            if hasattr(step, "outputs"):
+                if hasattr(step.outputs, "parameters"):
+                    print("Output parameters:")
+                    for name, par in step.outputs.parameters.items():
+                        if name[:6] == "dflow_":
+                            continue
+                        print("%s: %s" % (name, par.value))
+                    print()
+                if hasattr(step.outputs, "artifacts"):
+                    print("Output artifacts:")
+                    for name, art in step.outputs.artifacts.items():
+                        if name[:6] == "dflow_" or name == "main-logs":
+                            continue
+                        key = ""
+                        if hasattr(art, "s3"):
+                            key = art.s3.key
+                        elif hasattr(art, "oss"):
+                            key = art.oss.key
+                        print("%s: %s" % (name, key))
+                    print()
+            print()
+    elif args.cmd == "getkeys":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        keys = wf.query_keys_of_steps()
+        print("\n".join(keys))
+    elif args.cmd == "delete":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        wf.delete()
+        print(f'Workflow deleted! (ID: {wf.id}, UID: {wf.uid})')
+    elif args.cmd == "resubmit":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        wf.resubmit()
+        print(f'Workflow resubmitted... (ID: {wf.id}, UID: {wf.uid})')
+    elif args.cmd == "resume":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        wf.resume()
+        print(f'Workflow resumed... (ID: {wf.id}, UID: {wf.uid})')
+    elif args.cmd == "retry":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        if args.step is not None:
+            wf.retry_steps(args.step.split(","))
+        else:
+            wf.retry()
+        print(f'Workflow retried... (ID: {wf.id}, UID: {wf.uid})')
+    elif args.cmd == "stop":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        wf.stop()
+        print(f'Workflow stopped! (ID: {wf.id}, UID: {wf.uid})')
+    elif args.cmd == "suspend":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        wf.suspend()
+        print(f'Workflow suspended... (ID: {wf.id}, UID: {wf.uid})')
+    elif args.cmd == "terminate":
+        config_dflow(args.config)
+        wf_id = args.ID
+        wf = Workflow(id=wf_id)
+        wf.terminate()
     elif args.cmd == 'run':
         run_step_from_args(
             parameter=args.parameter,
@@ -212,7 +586,7 @@ def main():
         )
     elif args.cmd == 'retrieve':
         retrieve_from_args(
-            workflow_id=args.workflow_id,
+            workflow_id=args.ID,
             destination=args.work,
             config_file=args.config,
         )
@@ -234,5 +608,5 @@ def main():
         )
     else:
         raise RuntimeError(
-            f"unknown command {args.command}\n{parser.print_help()}"
+            f"unknown command {args.cmd}\n{parser.print_help()}"
         )
