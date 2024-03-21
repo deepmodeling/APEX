@@ -104,12 +104,12 @@ def parse_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser_retrieve.add_argument(
-        "ID", type=str,
-        help='Workflow ID to be downloaded'
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to be retrieved'
     )
     parser_retrieve.add_argument(
-        "-w", "--work", type=str, default='./',
-        help='destination work directory to be downloaded to'
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to be retrieved'
     )
     parser_retrieve.add_argument(
         "-c", "--config",
@@ -145,7 +145,14 @@ def parse_args():
         help="Get a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_get.add_argument("ID", help="the workflow ID.")
+    parser_get.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to get'
+    )
+    parser_get.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to get'
+    )
     parser_get.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -185,7 +192,11 @@ def parse_args():
         "--id",
         type=str,
         default=None,
-        help="query by ID",
+        help="workflow ID to query",
+    )
+    parser_getsteps.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory'
     )
     parser_getsteps.add_argument(
         "-t",
@@ -206,7 +217,14 @@ def parse_args():
         help="Get keys of steps from a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_getkeys.add_argument("ID", type=str, help="the workflow ID.")
+    parser_getkeys.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to get keys'
+    )
+    parser_getkeys.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory get keys'
+    )
     parser_getkeys.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -219,7 +237,14 @@ def parse_args():
         help="Delete a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_delete.add_argument("ID", help="the workflow ID.")
+    parser_delete.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to delete'
+    )
+    parser_delete.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory delete'
+    )
     parser_delete.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -232,7 +257,14 @@ def parse_args():
         help="Resubmit a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_resubmit.add_argument("ID", help="the workflow ID.")
+    parser_resubmit.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to resubmit'
+    )
+    parser_resubmit.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to resubmit'
+    )
     parser_resubmit.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -245,7 +277,14 @@ def parse_args():
         help="Retry a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_retry.add_argument("ID", help="the workflow ID.")
+    parser_retry.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to retry'
+    )
+    parser_retry.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to retry'
+    )
     parser_retry.add_argument(
         "-s",
         "--step",
@@ -259,7 +298,14 @@ def parse_args():
         help="Resume a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_resume.add_argument("ID", help="the workflow ID.")
+    parser_resume.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to resume'
+    )
+    parser_resume.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to resume'
+    )
     parser_resume.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -272,7 +318,14 @@ def parse_args():
         help="Stop a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_stop.add_argument("ID", help="the workflow ID.")
+    parser_stop.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to stop'
+    )
+    parser_stop.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to stop'
+    )
     parser_stop.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -285,7 +338,14 @@ def parse_args():
         help="Suspend a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_suspend.add_argument("ID", help="the workflow ID.")
+    parser_suspend.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to suspend'
+    )
+    parser_suspend.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to suspend'
+    )
     parser_suspend.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -298,7 +358,14 @@ def parse_args():
         help="Terminate a workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser_terminate.add_argument("ID", help="the workflow ID.")
+    parser_terminate.add_argument(
+        "-i", "--id", type=str, default=None,
+        help='Workflow ID to terminate'
+    )
+    parser_terminate.add_argument(
+        "-w", "--work", type=str, default='.',
+        help='Target work directory to terminate'
+    )
     parser_terminate.add_argument(
         "-c", "--config",
         type=str, nargs='?',
@@ -415,6 +482,26 @@ def format_time_delta(td: datetime.timedelta) -> str:
         return "%ds" % td.seconds
 
 
+def get_id_from_record(work_dir: os.PathLike, operation_name: str = None) -> str:
+    logging.info(msg='No workflow_id is provided, will retrieve the latest workflow')
+    workflow_log = os.path.join(work_dir, '.workflow.log')
+    assert os.path.isfile(workflow_log), \
+        'No workflow_id is provided and no .workflow.log file found in work_dir'
+    with open(workflow_log, 'r') as f:
+        try:
+            last_record = f.readlines()[-1]
+        except IndexError:
+            raise RuntimeError('No workflow_id is provided and .workflow.log file is empty!')
+    workflow_id = last_record[-1].split('\t')[0]
+    if operation_name:
+        modified_record = last_record.split('\t')
+        modified_record[1] = operation_name
+        modified_record[2] = datetime.datetime.now().isoformat()
+        with open(workflow_log, 'a') as f:
+            f.write('\t'.join(modified_record))
+    return workflow_id
+
+
 def main():
     # logging
     logging.basicConfig(level=logging.INFO)
@@ -449,7 +536,9 @@ def main():
             format_print_table(t)
     elif args.cmd == "get":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'get')
         wf = Workflow(id=wf_id)
         info = wf.query()
         t = []
@@ -474,7 +563,9 @@ def main():
         format_print_table(t)
     elif args.cmd == "getsteps":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'getsteps')
         name = args.name
         key = args.key
         phase = args.phase
@@ -530,31 +621,41 @@ def main():
             print()
     elif args.cmd == "getkeys":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'getkeys')
         wf = Workflow(id=wf_id)
         keys = wf.query_keys_of_steps()
         print("\n".join(keys))
     elif args.cmd == "delete":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'delete')
         wf = Workflow(id=wf_id)
         wf.delete()
         print(f'Workflow deleted! (ID: {wf.id}, UID: {wf.uid})')
     elif args.cmd == "resubmit":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'resubmit')
         wf = Workflow(id=wf_id)
         wf.resubmit()
         print(f'Workflow resubmitted... (ID: {wf.id}, UID: {wf.uid})')
     elif args.cmd == "resume":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'resume')
         wf = Workflow(id=wf_id)
         wf.resume()
         print(f'Workflow resumed... (ID: {wf.id}, UID: {wf.uid})')
     elif args.cmd == "retry":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'retry')
         wf = Workflow(id=wf_id)
         if args.step is not None:
             wf.retry_steps(args.step.split(","))
@@ -563,19 +664,25 @@ def main():
         print(f'Workflow retried... (ID: {wf.id}, UID: {wf.uid})')
     elif args.cmd == "stop":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'stop')
         wf = Workflow(id=wf_id)
         wf.stop()
         print(f'Workflow stopped! (ID: {wf.id}, UID: {wf.uid})')
     elif args.cmd == "suspend":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'suspend')
         wf = Workflow(id=wf_id)
         wf.suspend()
         print(f'Workflow suspended... (ID: {wf.id}, UID: {wf.uid})')
     elif args.cmd == "terminate":
         config_dflow(args.config)
-        wf_id = args.ID
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'terminate')
         wf = Workflow(id=wf_id)
         wf.terminate()
     elif args.cmd == 'run':
@@ -586,8 +693,8 @@ def main():
         )
     elif args.cmd == 'retrieve':
         retrieve_from_args(
-            workflow_id=args.ID,
-            destination=args.work,
+            workflow_id=args.id,
+            work_dir=args.dest,
             config_file=args.config,
         )
     elif args.cmd == 'archive':
