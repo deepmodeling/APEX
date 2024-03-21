@@ -389,17 +389,23 @@ if no config JSON and work directory is specified, `./global.json` and `./` will
 
 #### 3.2.2. Workflow Inquiry & Operations
 APEX supports several commonly used `dflow` inquiry and operation commands as listed below:
-- `list`: List all workflows information (usage: `apex list [-h] [-l LABEL] [-c [CONFIG]]`)
-- `get`: Get detailed information of a workflow (usage: `apex get [-h] [-c [CONFIG]] ID`)
-- `getsteps`: Get detailed steps information of a workflow (usage: `apex getsteps [-h] [-n NAME] [-k KEY] [-p PHASE] [-i ID] [-t TYPE] [-c [CONFIG]] ID`)
-- `getkeys`: Get keys of steps from a workflow (usage: `apex getkeys [-h] [-c [CONFIG]] ID`)
-- `delete`: Delete a workflow (usage: `apex delete [-h] [-c [CONFIG]] ID`)
-- `resubmit`: Resubmit a workflow (usage: `apex resubmit [-h] [-c [CONFIG]] ID`)
-- `retry`: Retry a workflow (usage: `apex retry [-h] [-s STEP] ID`)
-- `resume`: Resume a workflow (usage: `apex resume [-h] [-c [CONFIG]] ID`)
-- `stop`: Stop a workflow (usage: `apex stop [-h] [-c [CONFIG]] ID`)
-- `suspend`: Suspend a workflow (usage: `apex suspend [-h] [-c [CONFIG]] ID`)
-- `terminate` Terminate a workflow (usage: `apex terminate [-h] [-c [CONFIG]] ID`)
+- `list`: List all workflows information
+- `get`: Get detailed information of a workflow
+- `getsteps`: Get detailed steps information of a workflow 
+- `getkeys`: Get keys of steps from a workflow
+- `delete`: Delete a workflow
+- `resubmit`: Resubmit a workflow
+- `retry`: Retry a workflow
+- `resume`: Resume a workflow
+- `stop`: Stop a workflow
+- `suspend`: Suspend a workflow
+- `terminate` Terminate a workflow
+  
+Take `stop` as an example (usage: `apex stop [-h] [-i ID] [-w WORK] [-c [CONFIG]]`) user can refer to following three options:
+1. `apex stop`, as running at the target `work_dir`, and apex will inquiry workflow `ID` from `.workflow.log` file under the current path (`config.json` is the default config file)
+2. `apex stop -w ./EAM_Ti -c ./EAM_Ti/config.json` to indicate target `work_dir` to stop
+3. `apex stop relax-fe03j4 -c ./config_bohrium.json` to indicate specific workflow `ID` to stop
+   
 
 #### 3.2.3. Run Single-Step Locally
 APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex run [-h] [-c [CONFIG]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex run -h` for help). Here is a example to do relaxation in this mode:
@@ -449,15 +455,15 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```shell
    apex run param_relax.json post_relax
    ```
-The property test can follow similar approach.
+The property test can follow a similar approach.
 
 #### 3.2.4. Retrieve Results Manually
 
-Sometimes when automatically results retrieving fails as workflow finished, you may try to obtained completed test results manually by `retrieve` command with specific workflow `ID` provided:
+Sometimes when results auto-retrieving fails after workflow finishing, you may try to retrieve completed test results manually by the `retrieve` command with a specific workflow `ID` (or target `work_dir`) provided:
 ```shell
-apex retrieve ID [-w Destination_work_dir] [-c [CONFIG]]
+apex retrieve [-h] [-i ID] [-w WORK] [-c [CONFIG]]
 ```
-where the `Destination` argument is defaulted to be `./`, and the `CONFIG` JSON is needed to connect to the remote storage.
+where the `WORK` defaults to be `./`, and the `CONFIG` JSON (default: `config.json`) is used to connect to the remote storage. The command usage to similar to [3.2.2. Workflow Inquiry \& Operations](#322-workflow-inquiry--operations)
 
 #### 3.2.5. Archive Test Results
 After completion of each workflow, the results and test parameters of corresponding property will be stored as `json` format automatically under respective work directory named as `all_result.json`. You can also do this manually to update this file based on the latest run by:
