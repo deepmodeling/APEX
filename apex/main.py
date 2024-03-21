@@ -3,7 +3,13 @@ import logging
 import os
 import datetime
 from typing import List
-from dflow import Workflow, query_workflows
+
+from dflow import (
+    Workflow,
+    query_workflows,
+    download_artifact
+)
+
 from apex import (
     header,
     __version__,
@@ -13,7 +19,6 @@ from apex.run import run_step_from_args
 from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
-from apex.retrieve import retrieve_from_args
 from apex.utils import load_config_file
 
 
@@ -493,6 +498,7 @@ def get_id_from_record(work_dir: os.PathLike, operation_name: str = None) -> str
         except IndexError:
             raise RuntimeError('No workflow_id is provided and .workflow.log file is empty!')
     workflow_id = last_record.split('\t')[0]
+    assert workflow_id, 'No workflow ID for operation!'
     logging.info(msg=f'Operating on workflow ID: {workflow_id}')
     if operation_name:
         modified_record = last_record.split('\t')
@@ -564,9 +570,7 @@ def main():
         format_print_table(t)
     elif args.cmd == "getsteps":
         config_dflow(args.config)
-        wf_id = args.id
-        if not wf_id:
-            wf_id = get_id_from_record(args.work, 'getsteps')
+        wf_id = args.ID
         name = args.name
         key = args.key
         phase = args.phase
@@ -686,17 +690,35 @@ def main():
             wf_id = get_id_from_record(args.work, 'terminate')
         wf = Workflow(id=wf_id)
         wf.terminate()
+    elif args.cmd == 'retrieve':
+        config_dflow(args.config)
+        wf_id = args.id
+        if not wf_id:
+            wf_id = get_id_from_record(args.work, 'retrieve')
+        wf = Workflow(id=wf_id)
+        work_dir = args.work
+        all_keys = wf.query_keys_of_steps()
+        wf_info = wf.query()
+        download_keys = [key for key in all_keys if key.split('-')[0] == 'propertycal' or key == 'relaxationcal']
+        task_left = len(download_keys)
+        print(f'Retrieving {task_left} workflow results {wf_id} to {work_dir}')
+
+        for key in download_keys:
+            step = wf_info.get_step(key=key)[0]
+            task_left -= 1
+            if step['phase'] == 'Succeeded':
+                logging.info(f"Retrieving {key}...({task_left} more left)")
+                download_artifact(
+                    artifact=step.outputs.artifacts['retrieve_path'],
+                    path=work_dir
+                )
+            else:
+                logging.warning(f"Step {key} with status: {step['phase']} will be skipping...({task_left} more left)")
     elif args.cmd == 'run':
         run_step_from_args(
             parameter=args.parameter,
             machine_file=args.config,
             step=args.step
-        )
-    elif args.cmd == 'retrieve':
-        retrieve_from_args(
-            workflow_id=args.id,
-            work_dir=args.dest,
-            config_file=args.config,
         )
     elif args.cmd == 'archive':
         archive_from_args(
