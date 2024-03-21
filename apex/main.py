@@ -492,7 +492,8 @@ def get_id_from_record(work_dir: os.PathLike, operation_name: str = None) -> str
             last_record = f.readlines()[-1]
         except IndexError:
             raise RuntimeError('No workflow_id is provided and .workflow.log file is empty!')
-    workflow_id = last_record[-1].split('\t')[0]
+    workflow_id = last_record.split('\t')[0]
+    logging.info(msg=f'Operating on workflow ID: {workflow_id}')
     if operation_name:
         modified_record = last_record.split('\t')
         modified_record[1] = operation_name
