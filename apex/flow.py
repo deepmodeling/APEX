@@ -124,7 +124,7 @@ class FlowGenerator:
                 break
 
     def dump_flow_id(self):
-        with open('.flow_id.log', 'a') as f:
+        with open('.workflow.log', 'a') as f:
             timestamp = datetime.datetime.now().isoformat()
             f.write(f'{self.workflow.id}\tsubmit\t{timestamp}\t{self.download_path}\n')
 
