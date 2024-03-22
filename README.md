@@ -2,17 +2,18 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, and ABACUS.
 
-## v1.2 New Features Update
+## v1.2 New Features and Revisions Update
 * Add `retrieve` sub-command allowing results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
 * Support common **dflow operations** within the terminal command
 * Support results `archive` function to the local path and NoSQL database ([MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/))
 * Add `report` sub-command for quick results visualization and cross-comparison via a front-end APP based on [Dash](https://dash.plotly.com)
 * Support [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatic band path search in `phonon` calculation
-
+* Support eight conventional HCP interstitial configurations in `interstitial` calculation
+* Change single step run command from `test` to `run`
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer using simulations](#apex-alloy-property-explorer-using-simulations)
-  - [v1.2 New Features Update](#v12-new-features-update)
+  - [v1.2 New Features and Revisions Update](#v12-new-features-and-revisions-update)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
@@ -267,6 +268,10 @@ Below are three examples (for detailed explanations of each parameter, please re
   | insert_ele | List[String] | ["Al"] | The element to be inserted |
   | supercell | List[Int] | [3, 3, 3] | The supercell to be constructed, default =[1,1,1] |
   | conf_filters | Dict | "min_dist": 1.5 | Filter out the undesirable configuration |
+  <div>
+      <img src="./docs/images/interstitial_table.png" alt="Fig3" style="zoom: 90%;">
+      <p style='font-size:1.0rem; font-weight:none'> </p>
+  </div>
 
 ##### 3.1.2.6. Gamma Line
   <div>
