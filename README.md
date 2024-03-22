@@ -1,21 +1,18 @@
 # APEX: Alloy Property EXplorer using simulations
 
-[APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of property-test workflows by utilizing various computational approaches, including support for LAMMPS, VASP, and ABACUS.
+[APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, and ABACUS.
 
-## New Features Update (v1.0)
-* Add calculation function of `phonon` spectrum (v1.1.0)
-* Decouple property calculations into individual sub-workflow to facilitate the customization of complex property functions
-* Support one-click parallel submission of multiple workflows
-* Support `run` step in the single step test mode (Interaction method similar to `auto_test`)
-* Allow user to adjust concurrency for task submission via `group_size` and `pool_size`
-* Allow user to customize `suffix` of property calculation directory so that multiple tests with identical property templates but different settings can be run within one workflow
-* Refactor and optimize the command line interaction
-* Enhance robustness across diverse use scenarios, especially for the local debug mode
+## v1.2 New Features Update
+* Add `retrieve` sub-command allowing results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
+* Support common **dflow operations** within the terminal command
+* Support results `archive` function to the local path and NoSQL database ([MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/))
+* Add `report` sub-command for quick results visualization and cross-comparison via a front-end APP based on [Dash](https://dash.plotly.com)
+* Support [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatic band path search in `phonon` calculation
 
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer using simulations](#apex-alloy-property-explorer-using-simulations)
-  - [New Features Update (v1.0)](#new-features-update-v10)
+  - [v1.2 New Features Update](#v12-new-features-update)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
@@ -497,15 +494,19 @@ This mode can also result archive to **NoSQL** database. We currently support tw
 
 #### 3.2.6. Results Visualization Report
 Note that this mode **only** runs on computer with **interactive UI** frontend. 
-In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash APP](https://dash.plotly.com). You can invoke the report app simply under target work directory by:
+In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash](https://dash.plotly.com) App. You can invoke the report app simply under target work directory by:
 ```shell
 apex report
 ```
 Or indicate multiple work directories or path of result file in `json` format by `-w` for cross-comparison. Here is an example:
 ```shell
-apex report -w MEAM.bk DP/all_result.json
+apex report -w DP/all_result.json ./MEAM_00*
 ```
 Once the report app is opened (or manully via http://127.0.0.1:8050/), one can select interesting configuration and type of property and the result plot and data table will be shown accordingly.
+**NOTE**:
+- If two Dash pages are automatically opened in your browser, you can close the first one.
+- If the clipboard buttons do not function well, try to reload the page one time.
+- Do not over-refresh the page as duplicate errors may occur. If did, stop the server and re-execute the apex report command.
   <div>
       <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 100%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
