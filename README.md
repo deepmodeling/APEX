@@ -550,8 +550,8 @@ The most efficient method for submitting an APEX workflow is through the preconf
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependencies:0.0.3",
-    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmd-kit:deepmd-kit2.1.1_cuda11.6_gpu",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
+    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
     "lammps_run_command":"lmp -in in.lammps",
     "scass_type":"c8_m31_1 * NVIDIA T4"
 }
