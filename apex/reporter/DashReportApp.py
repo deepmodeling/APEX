@@ -1,9 +1,7 @@
-import logging
 import dash
 from dash import dcc, html, State
 from dash.dependencies import Input, Output
 import dash_bootstrap_components as dbc
-from dash_bootstrap_templates import load_figure_template
 import plotly.graph_objects as go
 import webbrowser
 from threading import Timer
@@ -340,8 +338,9 @@ class DashReportApp:
     def run(self, **kwargs):
         Timer(1.2, self.open_webpage).start()
         print('Dash server running... (See the report at http://127.0.0.1:8050/)')
-        print('NOTE: If clipboard buttons do not function well, try to reload the page for one time.')
-        print('NOTE: Do not over-refresh the page as duplicate error may occur. '
+        print('NOTE: If two Dash pages are automatically opened in your browser, you can close the first one.')
+        print('NOTE: If the clipboard buttons do not function well, try to reload the page one time.')
+        print('NOTE: Do not over-refresh the page as duplicate errors may occur. '
               'If did, stop the server and re-execute the apex report command.')
         self.app.run(**kwargs)
 

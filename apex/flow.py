@@ -3,6 +3,7 @@ import glob
 import time
 import shutil
 import re
+import datetime
 from typing import (
     Optional,
     Type,
@@ -122,6 +123,11 @@ class FlowGenerator:
                       f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
                 break
 
+    def dump_flow_id(self):
+        with open('.workflow.log', 'a') as f:
+            timestamp = datetime.datetime.now().isoformat()
+            f.write(f'{self.workflow.id}\tsubmit\t{timestamp}\t{self.download_path}\n')
+
     def _set_relax_flow(
             self,
             input_work_dir: dflow.common.S3Artifact,
@@ -160,7 +166,7 @@ class FlowGenerator:
             self,
             input_work_dir: dflow.common.S3Artifact,
             props_parameter: dict
-    ) -> [list[Step], list[str]]:
+    ) -> [List[Step], List[str]]:
 
         simplePropertySteps = SimplePropertySteps(
             name='property-flow',
@@ -251,9 +257,9 @@ class FlowGenerator:
         )
         self.workflow.add(relaxation)
         self.workflow.submit()
+        self.dump_flow_id()
         # Wait for and retrieve relaxation
         self._monitor_relax()
-
         return self.workflow.id
 
     @json2dict
@@ -274,6 +280,7 @@ class FlowGenerator:
         )
         self.workflow.add(subprops_list)
         self.workflow.submit()
+        self.dump_flow_id()
         # wait for and retrieve sub-property flows
         self._monitor_props(subprops_key_list)
 
@@ -304,6 +311,7 @@ class FlowGenerator:
         self.workflow.add(relaxation)
         self.workflow.add(subprops_list)
         self.workflow.submit()
+        self.dump_flow_id()
         # Wait for and retrieve relaxation
         self._monitor_relax()
         # Wait for and retrieve sub-property flows

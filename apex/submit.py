@@ -4,7 +4,9 @@ import glob
 import shutil
 import tempfile
 import logging
+from typing import List
 from multiprocessing import Pool
+from monty.serialization import loadfn
 
 import apex
 import dpdata
@@ -25,7 +27,6 @@ from apex.utils import (
 )
 
 
-@json2dict
 def pack_upload_dir(
         work_dir: os.PathLike,
         upload_dir: os.PathLike,
@@ -115,7 +116,7 @@ def submit(
         logging.info(msg=f'Working on: {work_dir}')
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        logging.info(msg=f'Temporary upload directory:{tmp_dir}')
+        logging.debug(msg=f'Temporary upload directory:{tmp_dir}')
         pack_upload_dir(
             work_dir=work_dir,
             upload_dir=tmp_dir,
@@ -153,15 +154,13 @@ def submit(
 
 
 def submit_workflow(
-        parameter,
-        config_file,
-        work_dir,
-        user_flow_type,
-        is_debug=False,
-        labels=None
+    parameter_dicts: List[dict],
+    config_dict: dict,
+    work_dirs: List[os.PathLike],
+    indicated_flow_type: str,
+    is_debug=False,
+    labels=None
 ):
-    print('-------Submit Workflow Mode-------')
-    config_dict = load_config_file(config_file)
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
     wf_config.config_dflow(wf_config.dflow_config_dict)
@@ -176,7 +175,7 @@ def submit_workflow(
 
     # judge basic flow info from user indicated parameter files
     (run_op, calculator, flow_type,
-     relax_param, props_param) = judge_flow(parameter, user_flow_type)
+     relax_param, props_param) = judge_flow(parameter_dicts, indicated_flow_type)
     print(f'Running APEX calculation via {calculator}')
     print(f'Submitting {flow_type} workflow...')
     make_image = wf_config.basic_config_dict["apex_image_name"]
@@ -212,7 +211,7 @@ def submit_workflow(
     )
     # submit the workflows
     work_dir_list = []
-    for ii in work_dir:
+    for ii in work_dirs:
         glob_list = glob.glob(os.path.abspath(ii))
         work_dir_list.extend(glob_list)
         work_dir_list.sort()
@@ -249,4 +248,20 @@ def submit_workflow(
     else:
         raise NotADirectoryError('Empty work directory indicated, please check your argument')
 
+
+def submit_from_args(
+        parameters,
+        config_file: os.PathLike,
+        work_dirs,
+        indicated_flow_type: str,
+        is_debug=False,
+):
+    print('-------Submit Workflow Mode-------')
+    submit_workflow(
+        parameter_dicts=[loadfn(jj) for jj in parameters],
+        config_dict=load_config_file(config_file),
+        work_dirs=work_dirs,
+        indicated_flow_type=indicated_flow_type,
+        is_debug=is_debug,
+    )
     print('Completed!')
