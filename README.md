@@ -11,6 +11,7 @@
 * Support eight conventional HCP interstitial configurations in `interstitial` calculation
 * Add four more **ML** pair styles (`snap`, `gap`, `rann` and `mace`) and additional `meam-spline` in LAMMPS interation type support
 * Change single step run command from `test` to `run`
+
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer using simulations](#apex-alloy-property-explorer-using-simulations)
@@ -19,7 +20,7 @@
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
   - [3. User Guide](#3-user-guide)
-    - [3.1. Before submission](#31-before-submission)
+    - [3.1. Before Submission](#31-before-submission)
       - [3.1.1. Global Setting](#311-global-setting)
       - [3.1.2. Calculation Parameters](#312-calculation-parameters)
         - [3.1.2.1. EOS](#3121-eos)
@@ -43,7 +44,7 @@
 
 ## 1. Overview
 
-APEX adopts the functionality of the second-generation alloy properties calculations and is developed utilizing the [dflow](https://github.com/deepmodeling/dflow) framework. By integrating the benefits of cloud-native workflows, APEX streamlines the intricate procedure of automatically testing various configurations and properties. Owing to its cloud-native characteristic, APEX provides users with a more intuitive and user-friendly interaction, enhancing the overall user experience by eliminating concerns related to process control, task scheduling, observability, and disaster tolerance.
+APEX adopts the functionality of the second-generation `auto_test` for alloy properties calculations and is developed utilizing the [dflow](https://github.com/deepmodeling/dflow) framework. By integrating the benefits of cloud-native workflows, APEX streamlines the intricate procedure of automatically testing various configurations and properties. Owing to its cloud-native characteristic, APEX provides users with a more intuitive and user-friendly interaction, enhancing the overall user experience by eliminating concerns related to process control, task scheduling, observability, and disaster tolerance.
 
 The comprehensive architecture of APEX is demonstrated below:
 
@@ -66,6 +67,7 @@ APEX currently offers computation methods for the following alloy properties:
 * Interstitial formation energy
 * Vacancy formation energy
 * Generalized stacking fault energy (Gamma line)
+* Phonon spectrum
 
 Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dynamics simulations, and **VASP** and **ABACUS** for first-principles calculations.
 
@@ -85,11 +87,11 @@ pip install .
 ```
 ## 3. User Guide
 
-### 3.1. Before submission
-In APEX, **three vital elements** need to be prepared before submission of a workflow:
-* **One global JSON file** containing parameters to configure `dflow` and other global settings (default: "./global.json")
-* **Calculation JSON file** containing parameters related to calculation (relaxation and property test)
-* **Work directory** consists of necessary files indicated in above JSON files together with initial structures (default: "./")
+### 3.1. Before Submission
+In APEX, there are **three essential components** required before submitting a workflow:
+* **A global JSON file** containing parameters for configuring `dflow` and other global settings (default: "./global.json")
+* **A calculation JSON file** containing parameters associated with calculations (relaxation and property test)
+* **A work directory** consists of necessary files specified in the above JSON files, along with initial structures (default: "./")
 
 
 #### 3.1.1. Global Setting
@@ -99,11 +101,11 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
   | apex_image_name | String | zhuoy/apex_amd64 | Image for step other than `run`. One can build this Docker image via prepared [Dockerfile](./docs/Dockerfile) |
-  | run_image_name | String | None | Image of calculator for `run` step. Use `{calculator}_image_name` to indicate corresponding image for higher priority. |
-  | run_command | String | None | Shell command for `run` step. Use `{calculator}_run_command` to indicate corresponding command for higher priority. |
+  | run_image_name | String | None | Image of calculator for `run` step. Use `{calculator}_image_name` to indicate corresponding image for higher priority |
+  | run_command | String | None | Shell command for `run` step. Use `{calculator}_run_command` to indicate corresponding command for higher priority |
   | group_size | Int | 1 | Number of tasks per parallel run group. |
   | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
-  | upload_python_package | Optional[List] | None | Extra python packages needed to be used in the container. |
+  | upload_python_package | Optional[List] | None | Additional python packages required in the container |
   | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
 
 * **Dflow config**
@@ -238,25 +240,25 @@ Below are three examples (for detailed explanations of each parameter, please re
   }
   ```
 ##### 3.1.2.1. EOS
-  | Key words | Data structure | Example | Description |
-  | :------------ | ----- | ----- | ------------------- |
-  | vol_start | Float | 0.9 | The starting volume related to the equilibriumstructure |
-  | vol_end | Float | 1.1 | The maximum volume related to the equilibriumstructure |
-  | vol_step | Float | 0.01 | The volume increment related to the equilibriumstructure |
+  | Key words | Data structure | Example | Description                                               |
+  | :------------ | ----- |-----------------------------------------------------------| ------------------- |
+  | vol_start | Float | 0.9 | The starting volume related to the equilibrium structure  |
+  | vol_end | Float | 1.1 | The maximum volume related to the equilibrium structure   |
+  | vol_step | Float | 0.01 | The volume increment related to the equilibrium structure |
 
 ##### 3.1.2.2. Elastic
-  | Key words | Data structure | Example | Description |
-  | :------------ | ----- | ----- | ------------------- |
-  | norm_deform | Float | 1.1 | The biggest volume related to the equilibriumstructure |
-  | shear_deform | Float | 0.01 | The volume increment related to the equilibriumstructure |
+  | Key words | Data structure | Example | Description                                         |
+  | :------------ | ----- |-----------------------------------------------------| ------------------- |
+  | norm_deform | Float | 1.1 | The deformation in xx, yy, zz, defaul = 1e-2        |
+  | shear_deform | Float | 0.01 | The deformation in other directions, default = 1e-2 |
 
 ##### 3.1.2.3. Surface
-  | Key words | Data structure | Example | Description |
-  | :------------ | ----- | ----- | ------------------- |
-  | min_slab_size | Int | 10 | Minimum size of slab thickness |
-  | min_vacuum_size | Int | 11 | Minimum size of vacuume width |
-  | pert_xz | Float | 0.01 | Perturbation through xz direction used tocompute surface energy, default = 0.01 |
-  | max_miller | Int | 2 | The maximum miller index number of surface generated |
+  | Key words | Data structure | Example | Description                                                                      |
+  | :------------ | ----- |----------------------------------------------------------------------------------| ------------------- |
+  | min_slab_size | Int | 10 | Minimum size of slab thickness                                                   |
+  | min_vacuum_size | Int | 11 | Minimum size of vacuum width                                                     |
+  | pert_xz | Float | 0.01 | Perturbation through xz direction used to compute surface energy, default = 0.01 |
+  | max_miller | Int | 2 | The maximum miller index number of surface generated                             |
 
 ##### 3.1.2.4. Vacancy
   | Key words | Data structure | Example | Description |
@@ -280,9 +282,9 @@ Below are three examples (for detailed explanations of each parameter, please re
       <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
   </div>
 
-The Gamma line (generalized stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with slip length defined by user or default settings. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
+The Gamma line (generalized stacking fault energy) function of APEX calculates energy of a series slab structures of specific crystal plane, which displaced in the middle along a slip vector as illustrated in **Figure 2**. In APEX, the slab structrures are defined by a plane miller index and two orthogonal directions (primary and secondary) on the plane. The **slip vector is always along the primary directions** with slip length defined by users or default settings. Thus, by indicating `plane_miller` and the `slip_direction` (AKA, primary direction), a slip system can be defined.
 
-For most common slip systems in respect to FCC, BCC and HCP crystal structures, slip direction, secondary direction and default fractional slip lengths are already documented and listed below (Users are **strongly advised** to follow those pre-defined slip system, or may need to double-check the generated slab structure, as unexpected results may occur especially for system like HCP):
+For most common slip systems in respect to FCC, BCC and HCP crystal structures, slip direction, secondary direction and default fractional slip lengths are already documented and listed below (users are **strongly advised** to follow those pre-defined slip system, or may need to double-check the generated slab structure, as unexpected results may occur especially for system like HCP):
 * FCC
   | Plane miller index | Slip direction | Secondary direction | Default slip length |
   | :-------- | ----- | ----- | ---- |
@@ -327,7 +329,7 @@ The parameters related to Gamma line calculation are listed below:
   | :------------ | ----- | ----- | ------------------- |
   | plane_miller | Sequence[Int] | None | Miller index of the target slab |
   | slip_direction | Sequence[Int] | None | Miller index of slip (primary) direction of the slab |
-  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as the table shows above, or 1 if not indicated | Slip length along the primary direction with default unit set by user or default setting. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
+  | slip_length | Int\|Float; Sequence[Int\|Float, Int\|Float, Int\|Float] | Refer to specific slip system as the table shows above, or 1 if not indicated | Slip length along the primary direction with default unit set by users or default setting. As for format of `[x, y, z]`, the length equals to $\sqrt{(xa)^2+(yb)^2+(zc)^2}$ |
   | plane_shift | Int\|Float | 0 | Shift of displacement plane with unit of lattice parameter **$c$** (positive for upwards). This allows creating slip plane within narrowly-spaced planes (see [ref](https://doi.org/10.1016/j.actamat.2016.10.042)). |
   | n_steps | Int | 10 | Number of steps to displace slab along the slip vector  |
   | vacuum_size | Int\|Float | 0 | Thickness of vacuum layer added around the slab with unit of Angstrom |
@@ -353,14 +355,14 @@ The parameters related to Gamma line calculation are listed below:
       "n_steps":         10
 	}
   ```
-  It should be noted that for various crystal structures, **users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption**. In above example, the slip system configuration within the "hcp" dictionary will be utilized.
+  It should be noted that for various crystal structures, **users can further define slip parameters within the respective nested dictionaries, which will be prioritized for adoption**. In the example above, the slip system configuration within the "hcp" dictionary will be utilized.
 
 ##### 3.1.2.7. Phonon Spectrum
 This function incorporates part of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) codes into APEX to make it more complete. This workflow is realized via [Phonopy](https://github.com/phonopy/phonopy), and plus [phonoLAMMPS](https://github.com/abelcarreras/phonolammps) for LAMMPS calculation. In APEX, this part includes the [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatically high-symmetry points searching for phonon calculation.
 
-*IMPORTANT!!*: it should be noticed that one will need the **phonoLAMMPS** package pre-installed within one's `run_image` for proper `LAMMPS` calculation of phonon spectrum.
+**IMPORTANT!!**: it should be noticed that the **phonoLAMMPS** package must be pre-installed in the user's `run_image` to ensure accurate `LAMMPS` calculations for the phonon spectrum.
 
-The parameters related to `Phonon` calculation are listed below:
+Parameters related to `Phonon` calculations are listed below:
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
   | primitive | Bool | False | Whether to find primitive lattice structure for phonon calculation |
@@ -375,7 +377,7 @@ The parameters related to `Phonon` calculation are listed below:
   | seekpath_from_original | Bool | False | Whether to re-seek standard primitive cell for relaxed structure for band path via the seekpath package. If True: `seekpath.get_path_orig_cell` will be adopted, else: `seekpath.get_path`. Refer to [link](https://seekpath.readthedocs.io/en/latest/maindoc.html#k-point-path-for-non-standard-unit-cells) |
   | seekpath_param | Dict | None | (Optional) Other parameters to be specified for `seekpath.get_path` and `seekpath.get_path`. Refer to [link](https://seekpath.readthedocs.io/en/latest/maindoc.html#k-point-path-for-non-standard-unit-cells) |
 
-When utilize the `VASP`, you have **two** primary calculation methods at your disposal: the **Linear Response Method** and the **Finite Displacement Method**.
+When utilizing `VASP`, you have **two** primary calculation methods at your disposal: the **Linear Response Method** and the **Finite Displacement Method**.
 
 The **Linear Response Method** has an edge over the Finite Displacement Method in that it eliminates the need for creating super-cells, thereby offering computational efficiency in certain cases. Additionally, this method is particularly well-suited for systems with anomalous phonon dispersion (like systems with Kohn anomalies), as it can precisely calculate the phonons at the specified points.
 
@@ -537,7 +539,7 @@ lammps_demo
 ├── param_props.json
 └── param_relax.json
 ```
-There are three types of parameter files and two types of global config files, as well as a force-field potential file of molybdenum `frozen_model.pb`. Under the directory of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
+There are three types of parameter files and two types of global config files, as well as a Deep Potential file of molybdenum `frozen_model.pb`. Under the directory of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
 
 ### 4.1. In the Bohrium
 The most efficient method for submitting an APEX workflow is through the preconfigured execution environment of dflow on the [Bohrium platform](https://bohrium.dp.tech). To do this, it may be necessary to create an account on Bohrium. Below is an example of a global.json file for this approach.
@@ -561,14 +563,14 @@ Then, one can submit a relaxation workflow via:
 ```shell
 apex submit param_relax.json -c global_bohrium.json
 ```
-Remember to replace the values of `email`, `password` and `program_id` of your own before submit. As for image used, you can either built your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it on https://workflows.deepmodeling.com.
+Remember to replace `email`, `password` and `program_id` of your own before submission. As for image, you can either build your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it at https://workflows.deepmodeling.com.
 
 ### 4.2. In a Local Argo Service
-Additionally, a dflow environment can be installed on a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (User can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
+Additionally, a dflow environment can be installed in a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (users can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
 ```shell
 bash install-linux-cn.sh
 ```
-This process will automatically configure the required local tools, including Docker, Minikube, and Argo service, with the default port set to `127.0.0.1:2746`. Consequently, one can modify the `global_hpc.json` file to submit a workflow to this container without needing a Bohrium account. Here is an example:
+This process will automatically configure the required local tools, including Docker, Minikube, and Argo service, with the default port set to `127.0.0.1:2746`. Consequently, one can modify the `global_hpc.json` file to submit a workflow to this container without a Bohrium account. Here is an example:
 
 ```json
 {
@@ -620,4 +622,4 @@ To enable this feature, users can add an additional optional argument `-d` to th
 apex submit -d param_relax.json -c global_hpc.json
 ```
 
-In this approach, the user is not required to specify an image for executing APEX. Rather, APEX should be pre-installed in the default `Python3` environment to ensure proper functioning.
+In this approach, uses are not required to specify an image for executing APEX. Rather, APEX should be pre-installed in the default `Python3` environment to ensure proper functioning.
