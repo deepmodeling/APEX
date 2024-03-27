@@ -8,8 +8,8 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-
-from apex.op.utils import recursive_search
+from apex.core.calculator import LAMMPS_INTER_TYPE
+from apex.utils import recursive_search
 
 upload_packages.append(__file__)
 
@@ -58,6 +58,7 @@ class RelaxMake(OP):
         conf_dirs = []
         for conf in structures:
             conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
         conf_dirs.sort()
 
         task_list = []
@@ -112,7 +113,7 @@ class RelaxPost(OP):
         cwd = os.getcwd()
         param_argv = op_in['param']
         inter_param = param_argv["interaction"]
-        calculator = inter_param["type"]
+        inter_type = inter_param["type"]
         conf_list = param_argv["structures"]
         copy_dir_list_input = [conf.split('/')[0] for conf in conf_list]
         os.chdir(op_in['input_all'])
@@ -127,7 +128,7 @@ class RelaxPost(OP):
             raise RuntimeError(f'Fail to find input work path after slices!')
 
         os.chdir(op_in['input_all'])
-        if calculator in ['vasp', 'abacus']:
+        if inter_type in ['vasp', 'abacus']:
             shutil.copytree(op_in['input_post'], './', dirs_exist_ok=True)
             post_equi(conf_list, inter_param)
         else:
@@ -137,9 +138,23 @@ class RelaxPost(OP):
             conf_dirs = []
             for conf in conf_list:
                 conf_dirs.extend(glob.glob(conf))
+            conf_dirs = list(set(conf_dirs))
             conf_dirs.sort()
+
+            # remove potential files
+            inter_files_name = []
+            if inter_type in LAMMPS_INTER_TYPE:
+                if type(inter_param["model"]) is str:
+                    inter_files_name = [inter_param["model"]]
+                elif type(inter_param["model"]) is list:
+                    inter_files_name.extend(inter_param["model"])
+            elif inter_type == 'vasp':
+                inter_files_name = ['POTCAR']
+
             for ii in conf_dirs:
-                cmd = 'rm *.pb'
+                cmd = 'rm -f'
+                for jj in inter_files_name:
+                    cmd += f' {jj}'
                 os.chdir(ii)
                 subprocess.call(cmd, shell=True)
                 os.chdir(op_in['input_all'])

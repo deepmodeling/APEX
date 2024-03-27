@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-
 import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
@@ -278,7 +277,7 @@ class Surface(Property):
                     epa,
                     equi_epa,
                 )
-                res_data[str(miller_index) + "-" + structure_dir] = [
+                res_data[str(miller_index) + "_" + structure_dir] = [
                     evac,
                     epa,
                     equi_epa,

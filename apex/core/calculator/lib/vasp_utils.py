@@ -319,8 +319,8 @@ def make_vasp_relax_incar(
     relax_ion,
     relax_shape,
     relax_volume,
-    npar,
-    kpar,
+    npar=None,
+    kpar=None,
     kspacing=0.5,
     kgamma=True,
     ismear=1,
@@ -335,8 +335,10 @@ def make_vasp_relax_incar(
     ret += "EDIFF=%e\n" % ediff
     ret += "EDIFFG=-0.01\n"
     ret += "LREAL=A\n"
-    ret += "NPAR=%d\n" % npar
-    ret += "KPAR=%d\n" % kpar
+    if npar:
+        ret += "NPAR=%d\n" % npar
+    if kpar:
+        ret += "KPAR=%d\n" % kpar
     ret += "\n"
     ret += "ISMEAR=%d\n" % ismear
     ret += "SIGMA=%f\n" % sigma
@@ -365,7 +367,7 @@ def make_vasp_relax_incar(
 
 
 def make_vasp_phonon_dfpt_incar(
-    ecut, ediff, npar, kpar, kspacing=0.3, kgamma=True, ismear=1, sigma=0.22
+    ecut, ediff, npar, kpar, kspacing=0.3, kgamma=True, ismear=1, sigma=0.01
 ):
     isif = 2
     ret = ""

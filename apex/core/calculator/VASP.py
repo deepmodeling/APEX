@@ -99,13 +99,14 @@ class VASP(Task):
                 if approach == "linear":
                     incar = incar_upper(Incar.from_str(
                         vasp_utils.make_vasp_phonon_dfpt_incar(
-                            ecut=650, ediff=0.0000001, npar=None, kpar=None
+                            ecut=650, ediff=0.0000001, npar=None, kpar=None, kspacing=0.1
                         )))
                 elif approach == "displacement":
                     incar = incar_upper(Incar.from_str(
                         vasp_utils.make_vasp_static_incar(
-                            ecut=650, ediff=0.0000001, npar=8, kpar=1
+                            ecut=650, ediff=0.0000001, ismear=0, sigma=0.01, npar=8, kpar=1, kspacing=0.1
                         )))
+
             else:
                 if not prop_type == "relaxation":
                     logging.info(f"No specification of INCAR for {prop_type} calculation, will use INCAR for relaxation")
@@ -260,5 +261,8 @@ class VASP(Task):
             return ["INCAR", "POTCAR"]
 
     def backward_files(self, property_type="relaxation"):
-        return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
+        if property_type == "phonon":
+            return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"]
+        else:
+            return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
 

@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import VacancyGenerator

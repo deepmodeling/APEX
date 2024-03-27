@@ -109,6 +109,8 @@ def inter_deepmd(param):
     deepmd_version = param["deepmd_version"]
     ret = "pair_style deepmd "
     model_list = ""
+    type_map_list = [i for i in param["param_type"]]
+    type_map_list_str = " ".join(type_map_list)
     for ii in models:
         model_list += ii + " "
     if Version(deepmd_version) < Version("1"):
@@ -123,7 +125,52 @@ def inter_deepmd(param):
             ret += "%s out_freq 10 out_file model_devi.out\n" % model_list
         else:
             ret += models[0] + "\n"
-    ret += "pair_coeff * *\n"
+    ret += "pair_coeff * * %s\n" % type_map_list_str
+    return ret
+
+
+def inter_mace(param):
+    ret = ""
+    line = "pair_style      mace no_domain_decomposition \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
+def inter_snap(param):
+    ret = ""
+    line = "pair_style      snap \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    line += "%s " % param["model_name"][1]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
+def inter_gap(param):
+    ret = ""
+    line = "pair_style      quip \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
+def inter_rann(param):
+    ret = ""
+    line = "pair_style      rann \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
     return ret
 
 
@@ -134,6 +181,17 @@ def inter_meam(param):
     for ii in param["param_type"]:
         line += ii + " "
     line += "%s " % param["model_name"][1]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
+
+def inter_meam_spline(param):
+    ret = ""
+    line = "pair_style      meam/spline \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
     for ii in param["param_type"]:
         line += ii + " "
     line += "\n"
@@ -185,6 +243,9 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -231,18 +292,36 @@ def make_lammps_equi(
     maxiter=5000,
     maxeval=500000,
     change_box=True,
+    *args,
+    **kwargs
 ):
     type_map_list = element_list(type_map)
 
     """
     make lammps input for equilibritation
     """
+    deepmd_version = param.get("deepmd_version", None)
+    is_new_dpmd = False
+    if deepmd_version:
+        split_v = deepmd_version.split('.')
+        is_new_dpmd = bool(int(split_v[0]) >= 2 and int(split_v[1]) >= 1 and int(split_v[2]) >= 5)
+    prop_type = kwargs.get("prop_type", "others")
+    dump_step = 100
+    # detour sychronizing problem of dumping in new version of deepmd-kit >=2.1.5
+    if is_new_dpmd and prop_type == "relaxation":
+        # make dump_step as large as possible to omit all middle frames and force sychronizing
+        dump_step = 100000
+
+    # in.lammps
     ret = ""
     ret += "clear\n"
     ret += "units 	metal\n"
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -254,14 +333,18 @@ def make_lammps_equi(
     ret += (
         "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
     )
-    ret += "dump            1 all custom 100 dump.relax id type xs ys zs fx fy fz\n"
+    ret += f"dump            1 all custom {dump_step} dump.relax id type xs ys zs fx fy fz\n"
     ret += "min_style       cg\n"
     if change_box:
         ret += "fix             1 all box/relax iso 0.0 \n"
-        ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-        ret += "fix             1 all box/relax aniso 0.0 \n"
-        ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-        ret += "fix             1 all box/relax tri 0.0 \n"
+        if is_new_dpmd and prop_type != "relaxation":
+            # detour synchronizing problem of property calculation by doing one minimization only
+            pass
+        else:
+            ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
+            ret += "fix             1 all box/relax aniso 0.0 \n"
+            ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
+            ret += "fix             1 all box/relax tri 0.0 \n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
     ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
@@ -300,6 +383,9 @@ def make_lammps_elastic(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -367,6 +453,9 @@ def make_lammps_press_relax(
     ret += "dimension   3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     for ii in range(len(type_map)):
@@ -403,13 +492,10 @@ def make_lammps_press_relax(
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     return ret
 
-
+"""
 def make_lammps_phonon(
     conf, masses, interaction, param, etol=0, ftol=1e-10, maxiter=5000, maxeval=500000
 ):
-    """
-    make lammps input for elastic calculation
-    """
     ret = ""
     ret += "clear\n"
     ret += "units 	metal\n"
@@ -424,7 +510,7 @@ def make_lammps_phonon(
     ret += "neigh_modify    every 1 delay 0 check no\n"
     ret += interaction(param)
     return ret
-
+"""
 
 def _get_epa(lines):
     for ii in lines:
