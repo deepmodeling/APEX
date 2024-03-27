@@ -292,6 +292,8 @@ def make_lammps_equi(
     maxiter=5000,
     maxeval=500000,
     change_box=True,
+    *args,
+    **kwargs
 ):
     type_map_list = element_list(type_map)
 
@@ -299,8 +301,18 @@ def make_lammps_equi(
     make lammps input for equilibritation
     """
     deepmd_version = param.get("deepmd_version", None)
+    is_new_dpmd = False
     if deepmd_version:
         split_v = deepmd_version.split('.')
+        is_new_dpmd = bool(int(split_v[0]) >= 2 and int(split_v[1]) >= 1 and int(split_v[2]) >= 5)
+    prop_type = kwargs.get("prop_type", "others")
+    dump_step = 100
+    # detour sychronizing problem of dumping in new version of deepmd-kit >=2.1.5
+    if is_new_dpmd and prop_type == "relaxation":
+        # make dump_step as large as possible to omit all middle frames and force sychronizing
+        dump_step = 100000
+
+    # in.lammps
     ret = ""
     ret += "clear\n"
     ret += "units 	metal\n"
@@ -321,11 +333,12 @@ def make_lammps_equi(
     ret += (
         "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
     )
-    ret += "dump            1 all custom 100 dump.relax id type xs ys zs fx fy fz\n"
+    ret += f"dump            1 all custom {dump_step} dump.relax id type xs ys zs fx fy fz\n"
     ret += "min_style       cg\n"
     if change_box:
         ret += "fix             1 all box/relax iso 0.0 \n"
-        if deepmd_version and int(split_v[0]) >= 2 and int(split_v[1]) >= 1 and int(split_v[2]) >= 5:
+        if is_new_dpmd and prop_type != "relaxation":
+            # detour synchronizing problem of property calculation by doing one minimization only
             pass
         else:
             ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)

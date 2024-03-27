@@ -60,9 +60,9 @@ class Lammps(Task):
             self.inter_func = inter_eam_alloy
 
     def set_model_param(self):
+        deepmd_version = self.inter.get("deepmd_version", "1.2.0")
         if self.inter_type == "deepmd":
             model_name = os.path.basename(self.model)
-            deepmd_version = self.inter.get("deepmd_version", "1.2.0")
             self.model_param = {
                 "type": self.inter_type,
                 "model_name": [model_name],
@@ -74,14 +74,16 @@ class Lammps(Task):
             self.model_param = {
                 "type": self.inter_type,
                 "model_name": model_name,
-                "param_type": self.type_map
+                "param_type": self.type_map,
+                "deepmd_version": deepmd_version,
             }
         else:
             model_name = os.path.basename(self.model)
             self.model_param = {
                 "type": self.inter_type,
                 "model_name": [model_name],
-                "param_type": self.type_map
+                "param_type": self.type_map,
+                "deepmd_version": deepmd_version,
             }
 
     def make_potential_files(self, output_dir):
@@ -169,6 +171,7 @@ class Lammps(Task):
 
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
+        prop_type = task_param.get("type", "relaxation")
 
         self.set_model_param()
 
@@ -227,6 +230,7 @@ class Lammps(Task):
                         maxiter,
                         maxeval,
                         False,
+                        prop_type=prop_type,
                     )
                 elif [relax_pos, relax_shape, relax_vol] == [True, True, True]:
                     fc = lammps_utils.make_lammps_equi(
@@ -239,6 +243,7 @@ class Lammps(Task):
                         maxiter,
                         maxeval,
                         True,
+                        prop_type=prop_type,
                     )
                 elif [relax_pos, relax_shape, relax_vol] == [
                     True,
@@ -288,6 +293,7 @@ class Lammps(Task):
                         maxiter,
                         maxeval,
                         False,
+                        prop_type=prop_type,
                     )
                 elif [relax_pos, relax_shape, relax_vol] == [False, False, False]:
                     fc = lammps_utils.make_lammps_eval(
