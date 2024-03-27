@@ -9,6 +9,7 @@
 * Add `report` sub-command for quick results visualization and cross-comparison via a front-end APP based on [Dash](https://dash.plotly.com)
 * Support [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatic band path search in `phonon` calculation
 * Support eight conventional HCP interstitial configurations in `interstitial` calculation
+* Add four more **ML** pair styles (`snap`, `gap`, `rann` and `mace`) and additional `meam-spline` in LAMMPS interation type support
 * Change single step run command from `test` to `run`
 ## Table of Contents
 
