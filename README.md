@@ -1,3 +1,7 @@
+<div style="text-align: center;">
+    <img src="./docs/images/logo.png" style="zoom: 15%;">
+</div>
+
 # APEX: Alloy Property EXplorer using simulations
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer using simulations, is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-Gen](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property testing. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, and ABACUS.
@@ -48,7 +52,7 @@ APEX adopts the functionality of the second-generation `auto_test` for alloy pro
 
 The comprehensive architecture of APEX is demonstrated below:
 
-<div>
+<div style="text-align: center;">
     <img src="./docs/images/flowchart.png" alt="Fig1" style="zoom: 40%;">
     <p style='font-size:1.0rem; font-weight:none'>Figure 1. APEX schematic diagram</p>
 </div>
@@ -277,7 +281,7 @@ Below are three examples (for detailed explanations of each parameter, please re
   </div>
 
 ##### 3.1.2.6. Gamma Line
-  <div>
+  <div style="text-align: center;">
       <img src="./docs/images/gamma_demo.png" alt="Fig2" style="zoom: 35%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 2. Schematic diagram of Gamma line calculation</p>
   </div>
@@ -515,7 +519,7 @@ Once the report app is opened (or manully via http://127.0.0.1:8050/), one can s
 - If two Dash pages are automatically opened in your browser, you can close the first one.
 - If the clipboard buttons do not function well, try to reload the page one time.
 - Do not over-refresh the page as duplicate errors may occur. If did, stop the server and re-execute the apex report command.
-  <div>
+  <div style="text-align: center;">
       <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 100%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
   </div>
