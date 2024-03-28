@@ -1,5 +1,5 @@
 <div style="text-align: center;">
-    <img src="./docs/images/logo.png" style="zoom: 4%;">
+    <img src="./docs/images/logo.png" style="zoom: 15%;">
 </div>
 
 # APEX: Alloy Property EXplorer using simulations
