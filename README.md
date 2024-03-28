@@ -413,7 +413,7 @@ APEX supports several commonly used `dflow` inquiry and operation commands as li
 Take `stop` as an example (usage: `apex stop [-h] [-i ID] [-w WORK] [-c [CONFIG]]`) user can refer to following three options:
 1. `apex stop`, as running at the target `work_dir`, and apex will inquiry workflow `ID` from `.workflow.log` file under the current path (`config.json` is the default config file)
 2. `apex stop -w ./EAM_Ti -c ./EAM_Ti/config.json` to indicate target `work_dir` to stop
-3. `apex stop relax-fe03j4 -c ./config_bohrium.json` to indicate specific workflow `ID` to stop
+3. `apex stop -i relax-fe03j4 -c ./config_bohrium.json` to indicate specific workflow `ID` to stop
    
 
 #### 3.2.3. Run Single-Step Locally
