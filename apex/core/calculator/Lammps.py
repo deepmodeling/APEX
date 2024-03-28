@@ -3,7 +3,7 @@ import warnings
 import logging
 
 from monty.serialization import dumpfn, loadfn
-
+from contextlib import contextmanager
 from apex.core.calculator.lib import lammps_utils
 #from dpgen import dlog
 from apex.core.calculator.lib.lammps_utils import (
@@ -86,71 +86,40 @@ class Lammps(Task):
                 "deepmd_version": deepmd_version,
             }
 
+    @contextmanager
+    def change_dir(self,path):
+        old_dir = os.getcwd()
+        try:
+            os.chdir(path)
+            yield
+        finally:
+            os.chdir(old_dir)
+
+    def symlink_force(self, target, link_name):
+        if os.path.islink(link_name) or os.path.exists(link_name):
+            os.remove(link_name)
+        os.symlink(target, link_name)
+
     def make_potential_files(self, output_dir):
-        cwd = os.getcwd()
+        parent_dir = os.path.join(output_dir, "../../")
         if self.inter_type in ["meam", "snap"]:
-            model_lib = os.path.basename(self.model[0])
-            model_file = os.path.basename(self.model[1])
-
-            os.chdir(os.path.join(output_dir, "../../"))
-            if os.path.islink(model_lib):
-                link_lib = os.readlink(model_lib)
-                if not os.path.abspath(link_lib) == self.model[0]:
-                    os.remove(model_lib)
-                    os.symlink(os.path.relpath(self.model[0]), model_lib)
-            elif os.path.isfile(model_lib):
-                os.remove(model_lib)
-                os.symlink(os.path.relpath(self.model[0]), model_lib)
-            else:
-                os.symlink(os.path.relpath(self.model[0]), model_lib)
-
-            if os.path.islink(model_file):
-                link_file = os.readlink(model_file)
-                if not os.path.abspath(link_file) == self.model[1]:
-                    os.remove(model_file)
-                    os.symlink(os.path.relpath(self.model[1]), model_file)
-            elif os.path.isfile(model_file):
-                os.remove(model_file)
-                os.symlink(os.path.relpath(self.model[1]), model_file)
-            else:
-                os.symlink(os.path.relpath(self.model[1]), model_file)
-
-            os.chdir(output_dir)
-            if not os.path.islink(model_lib):
-                os.symlink(os.path.join("../..", model_lib), model_lib)
-            elif not os.path.join("../..", model_lib) == os.readlink(model_lib):
-                os.remove(model_lib)
-                os.symlink(os.path.join("../..", model_lib), model_lib)
-
-            if not os.path.islink(model_file):
-                os.symlink(os.path.join("../..", model_file), model_file)
-            elif not os.path.join("../..", model_file) == os.readlink(model_file):
-                os.remove(model_file)
-                os.symlink(os.path.join("../..", model_file), model_file)
-            os.chdir(cwd)
-
+            model_lib, model_file = map(os.path.basename, self.model[:2])
+            targets = [self.model[0], self.model[1]]
+            link_names = [model_lib, model_file]
         else:
             model_file = os.path.basename(self.model)
-            os.chdir(os.path.join(output_dir, "../../"))
-            if os.path.islink(model_file):
-                link_file = os.readlink(model_file)
-                if not os.path.abspath(link_file) == self.model:
-                    os.remove(model_file)
-                    os.symlink(os.path.relpath(self.model), model_file)
-            elif os.path.isfile(model_file):
-                os.remove(model_file)
-                os.symlink(os.path.relpath(self.model), model_file)
-            else:
-                os.symlink(os.path.relpath(self.model), model_file)
-            os.chdir(output_dir)
-            if not os.path.islink(model_file):
-                os.symlink(os.path.join("../..", model_file), model_file)
-            elif not os.path.join("../..", model_file) == os.readlink(model_file):
-                os.remove(model_file)
-                os.symlink(os.path.join("../..", model_file), model_file)
-            os.chdir(cwd)
+            targets = [self.model]
+            link_names = [model_file]
 
-        dumpfn(self.inter, os.path.join(output_dir, "inter.json"), indent=4)
+        with self.change_dir(parent_dir):
+            for target, link_name in zip(targets, link_names):
+                self.symlink_force(os.path.relpath(target), link_name)
+
+        with self.change_dir(output_dir):
+            for link_name in link_names:
+                self.symlink_force(os.path.join("../../", link_name), link_name)
+
+        dumpfn(self.inter, os.path.join(output_dir, "inter.json"), indent = 4)
 
     def make_input_file(self, output_dir, task_type, task_param):
         lammps_utils.cvt_lammps_conf(
@@ -159,19 +128,17 @@ class Lammps(Task):
             lammps_utils.element_list(self.type_map),
         )
 
-        # dumpfn(task_param, os.path.join(output_dir, 'task.json'), indent=4)
-
-        etol = 0
-        ftol = 1e-10
-        maxiter = 5000
-        maxeval = 500000
-        B0 = 70
-        bp = 0
-        ntypes = len(self.type_map)
-
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
         prop_type = task_param.get("type", "relaxation")
+
+        etol = cal_setting.get("etol", 0)
+        ftol = cal_setting.get("ftol", 1e-10)
+        maxiter = cal_setting.get("maxiter", 5000)
+        maxeval = cal_setting.get("maxeval", 500000)
+        B0 = 70
+        bp = 0
+        ntypes = len(self.type_map)
 
         self.set_model_param()
 

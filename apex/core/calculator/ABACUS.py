@@ -23,7 +23,7 @@ class ABACUS(Task):
         self.orbfile = inter_parameter.get("orb_files", None)
         self.deepks = inter_parameter.get("deepks_desc", None)
         self.path_to_poscar = path_to_poscar
-        self.if_define_orb_file = False if self.orbfile == None else True
+        self.if_define_orb_file = False if self.orbfile is None else True
 
     def make_potential_files(self, output_dir):
         stru = os.path.abspath(os.path.join(output_dir, "STRU"))
@@ -42,7 +42,7 @@ class ABACUS(Task):
         else:
             stru_path = output_dir
 
-        if pp_files == None:
+        if pp_files is None:
             raise RuntimeError("No pseudopotential information in STRU file")
 
         pp_dir = os.path.abspath(self.potcar_prefix)
@@ -52,17 +52,17 @@ class ABACUS(Task):
             os.mkdir("./pp_orb")
         for i in range(len(atom_names)):
             pp_orb_file = [[pp_files[i], self.potcars]]
-            if orb_files != None:
+            if orb_files is not None:
                 pp_orb_file.append([orb_files[i], self.orbfile])
-            elif self.orbfile != None:
+            elif self.orbfile is not None:
                 assert atom_names[i] in self.orbfile, (
                     "orb_file of %s is not defined" % atom_names[i]
                 )
                 pp_orb_file.append([self.orbfile[atom_names[i]], self.orbfile])
 
-            if dpks_descriptor != None:
+            if dpks_descriptor is not None:
                 pp_orb_file.append([dpks_descriptor[i], self.deepks])
-            elif self.deepks != None:
+            elif self.deepks is not None:
                 pp_orb_file.append([self.deepks, self.deepks])
 
             for tmpf, tmpdict in pp_orb_file:
