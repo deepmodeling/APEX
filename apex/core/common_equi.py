@@ -13,19 +13,17 @@ from apex.core.mpdb import get_structure
 from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
-lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
+lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 
 def make_equi(confs, inter_param, relax_param):
     # find all POSCARs and their name like mp-xxx
-    # ...
     logging.debug("debug info make equi")
     if "type_map" in inter_param:
-        ele_list = [key for key in inter_param["type_map"].keys()]
+        ele_list = list(inter_param["type_map"].keys())
     else:
-        ele_list = [key for key in inter_param["potcars"].keys()]
-    # ele_list = inter_param['type_map']
-    #dlog.debug("ele_list %s" % ":".join(ele_list))
+        ele_list = list(inter_param["potcars"].keys())
+
     logging.debug("ele_list %s" % ":".join(ele_list))
     conf_dirs = []
     for conf in confs:
@@ -34,40 +32,25 @@ def make_equi(confs, inter_param, relax_param):
     conf_dirs.sort()
 
     # generate a list of task names like mp-xxx/relaxation/relax_task
-    # ...
     cwd = os.getcwd()
     # generate poscar for single element crystal
     if len(ele_list) == 1 or "single" in inter_param:
-        if "single" in inter_param:
-            element_label = int(inter_param["single"])
-        else:
-            element_label = 0
+        element_label = int(inter_param.get("single", 0))
         for ii in conf_dirs:
             os.chdir(ii)
             crys_type = ii.split("/")[-1]
-            #dlog.debug("crys_type: %s" % crys_type)
-            logging.debug("crys_type: %s" % crys_type)
-            #dlog.debug("pwd: %s" % os.getcwd())
-            logging.debug("pwd: %s" % os.getcwd())
-            if crys_type == "std-fcc":
-                if not os.path.exists("POSCAR"):
-                    crys.fcc1(ele_list[element_label]).to("POSCAR", "POSCAR")
-            elif crys_type == "std-hcp":
-                if not os.path.exists("POSCAR"):
-                    crys.hcp(ele_list[element_label]).to("POSCAR", "POSCAR")
-            elif crys_type == "std-dhcp":
-                if not os.path.exists("POSCAR"):
-                    crys.dhcp(ele_list[element_label]).to("POSCAR", "POSCAR")
-            elif crys_type == "std-bcc":
-                if not os.path.exists("POSCAR"):
-                    crys.bcc(ele_list[element_label]).to("POSCAR", "POSCAR")
-            elif crys_type == "std-diamond":
-                if not os.path.exists("POSCAR"):
-                    crys.diamond(ele_list[element_label]).to("POSCAR", "POSCAR")
-            elif crys_type == "std-sc":
-                if not os.path.exists("POSCAR"):
-                    crys.sc(ele_list[element_label]).to("POSCAR", "POSCAR")
-
+            logging.debug(f"crys_type: {crys_type}, pwd: {os.getcwd()}")
+            crystal_generators = {
+                "std-fcc": crys.fcc1,
+                "std-hcp": crys.hcp,
+                "std-dhcp": crys.dhcp,
+                "std-bcc": crys.bcc,
+                "std-diamond": crys.diamond,
+                "std-sc": crys.sc,
+            }
+            if crys_type in crystal_generators and not os.path.exists("POSCAR"):
+                crystal_generators[crys_type](ele_list[element_label]).to("POSCAR", "POSCAR")
+                        
             if inter_param["type"] == "abacus" and not os.path.exists("STRU"):
                 abacus_utils.poscar2stru("POSCAR", inter_param, "STRU")
                 os.remove("POSCAR")
@@ -76,10 +59,9 @@ def make_equi(confs, inter_param, relax_param):
     task_dirs = []
     # make task directories like mp-xxx/relaxation/relax_task
     # if mp-xxx/exists then print a warning and exit.
-    # ...
     for ii in conf_dirs:
         crys_type = ii.split("/")[-1]
-        logging.debug("crys_type: %s" % crys_type)
+        logging.debug(f"crys_type: {crys_type}")
 
         if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
             get_structure(crys_type).to("POSCAR", os.path.join(ii, "POSCAR"))
@@ -97,7 +79,7 @@ def make_equi(confs, inter_param, relax_param):
             poscar = os.path.abspath(os.path.join(ii, "STRU"))
             POSCAR = "STRU"
         if not os.path.exists(poscar):
-            raise FileNotFoundError("no configuration for autotest")
+            raise FileNotFoundError("no configuration for APEX")
         if os.path.exists(os.path.join(ii, "relaxation", "jr.json")):
             os.remove(os.path.join(ii, "relaxation", "jr.json"))
 
@@ -108,7 +90,6 @@ def make_equi(confs, inter_param, relax_param):
         task_dirs.append(relax_dirs)
         os.chdir(relax_dirs)
         # copy POSCARs to mp-xxx/relaxation/relax_task
-        # ...
         if os.path.isfile(POSCAR):
             os.remove(POSCAR)
         os.symlink(os.path.relpath(poscar), POSCAR)
@@ -116,23 +97,13 @@ def make_equi(confs, inter_param, relax_param):
     task_dirs.sort()
     # generate task files
     relax_param["cal_type"] = "relaxation"
-    if "cal_setting" not in relax_param:
-        relax_param["cal_setting"] = {
-            "relax_pos": True,
-            "relax_shape": True,
-            "relax_vol": True,
-        }
-    else:
-        if "relax_pos" not in relax_param["cal_setting"]:
-            relax_param["cal_setting"]["relax_pos"] = True
-        if "relax_shape" not in relax_param["cal_setting"]:
-            relax_param["cal_setting"]["relax_shape"] = True
-        if "relax_vol" not in relax_param["cal_setting"]:
-            relax_param["cal_setting"]["relax_vol"] = True
-
+    relax_param.setdefault("cal_setting", {}).setdefault("relax_pos", True)
+    relax_param["cal_setting"].setdefault("relax_shape", True)
+    relax_param["cal_setting"].setdefault("relax_vol", True)
+    
     for ii in task_dirs:
         poscar = os.path.join(ii, "POSCAR")
-        logging.debug("task_dir %s" % ii)
+        logging.debug(f"task_dir {ii}")
         inter = make_calculator(inter_param, poscar)
         inter.make_potential_files(ii)
         inter.make_input_file(ii, "relaxation", relax_param)
