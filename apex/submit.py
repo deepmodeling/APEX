@@ -76,12 +76,12 @@ def pack_upload_dir(
     for ii in conf_dirs:
         build_conf_path = os.path.join(upload_dir, ii)
         os.makedirs(build_conf_path, exist_ok=True)
-        if os.path.exists(os.path.join(ii, "POSCAR")):
-            copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
+        copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
+        copy_stru_path = os.path.abspath(os.path.join(ii, "STRU"))
+        if os.path.isfile(copy_poscar_path):
             target_poscar_path = os.path.join(build_conf_path, "POSCAR")
             shutil.copy(copy_poscar_path, target_poscar_path)
-        if os.path.exists(os.path.join(ii, "STRU")):
-            copy_stru_path = os.path.abspath(os.path.join(ii, "STRU"))
+        if os.path.isfile(copy_stru_path):
             target_stru_path = os.path.join(build_conf_path, "STRU")
             shutil.copy(copy_stru_path, target_stru_path)
         if flow_type == 'props':
