@@ -13,7 +13,7 @@ def make_refine(init_from_suffix, output_suffix, path_to_work):
         output_suffix[::-1], init_from_suffix[::-1], path_to_work[::-1], count=1
     )[::-1]
     if not os.path.exists(init_from):
-        raise FileNotFoundError("the initial directory does not exist for refine")
+        raise FileNotFoundError("The initial directory does not exist for refine")
 
     output = path_to_work
     init_from_task_tot = glob.glob(os.path.join(init_from, "task.[0-9]*[0-9]"))

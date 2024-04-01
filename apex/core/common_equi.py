@@ -111,7 +111,6 @@ def make_equi(confs, inter_param, relax_param):
 
 def run_equi(confs, inter_param, mdata):
     # find all POSCARs and their name like mp-xxx
-    # ...
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
@@ -121,7 +120,6 @@ def run_equi(confs, inter_param, mdata):
     processes = len(conf_dirs)
 
     # generate a list of task names like mp-xxx/relaxation/relax_task
-    # ...
     work_path_list = []
     for ii in conf_dirs:
         work_path_list.append(os.path.join(ii, "relaxation"))
@@ -162,7 +160,6 @@ def run_equi(confs, inter_param, mdata):
 
 def post_equi(confs, inter_param):
     # find all POSCARs and their name like mp-xxx
-    # ...
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
@@ -174,8 +171,6 @@ def post_equi(confs, inter_param):
     task_dirs.sort()
 
     # generate a list of task names like mp-xxx/relaxation
-    # ...
-
     # dump the relaxation result.
     for ii in task_dirs:
         poscar = os.path.join(ii, "POSCAR")
