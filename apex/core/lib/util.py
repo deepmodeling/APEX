@@ -102,7 +102,7 @@ def collect_task(all_task, task_type):
         check_finished = vasp_utils.check_finished
     elif task_type in lammps_task_type:
         output_file = "log.lammps"
-        check_finished = lammps_task_type.check_finished
+        check_finished = lammps_utils.check_finished
     elif task_type == "abacus":
         output_file = "OUT.ABACUS/running_relax.log"
         check_finished = abacus_utils.check_finished
