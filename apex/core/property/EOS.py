@@ -34,21 +34,9 @@ class EOS(Property):
                 "relax_shape": True,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
+            parameter.setdefault("cal_setting", {})
+            parameter["cal_setting"].update(
+                {k: v for k, v in default_cal_setting.items() if k not in parameter["cal_setting"]})
             self.cal_setting = parameter["cal_setting"]
         else:
             parameter["cal_type"] = "static"
@@ -58,21 +46,9 @@ class EOS(Property):
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
+            parameter.setdefault("cal_setting", {})
+            parameter["cal_setting"].update(
+                {k: v for k, v in default_cal_setting.items() if k not in parameter["cal_setting"]})
             self.cal_setting = parameter["cal_setting"]
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
@@ -82,7 +58,6 @@ class EOS(Property):
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            #dlog.warning("%s already exists" % path_to_work)
             logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
@@ -94,10 +69,8 @@ class EOS(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
             assert struct_output_name in struct_init_name_list
             path_to_equi = os.path.abspath(
                 os.path.join(
@@ -111,7 +84,7 @@ class EOS(Property):
         cwd = os.getcwd()
         task_list = []
         if self.reprod:
-            print("eos reproduce starts")
+            logging.info("eos reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -122,17 +95,15 @@ class EOS(Property):
                 path_to_work,
                 self.parameter.get("reprod_last_frame", True),
             )
-            os.chdir(cwd)
 
         else:
             if refine:
-                print("eos refine starts")
+                logging.info("eos refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
                     path_to_work,
                 )
-                os.chdir(cwd)
 
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
@@ -154,10 +125,9 @@ class EOS(Property):
                         os.path.relpath(os.path.join(init_from_task, "eos.json")),
                         "eos.json",
                     )
-                os.chdir(cwd)
 
             else:
-                print(
+                logging.info(
                     "gen eos from "
                     + str(self.vol_start)
                     + " to "
@@ -199,10 +169,7 @@ class EOS(Property):
 
                 task_num = 0
                 while self.vol_start + self.vol_step * task_num < self.vol_end:
-                    # for vol in np.arange(int(self.vol_start * 100), int(self.vol_end * 100), int(self.vol_step * 100)):
-                    # vol = vol / 100.0
                     vol = self.vol_start + task_num * self.vol_step
-                    # task_num = int((vol - self.vol_start) / self.vol_step)
                     output_task = os.path.join(path_to_work, "task.%06d" % task_num)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
@@ -239,7 +206,7 @@ class EOS(Property):
                     self.parameter["scale2equi"].append(scale)  # 06/22
                     scale_func(POSCAR_orig, POSCAR, scale)
                     task_num += 1
-                os.chdir(cwd)
+        os.chdir(cwd)
         return task_list
 
     def post_process(self, task_list):
@@ -268,8 +235,6 @@ class EOS(Property):
                     vol,
                     task_result["energies"][-1] / sum(task_result["atom_numbs"]),
                 )
-                # res_data[vol] = all_res[ii]['energy'] / len(all_res[ii]['force'])
-                # ptr_data += '%7.3f  %8.4f \n' % (vol, all_res[ii]['energy'] / len(all_res[ii]['force']))
 
         else:
             if "init_data_path" not in self.parameter:
