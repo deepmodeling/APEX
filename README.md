@@ -14,7 +14,7 @@
 * Support [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatic band path search in `phonon` calculation
 * Support eight conventional HCP interstitial configurations in `interstitial` calculation
 * Add four more **ML** pair styles (`snap`, `gap`, `rann` and `mace`) and additional `meam-spline` in LAMMPS interation type support
-* Change single step run command from `test` to `run`
+* Change single step mode command from `test` to `do`
 
 ## Table of Contents
 
@@ -37,7 +37,7 @@
     - [3.2. Command](#32-command)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
       - [3.2.2. Workflow Inquiry \& Operations](#322-workflow-inquiry--operations)
-      - [3.2.3. Run Single-Step Locally](#323-run-single-step-locally)
+      - [3.2.3. Run Individual Step](#323-run-individual-step)
       - [3.2.4. Retrieve Results Manually](#324-retrieve-results-manually)
       - [3.2.5. Archive Test Results](#325-archive-test-results)
       - [3.2.6. Results Visualization Report](#326-results-visualization-report)
@@ -416,15 +416,15 @@ Take `stop` as an example (usage: `apex stop [-h] [-i ID] [-w WORK] [-c [CONFIG]
 3. `apex stop -i relax-fe03j4 -c ./config_bohrium.json` to indicate specific workflow `ID` to stop
    
 
-#### 3.2.3. Run Single-Step Locally
-APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run command under the work directory in this mode.** User can invoke them by format of `apex run [-h] [-c [CONFIG]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex run -h` for help). Here is a example to do relaxation in this mode:
+#### 3.2.3. Run Individual Step 
+APEX also provides a **single-step mode**, which can run `Make` `run` and `Post` step individually. One can execute `apex do` command under corresponding work directory to invoke this mode. (usage: `apex do [-h] [-c [CONFIG]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}`). Here is a example to do relaxation in this mode:
 1. Firstly, generate relaxation tasks by
    ```shell
-   apex run param_relax.json make_relax
+   apex do param_relax.json make_relax
    ```
 2. Then dispatch tasks by
    ```shell
-   apex run param_relax.json run_relax -c machine.json
+   apex do param_relax.json run_relax -c machine.json
    ```
    where `machine.json` is a JSON file to define dispatch method, containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a [Slurm](https://slurm.schedmd.com) managed remote HPC:
    ```json
@@ -462,7 +462,7 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```
 3. Finally, as all tasks are finished, post-process by
    ```shell
-   apex run param_relax.json post_relax
+   apex do param_relax.json post_relax
    ```
 The property test can follow a similar approach.
 
