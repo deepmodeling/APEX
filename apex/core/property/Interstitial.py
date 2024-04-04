@@ -39,54 +39,25 @@ class Interstitial(Property):
                 parameter["voronoi_param"] = parameter.get("voronoi_param", {})
                 self.voronoi_param = parameter["voronoi_param"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": True,
                 "relax_vol": True,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
         else:
             parameter["cal_type"] = "static"
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": False,
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
+        self.cal_type = parameter["cal_type"]
+        parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
+        for key in default_cal_setting:
+            parameter["cal_setting"].setdefault(key, default_cal_setting[key])
+        self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
         self.inter_param = inter_param if inter_param != None else {"type": "vasp"}
 
@@ -94,7 +65,6 @@ class Interstitial(Property):
         self.path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
             logging.warning("%s already exists" % path_to_work)
-            # dlog.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
@@ -105,11 +75,9 @@ class Interstitial(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = self.path_to_work.split("/")[-2]
-            assert struct_output_name in struct_init_name_list
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
+            assert struct_output_name in struct_init_name_list, f"{struct_output_name} not in initial configurations"
             path_to_equi = os.path.abspath(
                 os.path.join(
                     self.parameter["start_confs_path"],
@@ -123,7 +91,7 @@ class Interstitial(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            print("interstitial reproduce starts")
+            logging.info("interstitial reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -134,11 +102,10 @@ class Interstitial(Property):
                 self.path_to_work,
                 self.parameter.get("reprod_last_frame", False),
             )
-            os.chdir(cwd)
 
         else:
             if refine:
-                print("interstitial refine starts")
+                logging.info("interstitial refine starts")
                 self.task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -154,9 +121,7 @@ class Interstitial(Property):
                 task_list_basename = list(map(os.path.basename, self.task_list))
 
                 os.chdir(self.path_to_work)
-                if os.path.isfile("element.out"):
-                    os.remove("element.out")
-                if os.path.islink("element.out"):
+                if os.path.exists("element.out"):
                     os.remove("element.out")
                 os.symlink(
                     os.path.relpath(os.path.join(init_from_path, "element.out")),
@@ -168,15 +133,12 @@ class Interstitial(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(self.path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("supercell.json"):
-                        os.remove("supercell.json")
-                    if os.path.islink("supercell.json"):
+                    if os.path.exists("supercell.json"):
                         os.remove("supercell.json")
                     os.symlink(
                         os.path.relpath(os.path.join(init_from_task, "supercell.json")),
                         "supercell.json",
                     )
-                os.chdir(cwd)
 
             else:
                 if self.inter_param["type"] == "abacus":
@@ -193,14 +155,11 @@ class Interstitial(Property):
 
                 if self.inter_param["type"] == "abacus":
                     ss = abacus_utils.stru2Structure(equi_contcar)
-                    # orig_ss = abacus_utils.stru2Structure(orig_poscar)
                 else:
                     ss = Structure.from_file(equi_contcar)
-                    # orig_ss = Structure.from_file(orig_poscar)
 
                 # get structure type
                 os.chdir(self.path_to_work)
-                #ss.to("POSCAR", "POSCAR")
                 # convert site element into same type for a pseudo-structure just for simple lattice type judgment
                 same_type_ss = ss.copy()
                 species_mapping = {str(specie): "Ni" for specie in same_type_ss.composition.elements}
@@ -251,19 +210,16 @@ class Interstitial(Property):
                         #            dss.append(jj.generate_defect_structure(self.supercell))
                         self.dss = dss
 
-                print(
+                logging.info(
                     "gen interstitial with supercell "
                     + str(self.supercell)
                     + " with element "
                     + str(self.insert_ele)
                 )
                 os.chdir(self.path_to_work)
-                if os.path.isfile(POSCAR):
-                    os.remove(POSCAR)
-                if os.path.islink(POSCAR):
+                if os.path.exists(POSCAR):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
-                #           task_poscar = os.path.join(output, 'POSCAR')
                 for ii in range(len(dss)):
                     output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                     os.makedirs(output_task, exist_ok=True)
@@ -424,8 +380,7 @@ class Interstitial(Property):
                         os.chdir(output_task)
                         abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                         os.remove("POSCAR")
-                    os.chdir(cwd)
-
+        os.chdir(cwd)
         return self.task_list
 
     def __gen_tasks(self, interstitial_dict):
@@ -456,7 +411,7 @@ class Interstitial(Property):
             with open("POSCAR", "w+") as fout:
                 for ii in new_pos_line:
                     print(ii, file=fout)
-            print(f"gen {type_str}")
+            logging.info(f"gen {type_str}")
             os.chdir(cwd)
 
         total_task = len(self.dss) + len(interstitial_dict)
@@ -508,25 +463,21 @@ class Interstitial(Property):
             ) as fin:
                 fc = fin.read().split("\n")
             ptr_data += "Insert_ele-Struct:          \tInter_E(eV)    \tE(eV)     \tequi_E(eV)\n"
-            idid = -1
-            for ii in all_tasks:
-                idid += 1
-                # skip task.000000
-                if idid == 0:
-                    continue
-                structure_dir = os.path.basename(ii)
-                task_result = loadfn(all_res[idid])
-                interstitial_type = loadfn(os.path.join(ii, 'interstitial_type.json'))
-                natoms = task_result["atom_numbs"][0]
-                equi_path = os.path.abspath(
+
+            equi_path = os.path.abspath(
                     os.path.join(
                         os.path.dirname(output_file), "../relaxation/relax_task"
                     )
                 )
-                equi_result = loadfn(os.path.join(equi_path, "result.json"))
-                equi_epa = equi_result["energies"][-1] / equi_result["atom_numbs"][0]
-                evac = task_result["energies"][-1] - equi_epa * natoms
+            equi_result = loadfn(os.path.join(equi_path, "result.json"))
+            equi_epa = equi_result["energies"][-1] / sum(equi_result["atom_numbs"])
 
+            for idid, ii in enumerate(all_tasks[1:], start=1): # skip task.000000
+                structure_dir = os.path.basename(ii)
+                task_result = loadfn(all_res[idid])
+                interstitial_type = loadfn(os.path.join(ii, 'interstitial_type.json'))
+                natoms = sum(task_result["atom_numbs"])
+                evac = task_result["energies"][-1] - equi_epa * natoms
                 supercell_index = loadfn(os.path.join(ii, "supercell.json"))
                 # insert_ele = loadfn(os.path.join(ii, 'task.json'))['insert_ele'][0]
                 insert_ele = fc[idid]
