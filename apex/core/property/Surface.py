@@ -211,10 +211,10 @@ class Surface(Property):
             ptr_data += "Miller_Indices: \tSurf_E(J/m^2) EpA(eV) equi_EpA(eV)\n"
 
             equi_path = os.path.abspath(
-                    os.path.join(
-                        os.path.dirname(output_file), "../relaxation/relax_task"
-                    )
+                os.path.join(
+                    os.path.dirname(output_file), "../relaxation/relax_task"
                 )
+            )
             equi_result = loadfn(os.path.join(equi_path, "result.json"))
             equi_epa = equi_result["energies"][-1] / np.sum(
                 equi_result["atom_numbs"]

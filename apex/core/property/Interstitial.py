@@ -465,10 +465,10 @@ class Interstitial(Property):
             ptr_data += "Insert_ele-Struct:          \tInter_E(eV)    \tE(eV)     \tequi_E(eV)\n"
 
             equi_path = os.path.abspath(
-                    os.path.join(
-                        os.path.dirname(output_file), "../relaxation/relax_task"
-                    )
+                os.path.join(
+                    os.path.dirname(output_file), "../relaxation/relax_task"
                 )
+            )
             equi_result = loadfn(os.path.join(equi_path, "result.json"))
             equi_epa = equi_result["energies"][-1] / sum(equi_result["atom_numbs"])
 
