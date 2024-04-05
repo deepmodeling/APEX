@@ -137,11 +137,8 @@ class EOS(Property):
                 )
                 if self.vol_abs:
                     logging.info("treat vol_start and vol_end as absolute volume")
-                    #dlog.info("treat vol_start
-                    # and vol_end as absolute volume")
                 else:
                     logging.info("treat vol_start and vol_end as relative volume")
-                    #dlog.info("treat vol_start and vol_end as relative volume")
 
                 if self.inter_param["type"] == "abacus":
                     equi_contcar = os.path.join(
