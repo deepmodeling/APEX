@@ -217,6 +217,7 @@ def post_property(confs, inter_param, property_list):
             prop = make_property_instance(jj, inter_param_prop)
             param_json = os.path.join(path_to_work, "param.json")
             param_dict = prop.parameter
+            param_dict.setdefault("skip", False) # default of "skip" is False
             try:
                 param_dict.pop("skip")
             except KeyError:

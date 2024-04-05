@@ -16,7 +16,7 @@ from apex.core.calculator import LAMMPS_INTER_TYPE
 upload_packages.append(__file__)
 
 MaxLength = 70
-# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 
 # write a function to replace all '/' in the input string with '-'
