@@ -28,7 +28,7 @@ upload_packages.append(__file__)
 
 class Gamma(Property):
     """
-    Calculation of common gamma lines
+    Calculation of gamma lines
     """
 
     def __init__(self, parameter, inter_param=None):
