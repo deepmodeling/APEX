@@ -93,9 +93,7 @@ class PropsMake(OP):
 
         all_jobs = task_list
         njobs = len(all_jobs)
-        jobs = []
-        for job in all_jobs:
-            jobs.append(pathlib.Path(job))
+        jobs = [pathlib.Path(job) for job in task_list]
 
         os.chdir(cwd)
         op_out = OPIO({
