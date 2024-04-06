@@ -28,7 +28,7 @@ upload_packages.append(__file__)
 
 class Gamma(Property):
     """
-    Calculation of common gamma lines for bcc and fcc
+    Calculation of gamma lines
     """
 
     def __init__(self, parameter, inter_param=None):
@@ -36,7 +36,6 @@ class Gamma(Property):
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-                self.plane_miller = parameter.get("plane_miller", None)
                 parameter["plane_miller"] = parameter.get("plane_miller", None)
                 self.plane_miller = parameter["plane_miller"]
                 parameter["slip_direction"] = parameter.get("slip_direction", None)
@@ -57,28 +56,11 @@ class Gamma(Property):
                 self.n_steps = parameter["n_steps"]
                 self.atom_num = None
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
         else:
             parameter["cal_type"] = "static"
             self.cal_type = parameter["cal_type"]
@@ -87,24 +69,13 @@ class Gamma(Property):
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
+        self.cal_type = parameter["cal_type"]
+        parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
+        for key in default_cal_setting:
+            parameter["cal_setting"].setdefault(key, default_cal_setting[key])
+        self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
         self.inter_param = inter_param if inter_param != None else {"type": "vasp"}
 
@@ -121,11 +92,9 @@ class Gamma(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
-            assert struct_output_name in struct_init_name_list
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
+            assert struct_output_name in struct_init_name_list, f"{struct_output_name} not in initial configuration names"
             path_to_equi = os.path.abspath(
                 os.path.join(
                     self.parameter["start_confs_path"],
@@ -139,7 +108,7 @@ class Gamma(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            print("gamma line reproduce starts")
+            logging.info("gamma line reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -149,17 +118,15 @@ class Gamma(Property):
                 path_to_work,
                 self.parameter.get("reprod_last_frame", True),
             )
-            os.chdir(cwd)
 
         else:
             if refine:
-                print("gamma line refine starts")
+                logging.info("gamma line refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
                     path_to_work,
                 )
-                os.chdir(cwd)
                 # record miller
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
@@ -173,15 +140,12 @@ class Gamma(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("miller.json"):
-                        os.remove("miller.json")
-                    if os.path.islink("miller.json"):
+                    if os.path.exists("miller.json"):
                         os.remove("miller.json")
                     os.symlink(
                         os.path.relpath(os.path.join(init_from_task, "miller.json")),
                         "miller.json",
                     )
-                os.chdir(cwd)
 
             else:
                 if self.inter_param["type"] == "abacus":
@@ -250,9 +214,7 @@ class Gamma(Property):
                 self.atom_num = len(slab.sites)
 
                 os.chdir(path_to_work)
-                if os.path.isfile(POSCAR):
-                    os.remove(POSCAR)
-                if os.path.islink(POSCAR):
+                if os.path.exists(POSCAR):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 # task_poscar = os.path.join(output, 'POSCAR')
@@ -285,7 +247,7 @@ class Gamma(Property):
                             os.remove(jj)
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
-                    print(
+                    logging.info(
                         "# %03d generate " % count,
                         output_task,
                         " \t %d atoms" % len(obtained_slab.sites)
@@ -302,8 +264,8 @@ class Gamma(Property):
                     dumpfn(self.plane_miller, "miller.json")
                     dumpfn(self.slip_length, 'slip_length.json')
                     count += 1
-                os.chdir(cwd)
-
+        
+        os.chdir(cwd)
         return task_list
 
     def __convert_input_miller(self, structure: Structure):
@@ -553,6 +515,15 @@ class Gamma(Property):
             n_steps = len(all_tasks) - 1
             task_result_slab_equi = loadfn(os.path.join(all_tasks[0], "result_task.json"))
             slip_length = loadfn(os.path.join(all_tasks[0], "slip_length.json"))
+            equi_path = os.path.abspath(
+                os.path.join(
+                    os.path.dirname(output_file), "../relaxation/relax_task"
+                )
+            )
+            equi_result = loadfn(os.path.join(equi_path, "result.json"))
+            equi_epa = equi_result["energies"][-1] / np.sum(
+                equi_result["atom_numbs"]
+            )
             for ii in all_tasks:
                 task_result = loadfn(os.path.join(ii, "result_task.json"))
                 natoms = np.sum(task_result["atom_numbs"])
@@ -561,18 +532,8 @@ class Gamma(Property):
                 AA = np.linalg.norm(
                     np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
                 )
-
-                equi_path = os.path.abspath(
-                    os.path.join(
-                        os.path.dirname(output_file), "../relaxation/relax_task"
-                    )
-                )
-                equi_result = loadfn(os.path.join(equi_path, "result.json"))
-                equi_epa = equi_result["energies"][-1] / np.sum(
-                    equi_result["atom_numbs"]
-                )
+               
                 structure_dir = os.path.basename(ii)
-
                 Cf = 1.60217657e-16 / 1e-20 * 0.001
                 sfe = (
                         (

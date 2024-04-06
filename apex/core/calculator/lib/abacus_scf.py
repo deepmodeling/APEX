@@ -13,13 +13,13 @@ bohr2ang = 0.52917721067
 
 def make_abacus_scf_kpt(fp_params):
     # Make KPT file for abacus pw scf calculation.
-    # KPT file is the file containing k points infomation in ABACUS scf calculation.
+    # KPT file is the file containing k points information in ABACUS scf calculation.
     k_points = [1, 1, 1, 0, 0, 0]
     if "k_points" in fp_params:
         k_points = fp_params["k_points"]
         if len(k_points) != 6:
             raise RuntimeError(
-                "k_points has to be a list containig 6 integers specifying MP k points generation."
+                "k_points has to be a list containing 6 integers specifying MP k points generation."
             )
     ret = "K_POINTS\n0\nGamma\n"
     for i in range(6):
@@ -82,7 +82,7 @@ def make_abacus_scf_input(fp_params):
             exam_float.check({"mixing_beta": fp_params["mixing_beta"]})
             #fp_params["mixing_beta"] = float(fp_params["mixing_beta"])
             assert (
-                fp_params["mixing_beta"] >= 0 and fp_params["mixing_beta"] < 1
+                    0 <= fp_params["mixing_beta"] < 1
             ), "'mixing_beta' should between 0 and 1."
             ret += "mixing_beta %f\n" % fp_params["mixing_beta"]
         elif key == "symmetry":
@@ -106,7 +106,7 @@ def make_abacus_scf_input(fp_params):
                 fp_params["nspin"] == 1
                 or fp_params["nspin"] == 2
                 or fp_params["nspin"] == 4
-            ), "'nspin' can anly take 1, 2 or 4"
+            ), "'nspin' can only take 1, 2 or 4"
             ret += "nspin %d\n" % fp_params["nspin"]
         elif key == "ks_solver":
             assert fp_params["ks_solver"] in [
@@ -116,7 +116,7 @@ def make_abacus_scf_input(fp_params):
                 "genelpa",
                 "hpseps",
                 "scalapack_gvx",
-            ], "'ks_sover' should in 'cgx', 'dav', 'lapack', 'genelpa', 'hpseps', 'scalapack_gvx'."
+            ], "'ks_solver' should in 'cgx', 'dav', 'lapack', 'genelpa', 'hpseps', 'scalapack_gvx'."
             ret += "ks_solver %s\n" % fp_params["ks_solver"]
         elif key == "smearing_method":
             assert fp_params["smearing_method"] in [
@@ -198,7 +198,7 @@ def make_abacus_scf_stru(
 ):
     atom_names = sys_data["atom_names"]
     atom_numbs = sys_data["atom_numbs"]
-    if type_map == None:
+    if type_map is None:
         type_map = atom_names
 
     assert len(atom_names) == len(atom_numbs), "Please check the name of atoms. "

@@ -15,8 +15,8 @@ def fcc1(ele_name="ele", a=4.05):
     latt = Lattice.cubic(a)
     return Structure(
         latt,
-        [ele_name, ele_name, ele_name, ele_name],
-        [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]],
+        [ele_name] * 4,
+        [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]]
     )
 
 
@@ -29,11 +29,8 @@ def bcc(ele_name="ele", a=3.2144871302356037):
     latt = Lattice.cubic(a)
     return Structure(
         latt,
-        [ele_name, ele_name],
-        [
-            [0, 0, 0],
-            [0.5, 0.5, 0.5],
-        ],
+        [ele_name] * 2,
+        [[0, 0, 0], [0.5, 0.5, 0.5]]
     )
 
 
@@ -46,7 +43,7 @@ def hcp(
     box[2] *= c
     latt = Lattice(box)
     return Structure(
-        latt, [ele_name, ele_name], [[0, 0, 0], [1.0 / 3, 1.0 / 3, 1.0 / 2]]
+        latt, [ele_name] * 2, [[0, 0, 0], [1.0 / 3, 1.0 / 3, 1.0 / 2]]
     )
 
 
@@ -60,13 +57,13 @@ def dhcp(
     latt = Lattice(box)
     return Structure(
         latt,
-        [ele_name, ele_name, ele_name, ele_name],
+        [ele_name] * 4,
         [
             [0, 0, 0],
             [1.0 / 3.0, 1.0 / 3.0, 1.0 / 4.0],
             [0, 0, 1.0 / 2.0],
-            [2.0 / 3.0, 2.0 / 3.0, 3.0 / 4.0],
-        ],
+            [2.0 / 3.0, 2.0 / 3.0, 3.0 / 4.0]
+        ]
     )
 
 
@@ -76,9 +73,9 @@ def diamond(ele_name="ele", a=2.551340126037118):
     latt = Lattice(box)
     return Structure(
         latt,
-        [ele_name, ele_name],
+        [ele_name] * 2,
         [
             [0.12500000000000, 0.12500000000000, 0.12500000000000],
-            [0.87500000000000, 0.87500000000000, 0.87500000000000],
-        ],
+            [0.87500000000000, 0.87500000000000, 0.87500000000000]
+        ]
     )

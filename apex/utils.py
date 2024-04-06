@@ -16,7 +16,7 @@ from apex.core.calculator import LAMMPS_INTER_TYPE
 upload_packages.append(__file__)
 
 MaxLength = 70
-# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline']
+# LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 
 # write a function to replace all '/' in the input string with '-'
@@ -233,8 +233,8 @@ def judge_flow(parameter: List[dict], specify: str) -> (Type[OP], str, str, dict
                 props_param = parameter[0]
             else:
                 raise RuntimeError(
-                    'confusion of jason arguments provided: '
-                    'joint type of jason conflicts with the other json argument'
+                    'confusion of json arguments provided: '
+                    'joint type of json conflicts with the other json argument'
                 )
         else:
             raise RuntimeError('Same type of input json files')
