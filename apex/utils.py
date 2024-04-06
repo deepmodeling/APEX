@@ -214,10 +214,10 @@ def judge_flow(parameter: List[dict], specify: str) -> (Type[OP], str, str, dict
             props_param = parameter[0]
 
     elif num_args == 2:
-        task1, run_op1 = get_task_type(loadfn(parameter[0]))
-        flow1 = get_flow_type(loadfn(parameter[0]))
-        task2, run_op2 = get_task_type(loadfn(parameter[1]))
-        flow2 = get_flow_type(loadfn(parameter[1]))
+        task1, run_op1 = get_task_type(parameter[0])
+        flow1 = get_flow_type(parameter[0])
+        task2, run_op2 = get_task_type(parameter[1])
+        flow2 = get_flow_type(parameter[1])
         if flow1 != flow2:
             if specify == 'relax':
                 flow_type = 'relax'
