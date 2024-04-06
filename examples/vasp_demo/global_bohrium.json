@@ -1,9 +1,9 @@
 {
     "dflow_host": "https://workflows.deepmodeling.com",
     "k8s_api_server": "https://workflows.deepmodeling.com",
-    "email": "",
-    "password": "",
-    "program_id": xxxx,
+    "email": "YOUR_EMAIL",
+    "password": "YOUR_PASSWD",
+    "program_id": 1234,
     "group_size": 1,
     "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
     "vasp_image_name":"registry.dp.tech/dptech/vasp:5.4.4-dflow",
