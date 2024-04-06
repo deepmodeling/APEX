@@ -4,8 +4,8 @@
                 "type": "abacus",
                 "incar": "abacus_input/INPUT",
                 "potcar_prefix": "abacus_input",
-                "potcars": {"Al": "Al.PD04.PBE.UPF"},
-                "orb_files": {"Al":"Al_gga_10au_100Ry_3s3p2d.orb"}
+                "potcars": {"Al": "Al_ONCV_PBE-1.0.upf"},
+                "orb_files": {"Al":"Al_gga_9au_100Ry_4s4p1d.orb"}
 
             },
 	    "relaxation": {
