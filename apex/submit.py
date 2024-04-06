@@ -75,15 +75,6 @@ def pack_upload_dir(
     copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
     for ii in conf_dirs:
         build_conf_path = os.path.join(upload_dir, ii)
-<<<<<<< HEAD
-        if os.path.exists(os.path.join(ii, "POSCAR")):
-            poscar = "POSCAR"
-        elif os.path.exists(os.path.join(ii, "STRU")):
-            poscar = "STRU"
-        copy_poscar_path = os.path.abspath(os.path.join(ii, poscar))
-        target_poscar_path = os.path.join(build_conf_path, poscar)
-=======
->>>>>>> f789569 (fix: fix missing copy of STRU into tmp upload directory)
         os.makedirs(build_conf_path, exist_ok=True)
         copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
         copy_stru_path = os.path.abspath(os.path.join(ii, "STRU"))
