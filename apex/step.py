@@ -6,7 +6,7 @@ from apex.core.common_prop import (make_property, run_property, post_property)
 from apex.utils import get_flow_type, load_config_file
 
 
-def run_step(param_dict: dict, step: str, machine_dict: dict = None):
+def do_step(param_dict: dict, step: str, machine_dict: dict = None):
     # check input args
     json_type = get_flow_type(param_dict)
     mismatch1 = step in ['make_relax', 'run_relax', 'post_relax'] and json_type == 'props'
@@ -58,9 +58,9 @@ def run_step(param_dict: dict, step: str, machine_dict: dict = None):
             post_property(structures, inter_parameter, param)
 
 
-def run_step_from_args(parameter: str, step: str, machine_file: os.PathLike = None):
+def do_step_from_args(parameter: str, step: str, machine_file: os.PathLike = None):
     print('-------Singel Step Local Debug Mode--------')
-    run_step(
+    do_step(
         param_dict=loadfn(parameter),
         step=step,
         machine_dict=load_config_file(machine_file)

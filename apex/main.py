@@ -15,7 +15,7 @@ from apex import (
     __version__,
 )
 from apex.config import Config
-from apex.run import run_step_from_args
+from apex.step import do_step_from_args
 from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
@@ -73,17 +73,17 @@ def parse_args():
     )
 
     ##########################################
-    # Run single step locally
-    parser_run = subparsers.add_parser(
-        "run",
-        help="Run single step locally mode",
+    # Do single step locally
+    parser_do = subparsers.add_parser(
+        "do",
+        help="Run single step locally independent from workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser_run.add_argument(
+    parser_do.add_argument(
         "parameter", type=str,
         help='Json file to indicate calculation parameters'
     )
-    parser_run.add_argument(
+    parser_do.add_argument(
         "step",
         type=str,
         choices=[
@@ -94,7 +94,7 @@ def parse_args():
              "(make_relax | run_relax | post_relax |"
              " make_props | run_props | post_props)"
     )
-    parser_run.add_argument(
+    parser_do.add_argument(
         "-c", "--config",
         type=str, nargs='?',
         default='./global.json',
@@ -714,8 +714,8 @@ def main():
                 )
             else:
                 logging.warning(f"Step {key} with status: {step['phase']} will be skipping...({task_left} more left)")
-    elif args.cmd == 'run':
-        run_step_from_args(
+    elif args.cmd == 'do':
+        do_step_from_args(
             parameter=args.parameter,
             machine_file=args.config,
             step=args.step

@@ -130,9 +130,6 @@ def run_property(confs, inter_param, property_list, mdata):
     # ...
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
-    processes = len(property_list)
-    pool = Pool(processes=processes)
-    print("Submit job via %d processes" % processes)
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
@@ -182,6 +179,9 @@ def run_property(confs, inter_param, property_list, mdata):
             if len(run_tasks) == 0:
                 continue
             else:
+                processes = len(run_tasks)
+                pool = Pool(processes=processes)
+                print("Submit job via %d processes" % processes)
                 ret = pool.apply_async(
                     worker,
                     (
