@@ -6,7 +6,6 @@ from dpdata import LabeledSystem
 from monty.serialization import dumpfn
 
 from apex.core.calculator.lib import abacus_utils, abacus_scf
-#from dpgen import dlog
 from apex.core.calculator.Task import Task
 from apex.utils import sepline
 from dflow.python import upload_packages
