@@ -41,10 +41,8 @@ class ResultStorage:
         conf_dirs.sort()
         for ii in conf_dirs:
             relax_task = os.path.join(ii, 'relaxation/relax_task')
-            inter = os.path.join(relax_task, 'inter.json')
-            task = os.path.join(relax_task, 'task.json')
-            structure = os.path.join(relax_task, 'structure.json')
-            result = os.path.join(relax_task, 'result.json')
+            inter,task,structure,result=[os.path.join(relax_task,ii) for ii in 
+                ['inter.json','task.json','structure.json','result.json']]
             if not (
                 os.path.isfile(inter)
                 and os.path.isfile(task)
@@ -100,7 +98,7 @@ class ResultStorage:
                     logging.warning(
                         msg='You are trying to archive detailed running log of each task into database,'
                             'which may exceed the limitation of database allowance.'
-                            'Please consider split the data or only archive details of the most important property.'
+                            'Please consider spliting the data or only archiving details of the most important property.'
                     )
                     try:
                         task_list = loadfn(task_list_path)
@@ -108,8 +106,7 @@ class ResultStorage:
                     except FileNotFoundError:
                         logging.warning(f'{task_list_path} file not found, will track all tasks listed {prop_dir}')
                         result_task_path = glob.glob(os.path.join(prop_dir, 'task.*', 'result_task.json'))
-                    result_task_path.sort()
-                    task_result_list = [loadfn(kk) for kk in result_task_path]
+                    task_result_list = [loadfn(kk) for kk in sorted(result_task_path)]
                     prop_dict["tasks"] = task_result_list
 
                 new_dict = {conf_key: {jj: prop_dict}}
@@ -166,10 +163,7 @@ def archive_workdir(relax_param, props_param, config, work_dir, flow_type):
         store.sync_props(props_param, config.archive_tasks)
 
     # define archive key
-    if config.archive_key:
-        data_id = config.archive_key
-    else:
-        data_id = str(store.work_dir_path)
+    data_id = config.archive_key if config.archive_key else str(store.work_dir_path)
 
     dump_file = os.path.join(store.work_dir_path, 'all_result.json')
     if os.path.isfile(dump_file):

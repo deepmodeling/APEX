@@ -56,28 +56,11 @@ class Phonon(Property):
                 parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
                 self.BAND_CONNECTION = parameter["BAND_CONNECTION"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
         else:
             parameter["cal_type"] = "static"
             self.cal_type = parameter["cal_type"]
@@ -86,31 +69,19 @@ class Phonon(Property):
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
+        self.cal_type = parameter["cal_type"]
+        parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
+        for key in default_cal_setting:
+            parameter["cal_setting"].setdefault(key, default_cal_setting[key])
+        self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
         self.inter_param = inter_param if inter_param is not None else {"type": "vasp"}
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            #dlog.warning("%s already exists" % path_to_work)
             logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
@@ -122,11 +93,9 @@ class Phonon(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
-            assert struct_output_name in struct_init_name_list
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
+            assert struct_output_name in struct_init_name_list, f"{struct_output_name} not in initial configuration names"
             path_to_equi = os.path.abspath(
                 os.path.join(
                     self.parameter["start_confs_path"],
@@ -140,7 +109,7 @@ class Phonon(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            print("phonon reproduce starts")
+            logging.info("phonon reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -155,7 +124,7 @@ class Phonon(Property):
 
         else:
             if refine:
-                print("phonon refine starts")
+                logging.info("phonon refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -201,12 +170,9 @@ class Phonon(Property):
                     self.BAND_CONNECTION = type_param.get("BAND_CONNECTION", self.BAND_CONNECTION)
 
                 os.chdir(path_to_work)
-                if os.path.isfile(POSCAR):
-                    os.remove(POSCAR)
-                if os.path.islink(POSCAR):
+                if os.path.exists(POSCAR):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
-                #           task_poscar = os.path.join(output, 'POSCAR')
 
                 # get band path
                 if not self.BAND:
@@ -537,9 +503,9 @@ class Phonon(Property):
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
                 if os.path.exists("FORCE_SETS"):
-                    print('FORCE_SETS is created')
+                    logging.info('FORCE_SETS is created')
                 else:
-                    print('FORCE_SETS can not be created')
+                    logging.info('FORCE_SETS can not be created')
                 os.system('phonopy band.conf --abacus')
                 os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
 
@@ -558,7 +524,7 @@ class Phonon(Property):
                             self.supercell_size[1],
                             self.supercell_size[2]))
                     os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
-                    print('band.dat is created')
+                    logging.info('band.dat is created')
                     shutil.copyfile("band.dat", work_path/"band.dat")
 
                 elif self.approach == "displacement":
@@ -566,9 +532,9 @@ class Phonon(Property):
                     shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
                     os.system('phonopy -f task.0*/vasprun.xml')
                     if os.path.exists("FORCE_SETS"):
-                        print('FORCE_SETS is created')
+                        logging.info('FORCE_SETS is created')
                     else:
-                        print('FORCE_SETS can not be created')
+                        logging.info('FORCE_SETS can not be created')
                     os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
                         self.supercell_size[0],
                         self.supercell_size[1],

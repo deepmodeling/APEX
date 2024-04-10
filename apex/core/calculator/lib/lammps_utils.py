@@ -17,7 +17,7 @@ upload_packages.append(__file__)
 def cvt_lammps_conf(fin, fout, type_map, ofmt="lammps/data"):
     """
     Format convert from fin to fout, specify the output format by ofmt
-    Imcomplete situation
+    Incomplete situation
     """
     supp_ofmt = ["lammps/dump", "lammps/data", "vasp/poscar"]
     supp_exts = ["dump", "lmp", "poscar/POSCAR"]

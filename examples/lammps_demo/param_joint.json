@@ -23,12 +23,17 @@
         },
         {
          "type":         "elastic",
-	 "skip":         true,
          "norm_deform":  1e-2,
          "shear_deform": 1e-2,
 	 "cal_setting":  {"etol": 0,
                          "ftol": 1e-10}
         },
+        {
+         "type":         "vacancy",
+         "skip":         true,
+         "supercell":   [2, 2, 2]
+        },
+
 	{
          "type":           "surface",
          "skip":         true,
@@ -40,31 +45,27 @@
 	{
          "type":         "interstitial",
          "skip":         true,
-         "supercell":   [1, 1, 1],
+         "supercell":   [2, 2, 2],
          "insert_ele":  ["Mo"]
-        },
-	{
-         "skip":         true,
-         "supercell":        [2, 2, 2]
         },
 	{
 	  "type":            "gamma",
 	  "skip":            true,
-      "plane_miller":    [1,2,3],
-      "slip_direction":  [1,1,-1],
+      "plane_miller":    [1,1,0],
+      "slip_direction":  [-1,1,1],
 	  "hcp": {
         	"plane_miller":    [0,0,0,1],
         	"slip_direction":  [2,-1,-1,0],
             "slip_length": 1
 		},
-      "supercell_size":   [2,2,100],
+      "supercell_size":   [2,2,50],
       "vacuum_size": 15,
 	  "add_fix": ["true","true","false"],
       "n_steps":         20
 	},
 	{
          "type":         "phonon",
-	 "skip":         false,
+	 "skip":         true,
 	 "BAND": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
 	 "supercell_size":[4,4,4],
 	 "PRIMITIVE_AXES": "Auto"

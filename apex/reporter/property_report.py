@@ -557,7 +557,7 @@ class PhononReport(PropertyReport):
             '''
 
         layout = go.Layout(
-            title='Phonon Spectrum',
+            title='Phonon Spectra',
             annotations=annotations,
             shapes=shapes,
             autotypenumbers='convert types',

@@ -93,9 +93,7 @@ class PropsMake(OP):
 
         all_jobs = task_list
         njobs = len(all_jobs)
-        jobs = []
-        for job in all_jobs:
-            jobs.append(pathlib.Path(job))
+        jobs = [pathlib.Path(job) for job in task_list]
 
         os.chdir(cwd)
         op_out = OPIO({
@@ -177,6 +175,7 @@ class PropsPost(OP):
         prop = make_property_instance(prop_param, inter_param)
         param_json = os.path.join(abs_path_to_prop, "param.json")
         param_dict = prop.parameter
+        param_dict.setdefault("skip", False) # default of "skip" is False
         param_dict.pop("skip")
         dumpfn(param_dict, param_json)
         prop.compute(

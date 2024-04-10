@@ -18,8 +18,7 @@ from apex.utils import sepline, get_task_type, handle_prop_suffix
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
-lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
-
+lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 def make_property_instance(parameters, inter_param):
     """
@@ -41,12 +40,11 @@ def make_property_instance(parameters, inter_param):
     elif prop_type == "phonon":
         return Phonon(parameters, inter_param)
     else:
-        raise RuntimeError(f"unknown dflowautotest type {prop_type}")
+        raise RuntimeError(f"unknown APEX type {prop_type}")
 
 
 def make_property(confs, inter_param, property_list):
     # find all POSCARs and their name like mp-xxx
-    # ...
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
     conf_dirs = []
@@ -62,10 +60,7 @@ def make_property(confs, inter_param, property_list):
                 continue
             # generate working directory like mp-xxx/eos_00 if jj['type'] == 'eos'
             # handel the exception that the working directory exists
-            # ...
-
             # determine the suffix: from scratch or refine
-            # ...
 
             property_type = jj["type"]
             path_to_equi = os.path.join(ii, "relaxation", "relax_task")
@@ -73,9 +68,7 @@ def make_property(confs, inter_param, property_list):
 
             create_path(path_to_work)
 
-            inter_param_prop = inter_param
-            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
-                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+            inter_param_prop = jj.get("cal_setting", {}).get("overwrite_interaction", inter_param)
 
             prop = make_property_instance(jj, inter_param_prop)
             task_list = prop.make_confs(path_to_work, path_to_equi, do_refine)
@@ -84,12 +77,9 @@ def make_property(confs, inter_param, property_list):
                 poscar = os.path.join(kk, "POSCAR")
                 inter = make_calculator(inter_param_prop, poscar)
                 inter.make_potential_files(kk)
-                #dlog.debug(prop.task_type())  ### debug
                 inter.make_input_file(kk, prop.task_type(), prop.task_param())
 
-            prop.post_process(
-                task_list
-            )  # generate same KPOINTS file for elastic when doing VASP
+            prop.post_process(task_list)  # generate same KPOINTS file for elastic when doing DFT
 
 
 def worker(
@@ -105,10 +95,9 @@ def worker(
     run_tasks = [os.path.basename(ii) for ii in all_task]
     machine = mdata.get("machine", None)
     resources = mdata.get("resources", None)
-    command = mdata.get(f"{task_type}_run_command", None)
-    if not command:
-        command = mdata.get("run_command", None)
+    command = mdata.get(f"{task_type}_run_command", mdata.get("run_command", None))
     group_size = mdata.get("group_size", 1)
+
     submission = make_submission(
         mdata_machine=machine,
         mdata_resources=resources,
@@ -127,7 +116,6 @@ def worker(
 
 def run_property(confs, inter_param, property_list, mdata):
     # find all POSCARs and their name like mp-xxx
-    # ...
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
     conf_dirs = []
@@ -135,6 +123,7 @@ def run_property(confs, inter_param, property_list, mdata):
         conf_dirs.extend(glob.glob(conf))
     conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
+
     task_list = []
     work_path_list = []
     multiple_ret = []
@@ -157,9 +146,7 @@ def run_property(confs, inter_param, property_list, mdata):
             tmp_task_list.sort()
             task_list.append(tmp_task_list)
 
-            inter_param_prop = inter_param
-            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
-                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+            inter_param_prop = jj.get("cal_setting", {}).get("overwrite_interaction", inter_param)
 
             # dispatch the tasks
             # POSCAR here is useless
@@ -193,7 +180,7 @@ def run_property(confs, inter_param, property_list, mdata):
                         mdata,
                         inter_type,
                         task_type
-                    ),
+                    )
                 )
                 multiple_ret.append(ret)
     pool.close()
@@ -207,7 +194,6 @@ def run_property(confs, inter_param, property_list, mdata):
 
 def post_property(confs, inter_param, property_list):
     # find all POSCARs and their name like mp-xxx
-    # ...
     #    task_list = []
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
@@ -224,15 +210,14 @@ def post_property(confs, inter_param, property_list):
             if not suffix:
                 continue
 
-            inter_param_prop = inter_param
-            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
-                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+            inter_param_prop = jj.get("cal_setting", {}).get("overwrite_interaction", inter_param)
 
             property_type = jj["type"]
             path_to_work = os.path.join(ii, property_type + "_" + suffix)
             prop = make_property_instance(jj, inter_param_prop)
             param_json = os.path.join(path_to_work, "param.json")
             param_dict = prop.parameter
+            param_dict.setdefault("skip", False) # default of "skip" is False
             try:
                 param_dict.pop("skip")
             except KeyError:
@@ -241,5 +226,5 @@ def post_property(confs, inter_param, property_list):
             prop.compute(
                 os.path.join(path_to_work, "result.json"),
                 os.path.join(path_to_work, "result.out"),
-                path_to_work,
+                path_to_work
             )
