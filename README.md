@@ -522,7 +522,7 @@ Once the report app is opened (or manully via http://127.0.0.1:8050/), users can
 - If the clipboard buttons do not function well, try to reload the page once.
 - Do not over-refresh the page as duplicate errors may occur. Should this occur, stop the server and re-execute the apex report command.
   <div style="text-align: center;">
-      <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 100%;">
+      <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 50%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
   </div>
 
