@@ -67,6 +67,11 @@ def parse_args():
         help="(Optional) Run APEX workflow via local debug mode"
     )
     parser_submit.add_argument(
+        "-s", "--submit_only",
+        action="store_true",
+        help="(Optional) Submit workflow only without automatic result retrieving"
+    )
+    parser_submit.add_argument(
         '-f', "--flow",
         choices=['relax', 'props', 'joint'],
         help="(Optional) Specify type of workflow to submit: (relax | props | joint)"
@@ -521,6 +526,7 @@ def main():
             config_file=args.config,
             work_dirs=args.work,
             indicated_flow_type=args.flow,
+            submit_only=args.submit_only,
             is_debug=args.debug
         )
     elif args.cmd == "list":

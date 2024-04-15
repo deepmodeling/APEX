@@ -131,11 +131,13 @@ def submit(
         )
 
         flow_id = None
+        submit_only = wf_config.submit_only
         if flow_type == 'relax':
             flow_id = flow.submit_relax(
                 upload_path=tmp_dir,
                 download_path=work_dir,
                 relax_parameter=relax_param,
+                submit_only=submit_only,
                 labels=labels
             )
         elif flow_type == 'props':
@@ -143,6 +145,7 @@ def submit(
                 upload_path=tmp_dir,
                 download_path=work_dir,
                 props_parameter=props_param,
+                submit_only=submit_only,
                 labels=labels
             )
         elif flow_type == 'joint':
@@ -151,11 +154,14 @@ def submit(
                 download_path=work_dir,
                 props_parameter=props_param,
                 relax_parameter=relax_param,
+                submit_only=submit_only,
                 labels=labels
             )
-    # auto archive results
-    print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
-    archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)
+
+    if not submit_only:
+        # auto archive results
+        print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
+        archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)
 
 
 def submit_workflow(
@@ -163,6 +169,7 @@ def submit_workflow(
     config_dict: dict,
     work_dirs: List[os.PathLike],
     indicated_flow_type: str,
+    submit_only=False,
     is_debug=False,
     labels=None
 ):
@@ -171,6 +178,9 @@ def submit_workflow(
     wf_config.config_dflow(wf_config.dflow_config_dict)
     wf_config.config_bohrium(wf_config.bohrium_config_dict)
     wf_config.config_s3(wf_config.dflow_s3_config_dict)
+    if submit_only:
+        print('Submit only mode activated, no auto-retrieval of results.')
+        wf_config.submit_only = True
     # set pre-defined dflow debug mode settings
     if is_debug:
         tmp_work_dir = tempfile.TemporaryDirectory()
@@ -259,6 +269,7 @@ def submit_from_args(
         config_file: os.PathLike,
         work_dirs,
         indicated_flow_type: str,
+        submit_only=False,
         is_debug=False,
 ):
     print('-------Submit Workflow Mode-------')
@@ -267,6 +278,7 @@ def submit_from_args(
         config_dict=load_config_file(config_file),
         work_dirs=work_dirs,
         indicated_flow_type=indicated_flow_type,
+        submit_only=submit_only,
         is_debug=is_debug,
     )
     print('Completed!')
