@@ -488,7 +488,7 @@ def format_time_delta(td: datetime.timedelta) -> str:
 
 
 def get_id_from_record(work_dir: os.PathLike, operation_name: str = None) -> str:
-    logging.info(msg='No workflow_id is provided, will retrieve the latest workflow')
+    logging.info(msg='No workflow_id is provided, will employ the latest workflow')
     workflow_log = os.path.join(work_dir, '.workflow.log')
     assert os.path.isfile(workflow_log), \
         'No workflow_id is provided and no .workflow.log file found in work_dir'
@@ -514,8 +514,8 @@ def main():
     logging.basicConfig(level=logging.INFO)
     # parse args
     parser, args = parse_args()
-    header()
     if args.cmd == 'submit':
+        header()
         submit_from_args(
             parameters=args.parameter,
             config_file=args.config,
@@ -715,6 +715,7 @@ def main():
             else:
                 logging.warning(f"Step {key} with status: {step['phase']} will be skipping...({task_left} more left)")
     elif args.cmd == 'do':
+        header()
         do_step_from_args(
             parameter=args.parameter,
             machine_file=args.config,
@@ -732,6 +733,7 @@ def main():
             is_result=args.result
         )
     elif args.cmd == 'report':
+        header()
         report_from_args(
             config_file=args.config,
             path_list=args.work,
