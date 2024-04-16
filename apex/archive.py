@@ -11,7 +11,8 @@ from apex.utils import (
     json2dict,
     update_dict,
     return_prop_list,
-    load_config_file
+    load_config_file,
+    generate_random_string
 )
 from apex.database.DatabaseFactory import DatabaseFactory
 from apex.config import Config
@@ -162,9 +163,6 @@ def archive_workdir(relax_param, props_param, config, work_dir, flow_type):
     if props_param and flow_type != 'relax':
         store.sync_props(props_param, config.archive_tasks)
 
-    # define archive key
-    data_id = config.archive_key if config.archive_key else str(store.work_dir_path)
-
     dump_file = os.path.join(store.work_dir_path, 'all_result.json')
     if os.path.isfile(dump_file):
         logging.info(msg='all_result.json exists, and will be updated.')
@@ -173,6 +171,15 @@ def archive_workdir(relax_param, props_param, config, work_dir, flow_type):
         dumpfn(orig_data, dump_file, indent=4)
     else:
         dumpfn(store.result_data, dump_file, indent=4)
+
+    # try to get documented key id from all_result.json
+    try:
+        result_dict = loadfn(dump_file)
+        default_id = result_dict['archive_key']
+    except FileNotFoundError or KeyError:
+        default_id = generate_random_string(10)
+    # define archive key
+    data_id = config.archive_key if config.archive_key else default_id
 
     if config.database_type != 'local':
         data_json_str = json.dumps(store.result_data, cls=MontyEncoder, indent=4)

@@ -3,6 +3,8 @@ import logging
 import os
 import shutil
 import json
+import string
+import random
 from typing import Type, List
 from monty.serialization import loadfn
 from decimal import Decimal
@@ -32,6 +34,12 @@ def backup_path(path) -> None:
                 shutil.move(dirname, bk_dirname)
                 break
             counter += 1
+
+
+def generate_random_string(length):
+    characters = string.ascii_letters + string.digits  # 包含所有字母(大写和小写)和数字
+    random_string = ''.join(random.choices(characters, k=length))
+    return random_string
 
 
 def copy_all_other_files(src_dir, dst_dir, ignore_list=None) -> None:
