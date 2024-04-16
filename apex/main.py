@@ -465,9 +465,9 @@ def config_dflow(config_file: os.PathLike) -> None:
     # config dflow_config and s3_config
     config_dict = load_config_file(config_file)
     wf_config = Config(**config_dict)
-    wf_config.config_dflow(wf_config.dflow_config_dict)
-    wf_config.config_bohrium(wf_config.bohrium_config_dict)
-    wf_config.config_s3(wf_config.dflow_s3_config_dict)
+    Config.config_dflow(wf_config.dflow_config_dict)
+    Config.config_bohrium(wf_config.bohrium_config_dict)
+    Config.config_s3(wf_config.dflow_s3_config_dict)
 
 
 def format_print_table(t: List[List[str]]):

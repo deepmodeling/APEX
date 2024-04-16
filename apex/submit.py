@@ -175,9 +175,9 @@ def submit_workflow(
 ):
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
-    wf_config.config_dflow(wf_config.dflow_config_dict)
-    wf_config.config_bohrium(wf_config.bohrium_config_dict)
-    wf_config.config_s3(wf_config.dflow_s3_config_dict)
+    Config.config_dflow(wf_config.dflow_config_dict)
+    Config.config_bohrium(wf_config.bohrium_config_dict)
+    Config.config_s3(wf_config.dflow_s3_config_dict)
     if submit_only:
         print('Submit only mode activated, no auto-retrieval of results.')
         wf_config.submit_only = True
