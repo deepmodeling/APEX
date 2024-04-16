@@ -164,20 +164,21 @@ def archive_workdir(relax_param, props_param, config, work_dir, flow_type):
         store.sync_props(props_param, config.archive_tasks)
 
     dump_file = os.path.join(store.work_dir_path, 'all_result.json')
+    default_id = generate_random_string(10)
     if os.path.isfile(dump_file):
         logging.info(msg='all_result.json exists, and will be updated.')
         orig_data = loadfn(dump_file)
+        try:
+            default_id = orig_data['archive_key']
+        except KeyError:
+            store.result_data['archive_key'] = default_id
         update_dict(orig_data, store.result_data, depth=2)
         dumpfn(orig_data, dump_file, indent=4)
     else:
+        store.result_data['archive_key'] = default_id
         dumpfn(store.result_data, dump_file, indent=4)
 
     # try to get documented key id from all_result.json
-    try:
-        result_dict = loadfn(dump_file)
-        default_id = result_dict['archive_key']
-    except FileNotFoundError or KeyError:
-        default_id = generate_random_string(10)
     # define archive key
     data_id = config.archive_key if config.archive_key else default_id
 
