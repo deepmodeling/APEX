@@ -15,7 +15,7 @@ from apex import (
     __version__,
 )
 from apex.config import Config
-from apex.run import run_step_from_args
+from apex.step import do_step_from_args
 from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
@@ -67,23 +67,28 @@ def parse_args():
         help="(Optional) Run APEX workflow via local debug mode"
     )
     parser_submit.add_argument(
+        "-s", "--submit_only",
+        action="store_true",
+        help="(Optional) Submit workflow only without automatic result retrieving"
+    )
+    parser_submit.add_argument(
         '-f', "--flow",
         choices=['relax', 'props', 'joint'],
         help="(Optional) Specify type of workflow to submit: (relax | props | joint)"
     )
 
     ##########################################
-    # Run single step locally
-    parser_run = subparsers.add_parser(
-        "run",
-        help="Run single step locally mode",
+    # Do single step locally
+    parser_do = subparsers.add_parser(
+        "do",
+        help="Run single step locally independent from workflow",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser_run.add_argument(
+    parser_do.add_argument(
         "parameter", type=str,
         help='Json file to indicate calculation parameters'
     )
-    parser_run.add_argument(
+    parser_do.add_argument(
         "step",
         type=str,
         choices=[
@@ -94,7 +99,7 @@ def parse_args():
              "(make_relax | run_relax | post_relax |"
              " make_props | run_props | post_props)"
     )
-    parser_run.add_argument(
+    parser_do.add_argument(
         "-c", "--config",
         type=str, nargs='?',
         default='./global.json',
@@ -460,9 +465,9 @@ def config_dflow(config_file: os.PathLike) -> None:
     # config dflow_config and s3_config
     config_dict = load_config_file(config_file)
     wf_config = Config(**config_dict)
-    wf_config.config_dflow(wf_config.dflow_config_dict)
-    wf_config.config_bohrium(wf_config.bohrium_config_dict)
-    wf_config.config_s3(wf_config.dflow_s3_config_dict)
+    Config.config_dflow(wf_config.dflow_config_dict)
+    Config.config_bohrium(wf_config.bohrium_config_dict)
+    Config.config_s3(wf_config.dflow_s3_config_dict)
 
 
 def format_print_table(t: List[List[str]]):
@@ -488,7 +493,7 @@ def format_time_delta(td: datetime.timedelta) -> str:
 
 
 def get_id_from_record(work_dir: os.PathLike, operation_name: str = None) -> str:
-    logging.info(msg='No workflow_id is provided, will retrieve the latest workflow')
+    logging.info(msg='No workflow_id is provided, will employ the latest workflow')
     workflow_log = os.path.join(work_dir, '.workflow.log')
     assert os.path.isfile(workflow_log), \
         'No workflow_id is provided and no .workflow.log file found in work_dir'
@@ -514,13 +519,14 @@ def main():
     logging.basicConfig(level=logging.INFO)
     # parse args
     parser, args = parse_args()
-    header()
     if args.cmd == 'submit':
+        header()
         submit_from_args(
             parameters=args.parameter,
             config_file=args.config,
             work_dirs=args.work,
             indicated_flow_type=args.flow,
+            submit_only=args.submit_only,
             is_debug=args.debug
         )
     elif args.cmd == "list":
@@ -714,8 +720,9 @@ def main():
                 )
             else:
                 logging.warning(f"Step {key} with status: {step['phase']} will be skipping...({task_left} more left)")
-    elif args.cmd == 'run':
-        run_step_from_args(
+    elif args.cmd == 'do':
+        header()
+        do_step_from_args(
             parameter=args.parameter,
             machine_file=args.config,
             step=args.step
@@ -732,6 +739,7 @@ def main():
             is_result=args.result
         )
     elif args.cmd == 'report':
+        header()
         report_from_args(
             config_file=args.config,
             path_list=args.work,

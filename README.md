@@ -6,7 +6,6 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property calculations. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, ABACUS, and others.
 
-## v1.2 New Features and Revisions Update
 * Add a `retrieve` sub-command to allow results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
 * Support common **dflow operations** with terminal commands
 * Incorporate results `archive` function to both local paths and NoSQL database ([MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/))
@@ -14,12 +13,11 @@
 * Support [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) for automatic band path search in `phonon` calculations
 * Support eight conventional HCP interstitial configurations for `interstitial` calculations
 * Add four additional **ML** pair styles (`snap`, `gap`, `rann` and `mace`) and an extra `meam-spline` in LAMMPS interation type support
-* Modify the single-step run command from `test` to `run` for improved clarity and consistencey
+* Modify the single-step run command from `test` to `do` for improved clarity and consistencey
 
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer](#apex-alloy-property-explorer)
-  - [v1.2 New Features and Revisions Update](#v12-new-features-and-revisions-update)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
@@ -34,13 +32,14 @@
         - [3.1.2.5. Interstitial](#3125-interstitial)
         - [3.1.2.6. Gamma Line](#3126-gamma-line)
         - [3.1.2.7. Phonon Spectra](#3127-phonon-spectra)
-    - [3.2. Command](#32-command)
+    - [3.2. Submission](#32-submission)
       - [3.2.1. Workflow Submission](#321-workflow-submission)
       - [3.2.2. Workflow Inquiry \& Operations](#322-workflow-inquiry--operations)
-      - [3.2.3. Run Single-Step Locally](#323-run-single-step-locally)
-      - [3.2.4. Retrieve Results Manually](#324-retrieve-results-manually)
-      - [3.2.5. Archive Test Results](#325-archive-test-results)
-      - [3.2.6. Results Visualization Report](#326-results-visualization-report)
+      - [3.2.3. Run Individual Step](#323-run-individual-step)
+    - [3.3. After Submission](#33-after-submission)
+      - [3.3.1. Retrieve Results Manually](#331-retrieve-results-manually)
+      - [3.3.2. Archive Test Results](#332-archive-test-results)
+      - [3.3.3. Results Visualization Report](#333-results-visualization-report)
   - [4. Quick Start](#4-quick-start)
     - [4.1. In the Bohrium](#41-in-the-bohrium)
     - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
@@ -111,14 +110,15 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
   | upload_python_package | Optional[List] | None | Additional python packages required in the container |
   | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
+  | submit_only | Bool | False | Submit workflow only without automatic result retrieving |
 
 * **Dflow config**
   | Key words | Data structure | Default | Description |
   | :------------ | ----- | ----- | ------------------- |
   | dflow_host | String | https://127.0.0.1:2746 | Url of dflow server |
   | k8s_api_server | String | https://127.0.0.1:2746 | Url of kubernetes API server |
-  | dflow_config | Optional[Dict] | None | Specify more detailed dflow config in a nested dictionary with higher priority (See [dflow document](https://deepmodeling.com/dflow/dflow.html) for more details) |
-  | dflow_s3_config | Optional[Dict] | None | Specify dflow s3 repository config in a nested dictionary with higher priority (See [dflow document](https://deepmodeling.com/dflow/dflow.html) for more details) |
+  | dflow_config | Optional[Dict] | None | Specify more detailed dflow config in a nested dictionary with higher priority (See [dflow document](https://deepmodeling.com/dflow/dflow.html) for more detail) |
+  | dflow_s3_config | Optional[Dict] | None | Specify dflow s3 repository config in a nested dictionary with higher priority (See [dflow document](https://deepmodeling.com/dflow/dflow.html) for more detail) |
 
 * **Dispatcher config** (One may refer to [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) for details of the following parameters)
   | Key words | Data structure | Default | Description |
@@ -252,18 +252,19 @@ Below are three examples (for detailed explanations of each parameter, please re
   | vol_abs | Bool | False | Whether to treat vol_start and vol_end as absolute volume, default = False |
 
 ##### 3.1.2.2. Elastic
-  | Key words | Data structure | Example | Description                                         |
-  | :------------ | ----- |-----------------------------------------------------| ------------------- |
-  | norm_deform | Float | 0.01 | The deformation in xx, yy, zz, defaul = 1e-2        |
-  | shear_deform | Float | 0.01 | The deformation in other directions, default = 1e-2 |
+  | Key words    | Data structure | Example | Description                                        |
+  |:-------------|----------------|---------|----------------------------------------------------|
+  | norm_deform  | Float          | 0.01    | The deformation in xx, yy, zz, defaul = 1e-2       |
+  | shear_deform | Float          | 0.01    | The deformation in other directions, default = 1e-2 |
+  | conventional | Bool           | False   | Whether adopt conventional cell for deformation    |
 
 ##### 3.1.2.3. Surface
-  | Key words | Data structure | Example | Description                                                                      |
+  | Key words | Data structure | Example | Description |
   | :------------ | ----- |----------------------------------------------------------------------------------| ------------------- |
-  | min_slab_size | Int | 10 | Minimum size of slab thickness                                                   |
-  | min_vacuum_size | Int | 11 | Minimum size of vacuum width                                                     |
+  | min_slab_size | Int | 10 | Minimum size of slab thickness |
+  | min_vacuum_size | Int | 11 | Minimum size of vacuum width |
   | pert_xz | Float | 0.01 | Perturbation through xz direction used to compute surface energy, default = 0.01 |
-  | max_miller | Int | 2 | The maximum miller index number of generated surface, default = 2                              |
+  | max_miller | Int | 2 | The maximum miller index number of surface, default = 2 |
 
 ##### 3.1.2.4. Vacancy
   | Key words | Data structure | Example | Description |
@@ -389,9 +390,9 @@ The **Linear Response Method** has an edge over the Finite Displacement Method i
 On the other hand, the advantage of **Finite Displacement Method** lies in its versatility; it functions as an add-on compatible with any code, including those beyond the scope of density functional theory. The only requirement is that the external code can compute forces. For instance, ABACUS may lack an implementation of the Linear Response Method, but can effectively utilize the Finite Displacement Method implemented in phonon calculations.
 
 
-### 3.2. Command
+### 3.2. Submission
 #### 3.2.1. Workflow Submission
-APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by users. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for help). Here is an example to submit a `joint` workflow:
+APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-s] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by users. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for further help). Here is an example to submit a `joint` workflow:
 ```shell
 apex submit param_relax.json param_props.json -c ./global_bohrium.json -w 'dp_demo_0?' 'eam_demo'
 ```
@@ -417,15 +418,15 @@ Take `stop` as an example (usage: `apex stop [-h] [-i ID] [-w WORK] [-c [CONFIG]
 3. `apex stop -i relax-fe03j4 -c ./config_bohrium.json` to indicate specific workflow `ID` to stop
    
 
-#### 3.2.3. Run Single-Step Locally
+#### 3.2.3. Run Individual Step 
 APEX also provides a **single-step test mode**, which can run `Make` `run` and `Post` step individually under local enviornment. **Please note that one needs to run commands under the work directory in this mode.** User can invoke them by format of `apex run [-h] [-c [CONFIG]] parameter {make_relax,run_relax,post_relax,make_props,run_props,post_props}` (Run `apex run -h` for help). Here is a example to do relaxation in this mode:
 1. Firstly, generate relaxation tasks by
    ```shell
-   apex run param_relax.json make_relax
+   apex do param_relax.json make_relax
    ```
 2. Then dispatch tasks by
    ```shell
-   apex run param_relax.json run_relax -c machine.json
+   apex do param_relax.json run_relax -c machine.json
    ```
    where `machine.json` is a JSON file to define dispatch method, containing `machine`, `resources`, `task` dictionaries and `run_command` as listed in [DPDispatcher’s documentation](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html). Here is an example to submit tasks to a remote HPC managed by [Slurm](https://slurm.schedmd.com):
    ```json
@@ -463,11 +464,13 @@ APEX also provides a **single-step test mode**, which can run `Make` `run` and `
    ```
 3. Finally, when all tasks are finished, post-process by
    ```shell
-   apex run param_relax.json post_relax
+   apex do param_relax.json post_relax
    ```
 The property test can follow a similar approach.
 
-#### 3.2.4. Retrieve Results Manually
+### 3.3. After Submission
+
+#### 3.3.1. Retrieve Results Manually
 
 Sometimes when results auto-retrieving fails after workflows finish, you may try to retrieve completed test results manually by the `retrieve` command with a specific workflow `ID` (or target `work_dir`) provided:
 ```shell
@@ -475,7 +478,7 @@ apex retrieve [-h] [-i ID] [-w WORK] [-c [CONFIG]]
 ```
 where the `WORK` defaults to be `./`, and the `CONFIG` JSON (default: `config.json`) is used to connect to the remote storage. The command usage to similar to [3.2.2. Workflow Inquiry \& Operations](#322-workflow-inquiry--operations)
 
-#### 3.2.5. Archive Test Results
+#### 3.3.2. Archive Test Results
 After completion of each workflow, the results and test parameters of corresponding property will be stored as `json` format automatically under respective work directory named as `all_result.json`. You can also do this manually to update this file based on the latest run by:
 
 ```shell
@@ -505,7 +508,7 @@ This mode can also archive results to **NoSQL** database. We currently support t
   | dynamodb_table_name | String | apex_results | `Dynamodb` table name |
   | dynamodb_config | Dict | None | Complete parameter dictionary for [boto3 session](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/core/session.html#boto3.session.Session.resource) |
 
-#### 3.2.6. Results Visualization Report
+#### 3.3.3. Results Visualization Report
 Note that this mode **only** runs on computer with **interactive UI** frontend. 
 In this mode, APEX will create a comprehensive and interactive results visualization report according to `all_result.json` within indicated work directories. This is achieved through [Dash](https://dash.plotly.com) App. You can invoke the report app simply under target work directory by:
 ```shell
@@ -521,7 +524,7 @@ Once the report app is opened (or manully via http://127.0.0.1:8050/), users can
 - If the clipboard buttons do not function well, try to reload the page once.
 - Do not over-refresh the page as duplicate errors may occur. Should this occur, stop the server and re-execute the apex report command.
   <div style="text-align: center;">
-      <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 100%;">
+      <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 50%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
   </div>
 

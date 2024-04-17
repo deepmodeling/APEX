@@ -29,10 +29,15 @@ class VASP(Task):
 
         poscar = os.path.abspath(os.path.join(output_dir, "POSCAR"))
         pos_str = Structure.from_file(poscar)
-        ele_pos_list = sorted({ii.as_dict()["element"] for ii in pos_str.species})
+        ele_pos_list_tmp = [ii.as_dict()["element"] for ii in pos_str.species]
+
+        ele_pos_list = [ele_pos_list_tmp[0]]
+        for ii in range(1, len(ele_pos_list_tmp)):
+            if not ele_pos_list_tmp[ii] == ele_pos_list_tmp[ii - 1]:
+                ele_pos_list.append(ele_pos_list_tmp[ii])
 
         def write_potcar(ele_list, potcar_path):
-            with open(potcar_path,"w") as fp:
+            with open(potcar_path, "w") as fp:
                 for element in ele_list:
                     potcar_file = os.path.join(self.potcar_prefix, self.potcars[element])
                     with open(potcar_file,"r") as fc:

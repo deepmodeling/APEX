@@ -75,14 +75,15 @@ def pack_upload_dir(
     copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
     for ii in conf_dirs:
         build_conf_path = os.path.join(upload_dir, ii)
-        if os.path.exists(os.path.join(ii, "POSCAR")):
-            poscar = "POSCAR"
-        elif os.path.exists(os.path.join(ii, "STRU")):
-            poscar = "STRU"
-        copy_poscar_path = os.path.abspath(os.path.join(ii, poscar))
-        target_poscar_path = os.path.join(build_conf_path, poscar)
         os.makedirs(build_conf_path, exist_ok=True)
-        shutil.copy(copy_poscar_path, target_poscar_path)
+        copy_poscar_path = os.path.abspath(os.path.join(ii, "POSCAR"))
+        copy_stru_path = os.path.abspath(os.path.join(ii, "STRU"))
+        if os.path.isfile(copy_poscar_path):
+            target_poscar_path = os.path.join(build_conf_path, "POSCAR")
+            shutil.copy(copy_poscar_path, target_poscar_path)
+        if os.path.isfile(copy_stru_path):
+            target_stru_path = os.path.join(build_conf_path, "STRU")
+            shutil.copy(copy_stru_path, target_stru_path)
         if flow_type == 'props':
             copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
             target_relaxation_path = os.path.join(build_conf_path, "relaxation")
@@ -130,11 +131,13 @@ def submit(
         )
 
         flow_id = None
+        submit_only = wf_config.submit_only
         if flow_type == 'relax':
             flow_id = flow.submit_relax(
                 upload_path=tmp_dir,
                 download_path=work_dir,
                 relax_parameter=relax_param,
+                submit_only=submit_only,
                 labels=labels
             )
         elif flow_type == 'props':
@@ -142,6 +145,7 @@ def submit(
                 upload_path=tmp_dir,
                 download_path=work_dir,
                 props_parameter=props_param,
+                submit_only=submit_only,
                 labels=labels
             )
         elif flow_type == 'joint':
@@ -150,11 +154,14 @@ def submit(
                 download_path=work_dir,
                 props_parameter=props_param,
                 relax_parameter=relax_param,
+                submit_only=submit_only,
                 labels=labels
             )
-    # auto archive results
-    print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
-    archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)
+
+    if not submit_only:
+        # auto archive results
+        print(f'Archiving results of workflow (ID: {flow_id}) into {wf_config.database_type}...')
+        archive_workdir(relax_param, props_param, wf_config, work_dir, flow_type)
 
 
 def submit_workflow(
@@ -162,14 +169,18 @@ def submit_workflow(
     config_dict: dict,
     work_dirs: List[os.PathLike],
     indicated_flow_type: str,
+    submit_only=False,
     is_debug=False,
     labels=None
 ):
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
-    wf_config.config_dflow(wf_config.dflow_config_dict)
-    wf_config.config_bohrium(wf_config.bohrium_config_dict)
-    wf_config.config_s3(wf_config.dflow_s3_config_dict)
+    Config.config_dflow(wf_config.dflow_config_dict)
+    Config.config_bohrium(wf_config.bohrium_config_dict)
+    Config.config_s3(wf_config.dflow_s3_config_dict)
+    if submit_only:
+        print('Submit only mode activated, no auto-retrieval of results.')
+        wf_config.submit_only = True
     # set pre-defined dflow debug mode settings
     if is_debug:
         tmp_work_dir = tempfile.TemporaryDirectory()
@@ -258,6 +269,7 @@ def submit_from_args(
         config_file: os.PathLike,
         work_dirs,
         indicated_flow_type: str,
+        submit_only=False,
         is_debug=False,
 ):
     print('-------Submit Workflow Mode-------')
@@ -266,6 +278,7 @@ def submit_from_args(
         config_dict=load_config_file(config_file),
         work_dirs=work_dirs,
         indicated_flow_type=indicated_flow_type,
+        submit_only=submit_only,
         is_debug=is_debug,
     )
     print('Completed!')
