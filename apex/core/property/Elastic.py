@@ -12,7 +12,6 @@ from pymatgen.analysis.elasticity.stress import Stress
 from pymatgen.core.structure import Structure
 from pymatgen.core.tensors import Tensor
 from pymatgen.core.operations import SymmOp
-from pymatgen.core.lattice import Lattice
 from pymatgen.io.vasp import Incar, Kpoints
 
 from apex.core.calculator.lib import abacus_utils
