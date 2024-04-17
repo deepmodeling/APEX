@@ -26,8 +26,15 @@ class ABACUS(Task):
 
     def make_potential_files(self, output_dir):
         stru = os.path.abspath(os.path.join(output_dir, "STRU"))
+        poscar = os.path.abspath(os.path.join(output_dir, "POSCAR"))
         if not os.path.isfile(stru):
-            raise FileNotFoundError("No file %s" % stru)
+            logging.warning(msg='No STRU found...')
+            if os.path.isfile(poscar):
+                logging.info(msg=f'will convert {poscar} into STRU...')
+                sys = dpdata.System(poscar, fmt="vasp/poscar")
+                sys.to("abacus/stru", stru)
+            else:
+                raise FileNotFoundError("No file %s" % stru)
         stru_data = abacus_scf.get_abacus_STRU(stru)
         atom_names = stru_data["atom_names"]
         orb_files = stru_data["orb_files"]

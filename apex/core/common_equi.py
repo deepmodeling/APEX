@@ -2,6 +2,7 @@ import glob
 import os
 import shutil
 import logging
+import dpdata
 from monty.serialization import dumpfn
 from pymatgen.core.structure import Structure
 from apex.core.calculator.lib import abacus_utils
@@ -74,9 +75,20 @@ def make_equi(confs, inter_param, relax_param):
         poscar = os.path.abspath(os.path.join(ii, "POSCAR"))
         POSCAR = "POSCAR"
         if inter_param["type"] == "abacus":
-            shutil.copyfile(os.path.join(ii, "STRU"), os.path.join(ii, "STRU.bk"))
-            abacus_utils.modify_stru_path(os.path.join(ii, "STRU"), "pp_orb/")
-            poscar = os.path.abspath(os.path.join(ii, "STRU"))
+            stru = os.path.join(ii, "STRU")
+            # if no STRU found, try to convert POSCAR to STRU
+            if not os.path.isfile(stru):
+                logging.warning(msg='No STRU found...')
+                if os.path.isfile(poscar):
+                    logging.info(msg=f'will convert {poscar} into STRU...')
+                    sys = dpdata.System(poscar, fmt="vasp/poscar")
+                    sys.to("abacus/stru", stru)
+                else:
+                    raise FileNotFoundError("No file %s" % stru)
+
+            shutil.copyfile(stru, os.path.join(ii, "STRU.bk"))
+            abacus_utils.modify_stru_path(stru, "pp_orb/", inter_param)
+            poscar = os.path.abspath(stru)
             POSCAR = "STRU"
         if not os.path.exists(poscar):
             raise FileNotFoundError("no configuration for APEX")

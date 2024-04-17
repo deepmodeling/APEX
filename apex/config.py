@@ -64,6 +64,7 @@ class Config:
     abacus_image_name: str = None
     abacus_run_command: str = None
     is_bohrium_dflow: bool = False
+    submit_only: bool = False
 
     database_type: str = 'local'
     archive_method: str = 'sync'

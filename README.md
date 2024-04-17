@@ -110,6 +110,7 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
   | upload_python_package | Optional[List] | None | Additional python packages required in the container |
   | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
+  | submit_only | Bool | False | Submit workflow only without automatic result retrieving |
 
 * **Dflow config**
   | Key words | Data structure | Default | Description |
@@ -251,10 +252,11 @@ Below are three examples (for detailed explanations of each parameter, please re
   | vol_abs | Bool | False | Whether to treat vol_start and vol_end as absolute volume, default = False |
 
 ##### 3.1.2.2. Elastic
-  | Key words | Data structure | Example | Description |
-  | :------------ | ----- |-----------------------------------------------------| ------------------- |
-  | norm_deform | Float | 0.01 | The deformation in xx, yy, zz, defaul = 1e-2 |
-  | shear_deform | Float | 0.01 | The deformation in other directions, default = 1e-2 |
+  | Key words    | Data structure | Example | Description                                        |
+  |:-------------|----------------|---------|----------------------------------------------------|
+  | norm_deform  | Float          | 0.01    | The deformation in xx, yy, zz, defaul = 1e-2       |
+  | shear_deform | Float          | 0.01    | The deformation in other directions, default = 1e-2 |
+  | conventional | Bool           | False   | Whether adopt conventional cell for deformation    |
 
 ##### 3.1.2.3. Surface
   | Key words | Data structure | Example | Description |
@@ -390,7 +392,7 @@ On the other hand, the advantage of **Finite Displacement Method** lies in its v
 
 ### 3.2. Submission
 #### 3.2.1. Workflow Submission
-APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by users. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for help). Here is an example to submit a `joint` workflow:
+APEX will execute a specific dflow workflow upon each invocation of the command in the format: `apex submit [-h] [-c [CONFIG]] [-w WORK [WORK ...]] [-d] [-s] [-f {relax,props,joint}] parameter [parameter ...]`. The type of workflow and calculation method will be automatically determined by APEX based on the parameter file provided by users. Additionally, users can specify the **workflow type**, **configuration JSON file**, and **work directory** through an optional argument (Run `apex submit -h` for further help). Here is an example to submit a `joint` workflow:
 ```shell
 apex submit param_relax.json param_props.json -c ./global_bohrium.json -w 'dp_demo_0?' 'eam_demo'
 ```
