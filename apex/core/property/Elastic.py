@@ -10,6 +10,9 @@ from pymatgen.analysis.elasticity.elastic import ElasticTensor
 from pymatgen.analysis.elasticity.strain import DeformedStructureSet, Strain
 from pymatgen.analysis.elasticity.stress import Stress
 from pymatgen.core.structure import Structure
+from pymatgen.core.tensors import Tensor
+from pymatgen.core.operations import SymmOp
+from pymatgen.core.lattice import Lattice
 from pymatgen.io.vasp import Incar, Kpoints
 
 from apex.core.calculator.lib import abacus_utils
@@ -32,6 +35,8 @@ class Elastic(Property):
             self.shear_deform = parameter["shear_deform"]
             parameter.setdefault("conventional", False)
             self.conventional = parameter["conventional"]
+            parameter.setdefault("ieee", True)
+            self.ieee = parameter["ieee"]
         parameter.setdefault("cal_type", "relaxation")
         self.cal_type = parameter["cal_type"]
         default_cal_setting = {
@@ -140,6 +145,12 @@ class Elastic(Property):
                 st = StructureInfo(ss)
                 ss = st.conventional_structure
                 ss.to(os.path.join(path_to_work, "POSCAR.conv"), "POSCAR")
+
+            # convert to IEEE-standard
+            if self.ieee:
+                rot = Tensor.get_ieee_rotation(ss)
+                op = SymmOp.from_rotation_and_translation(rot)
+                ss.apply_operation(op)
 
             dfm_ss = DeformedStructureSet(
                 ss,
