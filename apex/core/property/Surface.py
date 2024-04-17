@@ -101,7 +101,7 @@ class Surface(Property):
 
         else:
             if refine:
-                logging.info("surface refine starts")
+                print("surface refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -174,7 +174,7 @@ class Surface(Property):
                         if os.path.exists(jj):
                             os.remove(jj)
                     task_list.append(output_task)
-                    logging.info(
+                    print(
                         "# %03d generate " % ii,
                         output_task,
                         " \t %d atoms" % len(all_slabs[ii].sites),
