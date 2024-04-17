@@ -199,7 +199,7 @@ def archive2db_from_json(config, json_file):
     if config.archive_key:
         data_id = config.archive_key
     else:
-        data_id = str(data_dict["work_path"])
+        data_id = data_dict['archive_key']
     data_dict['_id'] = data_id
 
     archive2db(config, data_dict, data_id)
