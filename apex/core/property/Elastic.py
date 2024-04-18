@@ -4,7 +4,7 @@ import os
 import re
 from shutil import copyfile
 
-import numpy as np
+import dpdata
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.elasticity.elastic import ElasticTensor
 from pymatgen.analysis.elasticity.strain import DeformedStructureSet, Strain
@@ -150,6 +150,7 @@ class Elastic(Property):
                 rot = Tensor.get_ieee_rotation(ss)
                 op = SymmOp.from_rotation_and_translation(rot)
                 ss.apply_operation(op)
+                ss.to(os.path.join(path_to_work, "POSCAR.ieee"), "POSCAR")
 
             dfm_ss = DeformedStructureSet(
                 ss,
@@ -177,9 +178,12 @@ class Elastic(Property):
                         os.remove(jj)
                 task_list.append(output_task)
                 dfm_ss.deformed_structures[ii].to("POSCAR", "POSCAR")
+                sys = dpdata.System("POSCAR", fmt='vasp/poscar')
+                os.remove("POSCAR")
+                sys.to("vasp/poscar", "poscar")
                 if self.inter_param["type"] == "abacus":
                     abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                    os.remove("POSCAR")
+                    #os.remove("POSCAR")
                 # record strain
                 df = Strain.from_deformation(dfm_ss.deformations[ii])
                 dumpfn(df.as_dict(), "strain.json", indent=4)
