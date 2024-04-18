@@ -179,8 +179,7 @@ class Elastic(Property):
                 task_list.append(output_task)
                 dfm_ss.deformed_structures[ii].to("POSCAR", "POSCAR")
                 sys = dpdata.System("POSCAR", fmt='vasp/poscar')
-                os.remove("POSCAR")
-                sys.to("vasp/poscar", "poscar")
+                sys.to("vasp/poscar", "POSCAR")
                 if self.inter_param["type"] == "abacus":
                     abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
                     #os.remove("POSCAR")
