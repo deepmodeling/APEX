@@ -469,7 +469,8 @@ def check_stru_fixed(struf, fixed):
     return True
 
 
-def modify_stru_path(strucf, tpath):
+def modify_stru_path(strucf, tpath, inter):
+    pp_dict = inter["potcars"]
     if tpath[-1] != "/":
         tpath += "/"
     with open(strucf) as f1:
@@ -491,7 +492,16 @@ def modify_stru_path(strucf, tpath):
                 break
             elif lines[j].strip() == "":
                 continue
-            ppfile = tpath + os.path.split(lines[j].split()[file_numb])[1]
+            try:
+                _ = lines[j].split()[file_numb]
+            except IndexError:
+                line_split = lines[j].split()
+                ele_name = line_split[0]
+                pp_name = pp_dict[ele_name]
+                line_split.append(pp_name)
+                lines[j] = " ".join(line_split) + "\n"
+            finally:
+                ppfile = tpath + os.path.split(lines[j].split()[file_numb])[1]
             tmp_line = ""
             for k in range(file_numb):
                 tmp_line += lines[j].split()[k] + " "

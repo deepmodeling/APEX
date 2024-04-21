@@ -245,6 +245,7 @@ class FlowGenerator:
             upload_path: Union[os.PathLike, str],
             download_path: Union[os.PathLike, str],
             relax_parameter: dict,
+            submit_only: bool = False,
             labels: Optional[dict] = None
     ) -> str:
         self.upload_path = upload_path
@@ -258,8 +259,10 @@ class FlowGenerator:
         self.workflow.add(relaxation)
         self.workflow.submit()
         self.dump_flow_id()
-        # Wait for and retrieve relaxation
-        self._monitor_relax()
+        if not submit_only:
+            # Wait for and retrieve relaxation
+            self._monitor_relax()
+
         return self.workflow.id
 
     @json2dict
@@ -268,6 +271,7 @@ class FlowGenerator:
             upload_path: Union[os.PathLike, str],
             download_path: Union[os.PathLike, str],
             props_parameter: dict,
+            submit_only: bool = False,
             labels: Optional[dict] = None
     ) -> str:
         self.upload_path = upload_path
@@ -281,8 +285,9 @@ class FlowGenerator:
         self.workflow.add(subprops_list)
         self.workflow.submit()
         self.dump_flow_id()
-        # wait for and retrieve sub-property flows
-        self._monitor_props(subprops_key_list)
+        if not submit_only:
+            # wait for and retrieve sub-property flows
+            self._monitor_props(subprops_key_list)
 
         return self.workflow.id
 
@@ -293,6 +298,7 @@ class FlowGenerator:
             download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             props_parameter: dict,
+            submit_only: bool = False,
             labels: Optional[dict] = None
     ) -> str:
         self.upload_path = upload_path
@@ -312,9 +318,10 @@ class FlowGenerator:
         self.workflow.add(subprops_list)
         self.workflow.submit()
         self.dump_flow_id()
-        # Wait for and retrieve relaxation
-        self._monitor_relax()
-        # Wait for and retrieve sub-property flows
-        self._monitor_props(subprops_key_list)
+        if not submit_only:
+            # Wait for and retrieve relaxation
+            self._monitor_relax()
+            # Wait for and retrieve sub-property flows
+            self._monitor_props(subprops_key_list)
 
         return self.workflow.id

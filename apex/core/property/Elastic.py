@@ -4,17 +4,21 @@ import os
 import re
 from shutil import copyfile
 
+import dpdata
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.elasticity.elastic import ElasticTensor
 from pymatgen.analysis.elasticity.strain import DeformedStructureSet, Strain
 from pymatgen.analysis.elasticity.stress import Stress
 from pymatgen.core.structure import Structure
+from pymatgen.core.tensors import Tensor
+from pymatgen.core.operations import SymmOp
 from pymatgen.io.vasp import Incar, Kpoints
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.calculator.lib import abacus_scf
 from apex.core.property.Property import Property
+from apex.core.structure import StructureInfo
 from apex.core.refine import make_refine
 from apex.core.calculator.lib.vasp_utils import incar_upper
 from dflow.python import upload_packages
@@ -28,6 +32,10 @@ class Elastic(Property):
             self.norm_deform = parameter["norm_deform"]
             parameter.setdefault("shear_deform", 1e-2)
             self.shear_deform = parameter["shear_deform"]
+            parameter.setdefault("conventional", False)
+            self.conventional = parameter["conventional"]
+            parameter.setdefault("ieee", True)
+            self.ieee = parameter["ieee"]
         parameter.setdefault("cal_type", "relaxation")
         self.cal_type = parameter["cal_type"]
         default_cal_setting = {
@@ -131,6 +139,19 @@ class Elastic(Property):
                 ss = abacus_utils.stru2Structure(equi_contcar)
             else:
                 ss = Structure.from_file(equi_contcar)
+            # find conventional cell
+            if self.conventional:
+                st = StructureInfo(ss)
+                ss = st.conventional_structure
+                ss.to(os.path.join(path_to_work, "POSCAR.conv"), "POSCAR")
+
+            # convert to IEEE-standard
+            if self.ieee:
+                rot = Tensor.get_ieee_rotation(ss)
+                op = SymmOp.from_rotation_and_translation(rot)
+                ss.apply_operation(op)
+                ss.to(os.path.join(path_to_work, "POSCAR.ieee"), "POSCAR")
+
             dfm_ss = DeformedStructureSet(
                 ss,
                 symmetry=False,
@@ -159,7 +180,7 @@ class Elastic(Property):
                 dfm_ss.deformed_structures[ii].to("POSCAR", "POSCAR")
                 if self.inter_param["type"] == "abacus":
                     abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                    os.remove("POSCAR")
+                    #os.remove("POSCAR")
                 # record strain
                 df = Strain.from_deformation(dfm_ss.deformations[ii])
                 dumpfn(df.as_dict(), "strain.json", indent=4)
