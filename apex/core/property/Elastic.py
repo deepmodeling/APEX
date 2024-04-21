@@ -34,7 +34,7 @@ class Elastic(Property):
             self.shear_deform = parameter["shear_deform"]
             parameter.setdefault("conventional", False)
             self.conventional = parameter["conventional"]
-            parameter.setdefault("ieee", True)
+            parameter.setdefault("ieee", False)
             self.ieee = parameter["ieee"]
         parameter.setdefault("cal_type", "relaxation")
         self.cal_type = parameter["cal_type"]
