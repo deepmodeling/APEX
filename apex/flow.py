@@ -77,7 +77,10 @@ class FlowGenerator:
             wf_status = self.workflow.query_status()
             if wf_status == 'Failed':
                 raise RuntimeError(f'Workflow failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
-            relax_post = step_info.get_step(name='relaxation-cal')[0]
+            try:
+                relax_post = step_info.get_step(name='relaxation-cal')[0]
+            except IndexError:
+                continue
             if relax_post['phase'] == 'Succeeded':
                 print(f'Relaxation finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
                 print('Retrieving completed tasks to local...')
