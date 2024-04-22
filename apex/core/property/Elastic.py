@@ -4,7 +4,6 @@ import os
 import re
 from shutil import copyfile
 
-import dpdata
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.elasticity.elastic import ElasticTensor
 from pymatgen.analysis.elasticity.strain import DeformedStructureSet, Strain
@@ -34,7 +33,7 @@ class Elastic(Property):
             self.shear_deform = parameter["shear_deform"]
             parameter.setdefault("conventional", False)
             self.conventional = parameter["conventional"]
-            parameter.setdefault("ieee", False)
+            parameter.setdefault("ieee", True)
             self.ieee = parameter["ieee"]
         parameter.setdefault("cal_type", "relaxation")
         self.cal_type = parameter["cal_type"]
