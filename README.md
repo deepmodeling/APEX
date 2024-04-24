@@ -109,7 +109,8 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | group_size | Int | 1 | Number of tasks per parallel run group |
   | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
   | upload_python_package | Optional[List] | None | Additional python packages required in the container |
-  | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
+  | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode | 
+  | flow_name | String | None | Specify name of workflow to be submitted (default: work path name) |
   | submit_only | Bool | False | Submit workflow only without automatic result retrieving |
 
 * **Dflow config**
