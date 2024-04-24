@@ -131,6 +131,7 @@ def submit(
         )
 
         flow_id = None
+        flow_name = wf_config.flow_name
         submit_only = wf_config.submit_only
         if flow_type == 'relax':
             flow_id = flow.submit_relax(
@@ -138,6 +139,7 @@ def submit(
                 download_path=work_dir,
                 relax_parameter=relax_param,
                 submit_only=submit_only,
+                name=flow_name,
                 labels=labels
             )
         elif flow_type == 'props':
@@ -146,6 +148,7 @@ def submit(
                 download_path=work_dir,
                 props_parameter=props_param,
                 submit_only=submit_only,
+                name=flow_name,
                 labels=labels
             )
         elif flow_type == 'joint':
@@ -155,6 +158,7 @@ def submit(
                 props_parameter=props_param,
                 relax_parameter=relax_param,
                 submit_only=submit_only,
+                name=flow_name,
                 labels=labels
             )
 
@@ -169,6 +173,7 @@ def submit_workflow(
     config_dict: dict,
     work_dirs: List[os.PathLike],
     indicated_flow_type: str,
+    flow_name: str = None,
     submit_only=False,
     is_debug=False,
     labels=None
@@ -187,6 +192,9 @@ def submit_workflow(
         config["mode"] = "debug"
         config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
         s3_config["storage_client"] = None
+
+    if flow_name:
+        wf_config.flow_name = flow_name
 
     # judge basic flow info from user indicated parameter files
     (run_op, calculator, flow_type,
@@ -269,6 +277,7 @@ def submit_from_args(
         config_file: os.PathLike,
         work_dirs,
         indicated_flow_type: str,
+        flow_name: str = None,
         submit_only=False,
         is_debug=False,
 ):
@@ -278,6 +287,7 @@ def submit_from_args(
         config_dict=load_config_file(config_file),
         work_dirs=work_dirs,
         indicated_flow_type=indicated_flow_type,
+        flow_name=flow_name,
         submit_only=submit_only,
         is_debug=is_debug,
     )

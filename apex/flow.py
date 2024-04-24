@@ -69,6 +69,23 @@ class FlowGenerator:
         self.executor = executor
         self.upload_python_packages = upload_python_packages
 
+    @staticmethod
+    def regulate_name(name):
+        """
+        Adjusts the given workflow name to conform to RFC 1123 subdomain requirements.
+        It ensures the name is lowercase, contains only alphanumeric characters and hyphens,
+        and starts and ends with an alphanumeric character.
+        """
+        # lowercase the name
+        name = name.lower()
+        # substitute invalid characters with hyphens
+        name = re.sub(r'[^a-z0-9\-]', '-', name)
+        # make sure the name starts and ends with an alphanumeric character
+        name = re.sub(r'^[^a-z0-9]+', '', name)
+        name = re.sub(r'[^a-z0-9]+$', '', name)
+
+        return name
+
     def _monitor_relax(self):
         print('Waiting for relaxation result...')
         while True:
@@ -249,12 +266,14 @@ class FlowGenerator:
             download_path: Union[os.PathLike, str],
             relax_parameter: dict,
             submit_only: bool = False,
+            name: Optional[str] = None,
             labels: Optional[dict] = None
     ) -> str:
         self.upload_path = upload_path
         self.download_path = download_path
         self.relax_param = relax_parameter
-        self.workflow = Workflow(name='relaxation', labels=labels)
+        flow_name = name if name else self.regulate_name(os.path.basename(download_path))
+        self.workflow = Workflow(name=flow_name, labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
@@ -275,12 +294,14 @@ class FlowGenerator:
             download_path: Union[os.PathLike, str],
             props_parameter: dict,
             submit_only: bool = False,
+            name: Optional[str] = None,
             labels: Optional[dict] = None
     ) -> str:
         self.upload_path = upload_path
         self.download_path = download_path
         self.props_param = props_parameter
-        self.workflow = Workflow(name='property', labels=labels)
+        flow_name = name if name else self.regulate_name(os.path.basename(download_path))
+        self.workflow = Workflow(name=flow_name, labels=labels)
         subprops_list, subprops_key_list = self._set_props_flow(
             input_work_dir=upload_artifact(upload_path),
             props_parameter=props_parameter
@@ -302,13 +323,15 @@ class FlowGenerator:
             relax_parameter: dict,
             props_parameter: dict,
             submit_only: bool = False,
+            name: Optional[str] = None,
             labels: Optional[dict] = None
     ) -> str:
         self.upload_path = upload_path
         self.download_path = download_path
         self.relax_param = relax_parameter
         self.props_param = props_parameter
-        self.workflow = Workflow(name='joint', labels=labels)
+        flow_name = name if name else self.regulate_name(os.path.basename(download_path))
+        self.workflow = Workflow(name=flow_name, labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(upload_path),
             relax_parameter=self.relax_param
