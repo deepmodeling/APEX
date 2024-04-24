@@ -273,6 +273,7 @@ class FlowGenerator:
         self.download_path = download_path
         self.relax_param = relax_parameter
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
+        flow_name += '-relax'
         self.workflow = Workflow(name=flow_name, labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(upload_path),
@@ -301,6 +302,7 @@ class FlowGenerator:
         self.download_path = download_path
         self.props_param = props_parameter
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
+        flow_name += '-props'
         self.workflow = Workflow(name=flow_name, labels=labels)
         subprops_list, subprops_key_list = self._set_props_flow(
             input_work_dir=upload_artifact(upload_path),
@@ -331,6 +333,7 @@ class FlowGenerator:
         self.relax_param = relax_parameter
         self.props_param = props_parameter
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
+        flow_name += '-joint'
         self.workflow = Workflow(name=flow_name, labels=labels)
         relaxation = self._set_relax_flow(
             input_work_dir=upload_artifact(upload_path),
