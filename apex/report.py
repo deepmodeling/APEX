@@ -50,6 +50,7 @@ def report_local(input_path_list):
         data_dict = loadfn(kk)
         try:
             workdir_id = data_dict.pop('work_path')
+            _ = data_dict.pop('archive_key')
         except KeyError:
             logging.warning(msg=f'Invalid json for result archive, will skip: {kk}')
             continue
