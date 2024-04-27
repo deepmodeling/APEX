@@ -41,6 +41,15 @@ def pack_upload_dir(
     os.chdir(work_dir)
     relax_confs = relax_param.get("structures", []) if relax_param else []
     prop_confs = prop_param.get("structures", []) if prop_param else []
+    relax_prefix = relax_param["interaction"].get("potcar_prefix", None) if relax_param else None
+    prop_prefix = prop_param["interaction"].get("potcar_prefix", None) if prop_param else None
+    include_dirs = set()
+    if relax_prefix:
+        relax_prefix_base = relax_prefix.split('/')[0]
+        include_dirs.add(relax_prefix_base)
+    if prop_prefix:
+        prop_prefix_base = prop_prefix.split('/')[0]
+        include_dirs.add(prop_prefix_base)
     confs = relax_confs + prop_confs
     assert len(confs) > 0, "No configuration path indicated!"
     conf_dirs = []
@@ -66,13 +75,11 @@ def pack_upload_dir(
                 backup_path(path_to_prop)
 
     """copy necessary files and directories into temp upload directory"""
-    # exclude 'all_result.json' from copy
-    conf_root_list = [conf.split('/')[0] for conf in conf_dirs]
-    conf_root_list = list(set(conf_root_list))
-    conf_root_list.sort()
-    ignore_copy_list = conf_root_list
-    ignore_copy_list.append("all_result.json")
-    copy_all_other_files(work_dir, upload_dir, ignore_list=ignore_copy_list)
+    copy_all_other_files(
+        work_dir, upload_dir,
+        exclude_files=["all_result.json"],
+        include_dirs=list(include_dirs)
+    )
     for ii in conf_dirs:
         build_conf_path = os.path.join(upload_dir, ii)
         os.makedirs(build_conf_path, exist_ok=True)
