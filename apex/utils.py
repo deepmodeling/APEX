@@ -42,13 +42,20 @@ def generate_random_string(length):
     return random_string
 
 
-def copy_all_other_files(src_dir, dst_dir, ignore_list=None) -> None:
+def copy_all_other_files(
+        src_dir,
+        dst_dir,
+        exclude_files=[],
+        include_dirs=[]
+) -> None:
     """
-    Copies all files from the source directory to the destination directory with some files excluded.
+    Copies all files from the source directory to the destination directory with some files excluded
+    and some directories included.
 
     :param src_dir: The path to the source directory.
     :param dst_dir: The path to the destination directory.
-    :ignore_list: files to be ignored.
+    :exclude_files: files to be ignored.
+    :include_dirs: directories to be included.
     """
     if not os.path.exists(src_dir):
         raise FileNotFoundError(f"Source directory {src_dir} does not exist.")
@@ -57,14 +64,12 @@ def copy_all_other_files(src_dir, dst_dir, ignore_list=None) -> None:
         os.makedirs(dst_dir)
 
     for item in os.listdir(src_dir):
-        if ignore_list and item in ignore_list:
-            continue
         src_path = os.path.join(src_dir, item)
         dst_path = os.path.join(dst_dir, item)
 
-        if os.path.isfile(src_path):
+        if os.path.isfile(src_path) and item not in exclude_files:
             shutil.copy2(src_path, dst_path)
-        elif os.path.isdir(src_path):
+        elif os.path.isdir(src_path) and item in include_dirs:
             shutil.copytree(src_path, dst_path)
 
 
