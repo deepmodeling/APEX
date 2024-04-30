@@ -4,6 +4,7 @@
 
 # APEX: Alloy Property EXplorer
 [![](https://img.shields.io/badge/release-1.2.0-blue.svg)](https://github.com/deepmodeling/APEX) [![](https://img.shields.io/badge/doi-arXiv:2404.17330-red.svg)](https://doi.org/10.48550/arXiv.2404.17330) 
+
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property calculations. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, ABACUS, and others.
 
 * Add a `retrieve` sub-command to allow results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
@@ -17,7 +18,7 @@
 
 ## How to cite APEX
 If you use APEX in your research, please cite the following paper:
-[![](https://img.shields.io/badge/doi-arXiv:2404.17330-blue.svg)](https://doi.org/10.48550/arXiv.2404.17330)
+[arXiv:2404.17330](https://doi.org/10.48550/arXiv.2404.17330)
 
 ## Table of Contents
 
