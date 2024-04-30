@@ -17,7 +17,7 @@
 
 ## How to cite APEX
 If you use APEX in your research, please cite the following paper:
-[![](https://img.shields.io/badge/{doi}-{arXiv:2404.17330}-{blue}.svg)]({https://doi.org/10.48550/arXiv.2404.17330})
+[![](https://img.shields.io/badge/doi-arXiv:2404.17330-blue.svg)](https://doi.org/10.48550/arXiv.2404.17330)
 
 ## Table of Contents
 
