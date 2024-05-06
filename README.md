@@ -25,7 +25,7 @@ APEX also provides a web-based [Bohrium App](https://app.bohrium.dp.tech/apex/) 
 ## How to cite APEX
 [![](https://img.shields.io/badge/DOI-10.48550/arXiv.2404.17330-red.svg)](https://doi.org/10.48550/arXiv.2404.17330)
 
-If you use APEX in your future research, please cite the following paper for general purpose: 
+If you use APEX in your research, please cite the following paper for general purpose: 
 
 > Z. Li, T. Wen, Y. Zhang, X. Liu, C. Zhang, A. S. L. S. Pattamatta, X. Gong, B. Ye, H.Wang, L. Zhang, D. J. Srolovitz, An extendable cloud-native alloy property explorer (2024). arXiv:2404.17330.
 
