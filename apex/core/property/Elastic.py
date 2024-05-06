@@ -4,7 +4,6 @@ import os
 import re
 from shutil import copyfile
 
-import dpdata
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.elasticity.elastic import ElasticTensor
 from pymatgen.analysis.elasticity.strain import DeformedStructureSet, Strain

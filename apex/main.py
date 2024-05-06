@@ -76,6 +76,11 @@ def parse_args():
         choices=['relax', 'props', 'joint'],
         help="(Optional) Specify type of workflow to submit: (relax | props | joint)"
     )
+    parser_submit.add_argument(
+        "-n", "--name",
+        type=str, default=None,
+        help="(Optional) Specify name of the workflow",
+    )
 
     ##########################################
     # Do single step locally
@@ -526,6 +531,7 @@ def main():
             config_file=args.config,
             work_dirs=args.work,
             indicated_flow_type=args.flow,
+            flow_name=args.name,
             submit_only=args.submit_only,
             is_debug=args.debug
         )

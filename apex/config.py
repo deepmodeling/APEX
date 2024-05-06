@@ -50,7 +50,7 @@ class Config:
     remote_password: str = None
     port: int = 22
 
-    # calculator config
+    # basic run config
     run_image_name: str = None
     run_command: str = None
     apex_image_name: str = "zhuoyli/apex_amd64"
@@ -63,8 +63,11 @@ class Config:
     vasp_run_command: str = None
     abacus_image_name: str = None
     abacus_run_command: str = None
+
+    # common APEX config
     is_bohrium_dflow: bool = False
     submit_only: bool = False
+    flow_name: str = None
 
     database_type: str = 'local'
     archive_method: str = 'sync'
