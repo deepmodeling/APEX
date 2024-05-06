@@ -3,9 +3,11 @@
 </div>
 
 # APEX: Alloy Property EXplorer
+[![](https://img.shields.io/badge/release-1.2.0-blue.svg)](https://github.com/deepmodeling/APEX)
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property calculations. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, ABACUS, and others.
 
+## v1.2 Main Features Update
 * Add a `retrieve` sub-command to allow results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
 * Support common **dflow operations** with terminal commands
 * Incorporate results `archive` function to both local paths and NoSQL database ([MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/))
@@ -15,9 +17,24 @@
 * Add four additional **ML** pair styles (`snap`, `gap`, `rann` and `mace`) and an extra `meam-spline` in LAMMPS interation type support
 * Modify the single-step run command from `test` to `do` for improved clarity and consistencey
 
+## APEX Bohrium App
+[![](https://img.shields.io/badge/APP-BohriumApp-orange.svg)](https://app.bohrium.dp.tech/apex/)
+
+APEX also provides a web-based [Bohrium App](https://app.bohrium.dp.tech/apex/) for rapid and easy alloy property calculations without intensive JSON configuration (Note: one will need a Bohrium account to access this service).
+
+## How to cite APEX
+[![](https://img.shields.io/badge/DOI-10.48550/arXiv.2404.17330-red.svg)](https://doi.org/10.48550/arXiv.2404.17330)
+
+If you use APEX in your research, please cite the following paper for general purpose: 
+
+> Z. Li, T. Wen, Y. Zhang, X. Liu, C. Zhang, A. S. L. S. Pattamatta, X. Gong, B. Ye, H.Wang, L. Zhang, D. J. Srolovitz, An extendable cloud-native alloy property explorer (2024). arXiv:2404.17330.
+
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer](#apex-alloy-property-explorer)
+  - [v1.2 Main Features Update](#v12-main-features-update)
+  - [APEX Bohrium App](#apex-bohrium-app)
+  - [How to cite APEX](#how-to-cite-apex)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
   - [2. Easy Install](#2-easy-install)
@@ -109,7 +126,8 @@ The instructions regarding global configuration, [dflow](https://github.com/deep
   | group_size | Int | 1 | Number of tasks per parallel run group |
   | pool_size | Int | 1 | For multi tasks per parallel group, the pool size of multiprocessing pool to handle each task (1 for serial, -1 for infinity) |
   | upload_python_package | Optional[List] | None | Additional python packages required in the container |
-  | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode |
+  | debug_pool_workers | Int | 1 | Pool size of parallel tasks running in the debug mode | 
+  | flow_name | String | None | Specify name of workflow to be submitted (default: work path name) |
   | submit_only | Bool | False | Submit workflow only without automatic result retrieving |
 
 * **Dflow config**
@@ -252,11 +270,12 @@ Below are three examples (for detailed explanations of each parameter, please re
   | vol_abs | Bool | False | Whether to treat vol_start and vol_end as absolute volume, default = False |
 
 ##### 3.1.2.2. Elastic
-  | Key words    | Data structure | Example | Description                                        |
-  |:-------------|----------------|---------|----------------------------------------------------|
-  | norm_deform  | Float          | 0.01    | The deformation in xx, yy, zz, defaul = 1e-2       |
-  | shear_deform | Float          | 0.01    | The deformation in other directions, default = 1e-2 |
-  | conventional | Bool           | False   | Whether adopt conventional cell for deformation    |
+  | Key words    | Data structure | Example | Description                                                                                                                       |
+  |:-------------|----------------|---------|-----------------------------------------------------------------------------------------------------------------------------------|
+  | norm_deform  | Float          | 0.01    | The deformation in xx, yy, zz, defaul = 1e-2                                                                                      |
+  | shear_deform | Float          | 0.01    | The deformation in other directions, default = 1e-2                                                                               |
+  | conventional | Bool           | False   | Whether adopt conventional cell for deformation                                                                                   |
+  | ieee         | Bool           | True    | Whether rotate relaxed structure into IEEE-standard format before deformation ([ref](https://ieeexplore.ieee.org/document/26560)) |
 
 ##### 3.1.2.3. Surface
   | Key words | Data structure | Example | Description |
