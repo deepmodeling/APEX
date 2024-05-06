@@ -12,6 +12,17 @@ task_format = "%s"
 log_iter_head = "task type: " + iter_format + " task: " + task_format + " process: "
 
 
+def round_format(nums, decimal_places):
+    return [f"{round(num, decimal_places):.{decimal_places}f}"
+             if isinstance(num, (int, float)) else num for num in nums]
+
+
+def round_2d_format(nums, decimal_places):
+    return [[f"{round(num, decimal_places):.{decimal_places}f}"
+             if isinstance(num, (int, float)) else num for num in row]
+            for row in nums]
+
+
 def make_iter_name(iter_index):
     return "task type:" + (iter_format)
 

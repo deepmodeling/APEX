@@ -1,24 +1,24 @@
 import glob
 import os
 from multiprocessing import Pool
+from monty.serialization import dumpfn
 
 from apex.core.calculator.calculator import make_calculator
 from apex.core.property.Elastic import Elastic
 from apex.core.property.EOS import EOS
 from apex.core.property.Gamma import Gamma
 from apex.core.property.Interstitial import Interstitial
-from apex.core.lib.utils import create_path
-from apex.core.lib.util import collect_task
-from apex.core.lib.dispatcher import make_submission
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
-from apex.utils import sepline, get_task_type
+from apex.core.lib.utils import create_path
+from apex.core.lib.util import collect_task
+from apex.core.lib.dispatcher import make_submission
+from apex.utils import sepline, get_task_type, handle_prop_suffix
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
-lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]
-
+lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 def make_property_instance(parameters, inter_param):
     """
@@ -40,41 +40,27 @@ def make_property_instance(parameters, inter_param):
     elif prop_type == "phonon":
         return Phonon(parameters, inter_param)
     else:
-        raise RuntimeError(f"unknown dflowautotest type {prop_type}")
+        raise RuntimeError(f"unknown APEX type {prop_type}")
 
 
 def make_property(confs, inter_param, property_list):
     # find all POSCARs and their name like mp-xxx
-    # ...
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     for ii in conf_dirs:
         sepline(ch=ii, screen=True)
         for jj in property_list:
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                do_refine = True
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                do_refine = False
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                do_refine = False
-                suffix = str(jj['suffix'])
-            else:
-                do_refine = False
-                suffix = "00"
             # generate working directory like mp-xxx/eos_00 if jj['type'] == 'eos'
             # handel the exception that the working directory exists
-            # ...
-
             # determine the suffix: from scratch or refine
-            # ...
 
             property_type = jj["type"]
             path_to_equi = os.path.join(ii, "relaxation", "relax_task")
@@ -82,9 +68,7 @@ def make_property(confs, inter_param, property_list):
 
             create_path(path_to_work)
 
-            inter_param_prop = inter_param
-            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
-                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+            inter_param_prop = jj.get("cal_setting", {}).get("overwrite_interaction", inter_param)
 
             prop = make_property_instance(jj, inter_param_prop)
             task_list = prop.make_confs(path_to_work, path_to_equi, do_refine)
@@ -93,12 +77,9 @@ def make_property(confs, inter_param, property_list):
                 poscar = os.path.join(kk, "POSCAR")
                 inter = make_calculator(inter_param_prop, poscar)
                 inter.make_potential_files(kk)
-                #dlog.debug(prop.task_type())  ### debug
                 inter.make_input_file(kk, prop.task_type(), prop.task_param())
 
-            prop.post_process(
-                task_list
-            )  # generate same KPOINTS file for elastic when doing VASP
+            prop.post_process(task_list)  # generate same KPOINTS file for elastic when doing DFT
 
 
 def worker(
@@ -114,10 +95,9 @@ def worker(
     run_tasks = [os.path.basename(ii) for ii in all_task]
     machine = mdata.get("machine", None)
     resources = mdata.get("resources", None)
-    command = mdata.get(f"{task_type}_run_command", None)
-    if not command:
-        command = mdata.get("run_command", None)
+    command = mdata.get(f"{task_type}_run_command", mdata.get("run_command", None))
     group_size = mdata.get("group_size", 1)
+
     submission = make_submission(
         mdata_machine=machine,
         mdata_resources=resources,
@@ -136,16 +116,14 @@ def worker(
 
 def run_property(confs, inter_param, property_list, mdata):
     # find all POSCARs and their name like mp-xxx
-    # ...
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
-    processes = len(property_list)
-    pool = Pool(processes=processes)
-    print("Submit job via %d processes" % processes)
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
+
     task_list = []
     work_path_list = []
     multiple_ret = []
@@ -154,16 +132,9 @@ def run_property(confs, inter_param, property_list, mdata):
         for jj in property_list:
             # determine the suffix: from scratch or refine
             # ...
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                suffix = str(jj['suffix'])
-            else:
-                suffix = "00"
 
             property_type = jj["type"]
             path_to_work = os.path.abspath(
@@ -175,9 +146,7 @@ def run_property(confs, inter_param, property_list, mdata):
             tmp_task_list.sort()
             task_list.append(tmp_task_list)
 
-            inter_param_prop = inter_param
-            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
-                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+            inter_param_prop = jj.get("cal_setting", {}).get("overwrite_interaction", inter_param)
 
             # dispatch the tasks
             # POSCAR here is useless
@@ -197,6 +166,9 @@ def run_property(confs, inter_param, property_list, mdata):
             if len(run_tasks) == 0:
                 continue
             else:
+                processes = len(run_tasks)
+                pool = Pool(processes=processes)
+                print("Submit job via %d processes" % processes)
                 ret = pool.apply_async(
                     worker,
                     (
@@ -208,7 +180,7 @@ def run_property(confs, inter_param, property_list, mdata):
                         mdata,
                         inter_type,
                         task_type
-                    ),
+                    )
                 )
                 multiple_ret.append(ret)
     pool.close()
@@ -222,38 +194,37 @@ def run_property(confs, inter_param, property_list, mdata):
 
 def post_property(confs, inter_param, property_list):
     # find all POSCARs and their name like mp-xxx
-    # ...
     #    task_list = []
     # conf_dirs = glob.glob(confs)
     # conf_dirs.sort()
     conf_dirs = []
     for conf in confs:
         conf_dirs.extend(glob.glob(conf))
+    conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
     for ii in conf_dirs:
         for jj in property_list:
             # determine the suffix: from scratch or refine
             # ...
-            if jj.get("skip", False):
+            do_refine, suffix = handle_prop_suffix(jj)
+            if not suffix:
                 continue
-            if "init_from_suffix" and "output_suffix" in jj:
-                suffix = jj["output_suffix"]
-            elif "reproduce" in jj and jj["reproduce"]:
-                suffix = "reprod"
-            elif 'suffix' in jj and jj['suffix']:
-                suffix = str(jj['suffix'])
-            else:
-                suffix = "00"
 
-            inter_param_prop = inter_param
-            if "cal_setting" in jj and "overwrite_interaction" in jj["cal_setting"]:
-                inter_param_prop = jj["cal_setting"]["overwrite_interaction"]
+            inter_param_prop = jj.get("cal_setting", {}).get("overwrite_interaction", inter_param)
 
             property_type = jj["type"]
             path_to_work = os.path.join(ii, property_type + "_" + suffix)
             prop = make_property_instance(jj, inter_param_prop)
+            param_json = os.path.join(path_to_work, "param.json")
+            param_dict = prop.parameter
+            param_dict.setdefault("skip", False) # default of "skip" is False
+            try:
+                param_dict.pop("skip")
+            except KeyError:
+                pass
+            dumpfn(param_dict, param_json)
             prop.compute(
                 os.path.join(path_to_work, "result.json"),
                 os.path.join(path_to_work, "result.out"),
-                path_to_work,
+                path_to_work
             )

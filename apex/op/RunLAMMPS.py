@@ -1,4 +1,4 @@
-import os, subprocess
+import os, subprocess, logging
 from pathlib import Path
 from dflow.python import (
     OP,
@@ -42,9 +42,9 @@ class RunLAMMPS(OP):
             cmd = op_in["run_command"]
         exit_code = subprocess.call(cmd, shell=True)
         if exit_code == 0:
-            print("Call Lammps command successfully!")
+            logging.info("Call Lammps command successfully!")
         else:
-            print("Call Lammps command failed with exit code:", exit_code)
+            logging.warning(f"Call Lammps command failed with exit code: {exit_code}")
 
         os.chdir(cwd)
         op_out = OPIO({

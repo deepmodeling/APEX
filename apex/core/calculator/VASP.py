@@ -6,7 +6,6 @@ from monty.serialization import dumpfn
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
-#from dpgen import dlog
 from apex.core.calculator.Task import Task
 from apex.core.calculator.lib import vasp_utils
 from apex.core.calculator.lib.vasp_utils import incar_upper
@@ -25,52 +24,38 @@ class VASP(Task):
         self.path_to_poscar = path_to_poscar
 
     def make_potential_files(self, output_dir):
-        potcar_not_link_list = ["vacancy", "interstitial"]
+        potcar_not_link_list = {"vacancy", "interstitial"}
         task_type = output_dir.split("/")[-2].split("_")[0]
 
-        ele_pot_list = [key for key in self.potcars.keys()]
         poscar = os.path.abspath(os.path.join(output_dir, "POSCAR"))
         pos_str = Structure.from_file(poscar)
-        ele_pos_list_tmp = list(ii.as_dict()["element"] for ii in pos_str.species)
+        ele_pos_list_tmp = [ii.as_dict()["element"] for ii in pos_str.species]
 
         ele_pos_list = [ele_pos_list_tmp[0]]
         for ii in range(1, len(ele_pos_list_tmp)):
             if not ele_pos_list_tmp[ii] == ele_pos_list_tmp[ii - 1]:
                 ele_pos_list.append(ele_pos_list_tmp[ii])
 
+        def write_potcar(ele_list, potcar_path):
+            with open(potcar_path, "w") as fp:
+                for element in ele_list:
+                    potcar_file = os.path.join(self.potcar_prefix, self.potcars[element])
+                    with open(potcar_file,"r") as fc:
+                        fp.write(fc.read())
+        
         if task_type in potcar_not_link_list:
-            with open(os.path.join(output_dir, "POTCAR"), "w") as fp:
-                for ii in ele_pos_list:
-                    for jj in ele_pot_list:
-                        if ii == jj:
-                            with open(
-                                os.path.join(self.potcar_prefix, self.potcars[jj]), "r"
-                            ) as fin:
-                                for line in fin:
-                                    print(line.strip("\n"), file=fp)
-
+            write_potcar(ele_pos_list, output_dir+"/POTCAR")
         else:
-            if not os.path.isfile(os.path.join(output_dir, "../POTCAR")):
-                with open(os.path.join(output_dir, "../POTCAR"), "w") as fp:
-                    for ii in ele_pos_list:
-                        for jj in ele_pot_list:
-                            if ii == jj:
-                                with open(
-                                    os.path.join(self.potcar_prefix, self.potcars[jj]),
-                                    "r",
-                                ) as fin:
-                                    for line in fin:
-                                        print(line.strip("\n"), file=fp)
-            cwd = os.getcwd()
-            os.chdir(output_dir)
-            if not os.path.islink("POTCAR"):
-                os.symlink("../POTCAR", "POTCAR")
-            elif not "../POTCAR" == os.readlink("POTCAR"):
-                os.remove("POTCAR")
-                os.symlink("../POTCAR", "POTCAR")
-            os.chdir(cwd)
-
-        dumpfn(self.inter, os.path.join(output_dir, "inter.json"), indent=4)
+            potcar_path = output_dir+"/../POTCAR"
+            if not os.path.exists(potcar_path):
+                write_potcar(ele_pos_list, potcar_path)
+            potcar_link = output_dir+"/POTCAR"
+            if not os.path.islink(potcar_link) or "../POTCAR" != os.readlink(potcar_path):
+                if os.path.exists(potcar_link):
+                    os.remove(potcar_link)
+                os.symlink("../POTCAR", potcar_link)
+            
+        dumpfn(self.inter, output_dir+"/inter.json", indent=4)
 
     def make_input_file(self, output_dir, task_type, task_param):
         sepline(ch=output_dir)
@@ -85,7 +70,7 @@ class VASP(Task):
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
 
-        # user input INCAR for apex calculation
+        # user input INCAR for APEX calculation
         if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
             incar_prop = os.path.abspath(cal_setting["input_prop"])
             incar = incar_upper(Incar.from_file(incar_prop))
@@ -95,20 +80,21 @@ class VASP(Task):
         else:
             if prop_type == "phonon":
                 approach = task_param.get("approach", "linear")
-                logging.info(f"No specification of INCAR for {prop_type} calculation, will auto generate")
+                logging.info(f"No specification of INCAR for {prop_type} calculation, will auto-generate")
                 if approach == "linear":
                     incar = incar_upper(Incar.from_str(
                         vasp_utils.make_vasp_phonon_dfpt_incar(
-                            ecut=650, ediff=0.0000001, npar=None, kpar=None
+                            ecut=650, ediff=0.0000001, npar=None, kpar=None, kspacing=0.1
                         )))
                 elif approach == "displacement":
                     incar = incar_upper(Incar.from_str(
                         vasp_utils.make_vasp_static_incar(
-                            ecut=650, ediff=0.0000001, npar=8, kpar=1
+                            ecut=650, ediff=0.0000001, ismear=0, sigma=0.01, npar=8, kpar=1, kspacing=0.1
                         )))
+
             else:
                 if not prop_type == "relaxation":
-                    logging.info(f"No specification of INCAR for {prop_type} calculation, will use INCAR for relaxation")
+                    logging.info(f"No specification of INCAR for {prop_type} calculation, will use INCAR in relaxation")
                 incar = incar_relax
 
             if cal_type == "relaxation":
@@ -191,61 +177,58 @@ class VASP(Task):
                 )
                 incar["KGAMMA"] = cal_setting["kgamma"]
 
-        try:
-            kspacing = incar.get("KSPACING")
-        except KeyError:
+        kspacing = incar.get("KSPACING", None)
+        if kspacing is None:
             raise RuntimeError("KSPACING must be given in INCAR")
+        kgamma = incar.get("KGAMMA", False)
 
-        if "KGAMMA" in incar:
-            kgamma = incar.get("KGAMMA")
-        else:
-            kgamma = False
+        self._write_incar_and_kpoints(incar, output_dir, kspacing, kgamma)
 
+    def _write_incar_and_kpoints(self, incar, output_dir, kspacing, kgamma):
         incar.write_file(os.path.join(output_dir, "../INCAR"))
-        cwd = os.getcwd()
-        os.chdir(output_dir)
-        if not os.path.islink("INCAR"):
-            os.symlink("../INCAR", "INCAR")
-        elif not "../INCAR" == os.readlink("INCAR"):
-            os.remove("INCAR")
-            os.symlink("../INCAR", "INCAR")
-        os.chdir(cwd)
+        self._link_file("../INCAR", os.path.join(output_dir, "INCAR"))
         ret = vasp_utils.make_kspacing_kpoints(self.path_to_poscar, kspacing, kgamma)
-        kp = Kpoints.from_str(ret)
-        kp.write_file(os.path.join(output_dir, "KPOINTS"))
+        Kpoints.from_str(ret).write_file(os.path.join(output_dir, "KPOINTS"))
+    
+    def _link_file(self, target, link_name):
+        if not os.path.islink(link_name):
+            os.symlink(target, link_name)
+        elif os.readlink(link_name) != target:
+            os.remove(link_name)
+            os.symlink(target, link_name)
 
     def compute(self, output_dir):
         outcar = os.path.join(output_dir, "OUTCAR")
         if not os.path.isfile(outcar):
             logging.warning("cannot find OUTCAR in " + output_dir + " skip")
             return None
-        else:
-            ls = LabeledSystem(outcar)
-            stress = []
-            with open(outcar, "r") as fin:
-                lines = fin.read().split("\n")
-            for line in lines:
-                if "in kB" in line:
-                    stress_xx = float(line.split()[2])
-                    stress_yy = float(line.split()[3])
-                    stress_zz = float(line.split()[4])
-                    stress_xy = float(line.split()[5])
-                    stress_yz = float(line.split()[6])
-                    stress_zx = float(line.split()[7])
-                    stress.append([])
-                    stress[-1].append([stress_xx, stress_xy, stress_zx])
-                    stress[-1].append([stress_xy, stress_yy, stress_yz])
-                    stress[-1].append([stress_zx, stress_yz, stress_zz])
+        
+        stress = []
+        with open(outcar, "r") as fin:
+            lines = fin.read().split("\n")
+        for line in lines:
+            if "in kB" in line:
+                stress_xx = float(line.split()[2])
+                stress_yy = float(line.split()[3])
+                stress_zz = float(line.split()[4])
+                stress_xy = float(line.split()[5])
+                stress_yz = float(line.split()[6])
+                stress_zx = float(line.split()[7])
+                stress.append([])
+                stress[-1].append([stress_xx, stress_xy, stress_zx])
+                stress[-1].append([stress_xy, stress_yy, stress_yz])
+                stress[-1].append([stress_zx, stress_yz, stress_zz])
 
-            outcar_dict = ls.as_dict()
-            outcar_dict["data"]["stress"] = {
-                "@module": "numpy",
-                "@class": "array",
-                "dtype": "float64",
-                "data": stress,
-            }
+        ls = LabeledSystem(outcar)
+        outcar_dict = ls.as_dict()
+        outcar_dict["data"]["stress"] = {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": stress,
+        }
 
-            return outcar_dict
+        return outcar_dict
 
     def forward_files(self, property_type="relaxation"):
         return ["INCAR", "POSCAR", "KPOINTS", "POTCAR"]
@@ -260,5 +243,8 @@ class VASP(Task):
             return ["INCAR", "POTCAR"]
 
     def backward_files(self, property_type="relaxation"):
-        return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
+        if property_type == "phonon":
+            return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"]
+        else:
+            return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
 

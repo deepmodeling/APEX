@@ -211,7 +211,7 @@ class TestABACUS(unittest.TestCase):
                           property["supercell"][1] * \
                           property["supercell"][2]
         natom1 = np.array(stru_data["atom_numbs"]).sum() * supercell_scale
-        for ii in glob.glob(os.path.join(work_path, "task.*")):
+        for ii in glob.glob(os.path.join(work_path, "task.00000[1-9]")):
             self.assertTrue(os.path.isfile(os.path.join(ii, "STRU")))
             stru_data = abacus_scf.get_abacus_STRU(
                 os.path.realpath(os.path.join(ii, "STRU"))

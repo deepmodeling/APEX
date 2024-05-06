@@ -108,22 +108,22 @@ class Property(ABC):
         # os.chdir(cwd)
 
     @abstractmethod
-    def _compute_lower(self, output_file, all_tasks, all_res):
+    def _compute_lower(self, output_file, all_tasks, all_res) -> [dict, str]:
         """
-        Compute the apex.
+        Compute the post.
 
         Parameters
         ----------
         output_file:
-            The file to output the apex
+            The file to output the props
         all_tasks : list of str
             The list of directories to the tasks
         all_res : list of str
             The list of results
         Returns:
         -------
-        res_data : dist
-            The dict storing the result of the apex
+        res_data : dict
+            The dict storing the result of the props
         ptr_data : str
             The result printed in string format
         """

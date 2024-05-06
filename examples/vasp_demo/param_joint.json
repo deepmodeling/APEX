@@ -1,0 +1,91 @@
+{
+    "structures":    ["confs/std-*"],
+    	"interaction": {
+        "type":          "vasp",
+        "incar":         "vasp_input/INCAR",
+        "potcar_prefix": "vasp_input",
+        "potcars":      {"Mo": "POTCAR.Mo"}
+    },
+    "relaxation": {
+        "cal_type":      "relaxation",
+        "cal_setting":   {"relax_pos":       true,
+                          "relax_shape":     true,
+                          "relax_vol":       true,
+                          "ediff":           1e-6,
+                          "ediffg":         -0.01,
+                          "encut":           400,
+                          "kspacing":        0.2,
+                          "kgamma":          false}
+        },
+    "properties": [
+        {
+         "type":         "eos",
+         "skip":         true,
+         "vol_start":    0.6,
+         "vol_end":      1.4,
+         "vol_step":     0.4
+        },
+        {
+         "type":         "eos",
+         "skip":         false,
+	 "suffix":  	 "4_step",
+         "vol_start":    0.6,
+         "vol_end":      1.4,
+         "vol_step":     0.2
+        },
+        {
+         "type":         "elastic",
+         "norm_deform":  1e-2,
+         "shear_deform": 1e-2
+        },
+	{
+         "type":           "surface",
+         "skip":           true,
+         "min_slab_size":  10,
+         "min_vacuum_size":11,
+         "max_miller":     2,
+         "cal_type":       "static"
+        },
+        {
+         "type":             "vacancy",
+         "skip":             true,
+         "supercell":        [2, 2, 2]
+        },
+	{
+         "type":         "interstitial",
+         "skip":         true,
+         "supercell":   [1, 1, 1],
+         "insert_ele":  ["Mo"]
+        },
+	{
+	  "type":            "gamma",
+	  "skip":            true,
+      "plane_miller":    [1,2,3],
+      "slip_direction":  [1,1,-1],
+	  "hcp": {
+        	"plane_miller":    [0,0,0,1],
+        	"slip_direction":  [2,-1,-1,0],
+            "slip_length": 1
+		},
+      "supercell_size":   [1,1,20],
+      "vacuum_size": 15,
+	  "add_fix": ["true","true","false"],
+      "n_steps":         20
+	},
+        {
+         "type":         "phonon",
+	 "skip":         true,
+	 "suffix":       "linear",
+         "BAND": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
+         "supercell_size":[2,2,2]
+    },
+        {
+         "type":         "phonon",
+	 "skip":         true,
+	 "suffix":       "displacement",
+	 "approach":     "displacement",
+         "BAND": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
+         "supercell_size":[2,2,2]
+    }
+        ]
+}

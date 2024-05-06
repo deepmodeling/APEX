@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import VacancyGenerator
@@ -27,61 +26,31 @@ class Vacancy(Property):
                 parameter["supercell"] = parameter.get("supercell", default_supercell)
                 self.supercell = parameter["supercell"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": True,
                 "relax_vol": True,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
         else:
             parameter["cal_type"] = "static"
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": False,
                 "relax_shape": False,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
+        self.cal_type = parameter["cal_type"]
+        parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
+        for key in default_cal_setting:
+            parameter["cal_setting"].setdefault(key, default_cal_setting[key])
+        self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
         self.inter_param = inter_param if inter_param != None else {"type": "vasp"}
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            #dlog.warning("%s already exists" % path_to_work)
             logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
@@ -93,11 +62,9 @@ class Vacancy(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
-            assert struct_output_name in struct_init_name_list
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
+            assert struct_output_name in struct_init_name_list, f"{struct_output_name} not in initial configurations"
             path_to_equi = os.path.abspath(
                 os.path.join(
                     self.parameter["start_confs_path"],
@@ -122,7 +89,6 @@ class Vacancy(Property):
                 path_to_work,
                 self.parameter.get("reprod_last_frame", False),
             )
-            os.chdir(cwd)
 
         else:
             if refine:
@@ -145,15 +111,12 @@ class Vacancy(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("supercell.json"):
-                        os.remove("supercell.json")
-                    if os.path.islink("supercell.json"):
+                    if os.path.exists("supercell.json"):
                         os.remove("supercell.json")
                     os.symlink(
                         os.path.relpath(os.path.join(init_from_task, "supercell.json")),
                         "supercell.json",
                     )
-                os.chdir(cwd)
             else:
                 if self.inter_param["type"] == "abacus":
                     CONTCAR = abacus_utils.final_stru(path_to_equi)
@@ -181,9 +144,7 @@ class Vacancy(Property):
 
                 print("gen vacancy with supercell " + str(self.supercell))
                 os.chdir(path_to_work)
-                if os.path.isfile(POSCAR):
-                    os.remove(POSCAR)
-                if os.path.islink(POSCAR):
+                if os.path.exists(POSCAR):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
                 #           task_poscar = os.path.join(output, 'POSCAR')
@@ -209,7 +170,7 @@ class Vacancy(Property):
                         os.remove("POSCAR")
                     # np.savetxt('supercell.out', self.supercell, fmt='%d')
                     dumpfn(self.supercell, "supercell.json")
-                os.chdir(cwd)
+        os.chdir(cwd)
         return task_list
 
     def post_process(self, task_list):
@@ -228,19 +189,18 @@ class Vacancy(Property):
 
         if not self.reprod:
             ptr_data += "Structure: \tVac_E(eV)  E(eV) equi_E(eV)\n"
-            idid = -1
-            for ii in all_tasks:
-                idid += 1
+            equi_path = os.path.abspath(
+                os.path.join(
+                    os.path.dirname(output_file), "../relaxation/relax_task"
+                )
+            )
+            equi_result = loadfn(os.path.join(equi_path, "result.json"))
+            equi_epa = equi_result["energies"][-1] / sum(equi_result["atom_numbs"])
+
+            for idid, ii in enumerate(all_tasks):
                 structure_dir = os.path.basename(ii)
                 task_result = loadfn(all_res[idid])
-                natoms = task_result["atom_numbs"][0]
-                equi_path = os.path.abspath(
-                    os.path.join(
-                        os.path.dirname(output_file), "../relaxation/relax_task"
-                    )
-                )
-                equi_result = loadfn(os.path.join(equi_path, "result.json"))
-                equi_epa = equi_result["energies"][-1] / equi_result["atom_numbs"][0]
+                natoms = sum(task_result["atom_numbs"])                
                 evac = task_result["energies"][-1] - equi_epa * natoms
 
                 supercell_index = loadfn(os.path.join(ii, "supercell.json"))

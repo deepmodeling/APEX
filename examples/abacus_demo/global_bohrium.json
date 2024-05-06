@@ -4,7 +4,7 @@
     "email": "YOUR_EMAIL",
     "password": "YOUR_PASSWD",
     "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.1.0",
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
     "abacus_image_name":"registry.dp.tech/dptech/abacus:3.2.3",
     "abacus_run_command":"mpirun -n 32 abacus",
     "batch_type": "Bohrium",

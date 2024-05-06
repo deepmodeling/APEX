@@ -19,17 +19,12 @@ def make_repro(
     )
     init_data_path_list = glob.glob(init_data_path)
     init_data_path_list.sort()
-    cwd = os.getcwd()
-    struct_init_name_list = []
-    for ii in init_data_path_list:
-        struct_init_name_list.append(ii.split("/")[-2])
+    struct_init_name_list = [ii.split("/")[-2] for ii in init_data_path_list]
     struct_output_name = path_to_work.split("/")[-2]
 
-    assert struct_output_name in struct_init_name_list
+    assert struct_output_name in struct_init_name_list, "Output structure name not found in initial structure list"
 
-    for idx, ii in enumerate(struct_init_name_list):
-        if ii == struct_output_name:
-            label = idx
+    label = struct_init_name_list.index(struct_output_name)
 
     init_data_path_todo = init_data_path_list[label]
 
@@ -41,22 +36,19 @@ def make_repro(
     ), "There is no task in previous calculations path"
     init_data_task_todo.sort()
 
-    task_list = []
-    task_num = 0
-
+    cwd = os.getcwd()
     if property_type == "interstitial":
         if os.path.exists(os.path.join(path_to_work, "element.out")):
             os.remove(os.path.join(path_to_work, "element.out"))
         fout_element = open(os.path.join(path_to_work, "element.out"), "a+")
         fin_element = open(os.path.join(init_data_path_todo, "element.out"), "r")
 
+    task_list = []
+    task_num = 0
     for ii in init_data_task_todo:
         # get frame number
         task_result = loadfn(os.path.join(ii, "result_task.json"))
-        if reprod_last_frame:
-            nframe = 1
-        else:
-            nframe = len(task_result["energies"])
+        nframe = 1 if reprod_last_frame else len(task_result["energies"])
         if property_type == "interstitial":
             insert_element = fin_element.readline().split()[0]
         for jj in range(nframe):
@@ -109,18 +101,12 @@ def post_repro(
     init_data_path_list = glob.glob(init_data_path)
     init_data_path_list.sort()
     # cwd = os.getcwd()
-    struct_init_name_list = []
-    for ii in init_data_path_list:
-        struct_init_name_list.append(ii.split("/")[-2])
+    struct_init_name_list = [ii.split("/")[-2] for ii in init_data_path_list]
+    
+    assert struct_output_name in struct_init_name_list, "Output structure name not found in initial structure list"
 
-    assert struct_output_name in struct_init_name_list
-
-    for idx, ii in enumerate(struct_init_name_list):
-        if ii == struct_output_name:
-            label = idx
-
+    label = struct_init_name_list.index(struct_output_name)
     init_data_path_todo = init_data_path_list[label]
-
     init_data_task_todo = glob.glob(
         os.path.join(init_data_path_todo, "task.[0-9]*[0-9]")
     )
@@ -136,23 +122,17 @@ def post_repro(
 
     for ii in init_data_task_todo:
         init_task_result = loadfn(os.path.join(ii, "result_task.json"))
-        if reprod_last_frame:
-            nframe = 1
-        else:
-            nframe = len(init_task_result["energies"])
+        nframe = 1 if reprod_last_frame else len(init_task_result["energies"])
         # idid += nframe
         natoms = np.sum(init_task_result["atom_numbs"])
-        if reprod_last_frame:
-            init_ener = init_task_result["energies"][-1:]
-        else:
-            init_ener = init_task_result["energies"]
+        init_ener = init_task_result["energies"][-nframe:]
         init_ener_tot.extend(list(init_ener))
         output_ener = []
         for jj in range(idid, idid + nframe):
             output_task_result = loadfn(os.path.join(all_tasks[jj], "result_task.json"))
+            output_ener_tot.extend(output_task_result["energies"])
             output_epa = output_task_result["energies"] / natoms
             output_ener.append(output_epa)
-            output_ener_tot.extend(output_task_result["energies"])
 
             init_epa = init_ener[jj - idid] / natoms
             ptr_data += "%s %7.3f  %7.3f  %7.3f\n" % (

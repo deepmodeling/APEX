@@ -216,6 +216,10 @@ class TestABACUS(unittest.TestCase):
             os.path.join(self.source_path, "running_cell-relax.log"),
             os.path.join(self.equi_path, "OUT.ABACUS", "running_cell-relax.log"),
         )
+        shutil.copy(
+            os.path.join(self.source_path, "STRU_ION_D"),
+            os.path.join(self.equi_path, "OUT.ABACUS", "STRU_ION_D"),
+        )
         ret = self.ABACUS.compute(self.equi_path)
         ret_ref = loadfn(os.path.join(self.source_path, "cell-relax.json"))
 

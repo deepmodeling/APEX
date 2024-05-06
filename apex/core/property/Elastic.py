@@ -9,12 +9,15 @@ from pymatgen.analysis.elasticity.elastic import ElasticTensor
 from pymatgen.analysis.elasticity.strain import DeformedStructureSet, Strain
 from pymatgen.analysis.elasticity.stress import Stress
 from pymatgen.core.structure import Structure
+from pymatgen.core.tensors import Tensor
+from pymatgen.core.operations import SymmOp
 from pymatgen.io.vasp import Incar, Kpoints
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.calculator.lib import abacus_scf
 from apex.core.property.Property import Property
+from apex.core.structure import StructureInfo
 from apex.core.refine import make_refine
 from apex.core.calculator.lib.vasp_utils import incar_upper
 from dflow.python import upload_packages
@@ -24,41 +27,35 @@ upload_packages.append(__file__)
 class Elastic(Property):
     def __init__(self, parameter, inter_param=None):
         if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
-            default_norm_def = 1e-2
-            default_shear_def = 1e-2
-            parameter["norm_deform"] = parameter.get("norm_deform", default_norm_def)
+            parameter.setdefault("norm_deform", 1e-2)
             self.norm_deform = parameter["norm_deform"]
-            parameter["shear_deform"] = parameter.get("shear_deform", default_shear_def)
+            parameter.setdefault("shear_deform", 1e-2)
             self.shear_deform = parameter["shear_deform"]
-        parameter["cal_type"] = parameter.get("cal_type", "relaxation")
+            parameter.setdefault("conventional", False)
+            self.conventional = parameter["conventional"]
+            parameter.setdefault("ieee", True)
+            self.ieee = parameter["ieee"]
+        parameter.setdefault("cal_type", "relaxation")
         self.cal_type = parameter["cal_type"]
         default_cal_setting = {
             "relax_pos": True,
             "relax_shape": False,
             "relax_vol": False,
         }
-        if "cal_setting" not in parameter:
-            parameter["cal_setting"] = default_cal_setting
-        else:
-            if "relax_pos" not in parameter["cal_setting"]:
-                parameter["cal_setting"]["relax_pos"] = default_cal_setting["relax_pos"]
-            if "relax_shape" not in parameter["cal_setting"]:
-                parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                    "relax_shape"
-                ]
-            if "relax_vol" not in parameter["cal_setting"]:
-                parameter["cal_setting"]["relax_vol"] = default_cal_setting["relax_vol"]
+        parameter.setdefault("cal_setting", {})
+        parameter["cal_setting"].setdefault("relax_pos", True)
+        parameter["cal_setting"].setdefault("relax_shape", False)
+        parameter["cal_setting"].setdefault("relax_vol", False)
         self.cal_setting = parameter["cal_setting"]
         # parameter['reproduce'] = False
         # self.reprod = parameter['reproduce']
         self.parameter = parameter
-        self.inter_param = inter_param if inter_param != None else {"type": "vasp"}
+        self.inter_param = inter_param or {"type": "vasp"}
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
             logging.warning("%s already exists" % path_to_work)
-            #dlog.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
@@ -69,10 +66,8 @@ class Elastic(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
             assert struct_output_name in struct_init_name_list
             path_to_equi = os.path.abspath(
                 os.path.join(
@@ -86,27 +81,15 @@ class Elastic(Property):
         task_list = []
         cwd = os.getcwd()
 
-        if self.inter_param["type"] == "abacus":
-            CONTCAR = abacus_utils.final_stru(path_to_equi)
-            POSCAR = "STRU"
-        else:
-            CONTCAR = "CONTCAR"
-            POSCAR = "POSCAR"
-
+        CONTCAR = "CONTCAR" if self.inter_param["type"] != "abacus" else abacus_utils.final_stru(path_to_equi)
+        POSCAR = "POSCAR" if self.inter_param["type"] != "abacus" else "STRU"
         equi_contcar = os.path.join(path_to_equi, CONTCAR)
 
         os.chdir(path_to_work)
-        if os.path.isfile(POSCAR):
-            os.remove(POSCAR)
-        if os.path.islink(POSCAR):
+        if os.path.exists(POSCAR) or os.path.islink(POSCAR):
             os.remove(POSCAR)
         os.symlink(os.path.relpath(equi_contcar), POSCAR)
-        #           task_poscar = os.path.join(output, 'POSCAR')
-
         # stress, deal with unsupported stress in dpdata
-        # with open(os.path.join(path_to_equi, 'result.json')) as fin:
-        #    equi_result = json.load(fin)
-        # equi_stress = np.array(equi_result['stress']['data'])[-1]
         equi_result = loadfn(os.path.join(path_to_equi, "result.json"))
         equi_stress = equi_result["stress"][-1]
         dumpfn(equi_stress, "equi.stress.json", indent=4)
@@ -142,7 +125,6 @@ class Elastic(Property):
                 #    os.path.join((re.sub(self.parameter['output_suffix'], self.parameter['init_from_suffix'], ii)),
                 #                 'strain.json')),
                 #           'strain.json')
-            os.chdir(cwd)
         else:
             norm_def = self.norm_deform
             shear_def = self.shear_deform
@@ -156,6 +138,19 @@ class Elastic(Property):
                 ss = abacus_utils.stru2Structure(equi_contcar)
             else:
                 ss = Structure.from_file(equi_contcar)
+            # find conventional cell
+            if self.conventional:
+                st = StructureInfo(ss)
+                ss = st.conventional_structure
+                ss.to(os.path.join(path_to_work, "POSCAR.conv"), "POSCAR")
+
+            # convert to IEEE-standard
+            if self.ieee:
+                rot = Tensor.get_ieee_rotation(ss)
+                op = SymmOp.from_rotation_and_translation(rot)
+                ss.apply_operation(op)
+                ss.to(os.path.join(path_to_work, "POSCAR.ieee"), "POSCAR")
+
             dfm_ss = DeformedStructureSet(
                 ss,
                 symmetry=False,
@@ -184,11 +179,11 @@ class Elastic(Property):
                 dfm_ss.deformed_structures[ii].to("POSCAR", "POSCAR")
                 if self.inter_param["type"] == "abacus":
                     abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                    os.remove("POSCAR")
+                    #os.remove("POSCAR")
                 # record strain
                 df = Strain.from_deformation(dfm_ss.deformations[ii])
                 dumpfn(df.as_dict(), "strain.json", indent=4)
-            os.chdir(cwd)
+        os.chdir(cwd)
         return task_list
 
     def post_process(self, task_list):
@@ -224,7 +219,7 @@ class Elastic(Property):
                 kspacing = incar.get("KSPACING")
                 kgamma = incar.get("KGAMMA", False)
                 ret = vasp_utils.make_kspacing_kpoints(poscar_start, kspacing, kgamma)
-                kp = Kpoints.from_string(ret)
+                kp = Kpoints.from_str(ret)
                 if os.path.isfile("KPOINTS"):
                     os.remove("KPOINTS")
                 kp.write_file("KPOINTS")
@@ -234,9 +229,7 @@ class Elastic(Property):
                 os.path.join(task_list[0], "..", KPOINTS)
             )
             for ii in task_list:
-                if os.path.isfile(os.path.join(ii, KPOINTS)):
-                    os.remove(os.path.join(ii, KPOINTS))
-                if os.path.islink(os.path.join(ii, KPOINTS)):
+                if os.path.exists(os.path.join(ii, KPOINTS)):
                     os.remove(os.path.join(ii, KPOINTS))
                 os.chdir(ii)
                 os.symlink(os.path.relpath(kpoints_universal), KPOINTS)
@@ -253,6 +246,7 @@ class Elastic(Property):
         output_file = os.path.abspath(output_file)
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
+
         equi_stress = Stress(
             loadfn(os.path.join(os.path.dirname(output_file), "equi.stress.json"))
         )
@@ -262,9 +256,6 @@ class Elastic(Property):
         for ii in all_tasks:
             strain = loadfn(os.path.join(ii, "strain.json"))
             # stress, deal with unsupported stress in dpdata
-            # with open(os.path.join(ii, 'result_task.json')) as fin:
-            #    task_result = json.load(fin)
-            # stress = np.array(task_result['stress']['data'])[-1]
             stress = loadfn(os.path.join(ii, "result_task.json"))["stress"][-1]
             lst_strain.append(strain)
             lst_stress.append(Stress(stress * -1000))
@@ -274,9 +265,11 @@ class Elastic(Property):
         )
         res_data["elastic_tensor"] = []
         for ii in range(6):
+            c_ii = []
             for jj in range(6):
-                res_data["elastic_tensor"].append(et.voigt[ii][jj] / 1e4)
+                c_ii.append(et.voigt[ii][jj] / 1e4)
                 ptr_data += "%7.2f " % (et.voigt[ii][jj] / 1e4)
+            res_data["elastic_tensor"].append(c_ii)
             ptr_data += "\n"
 
         BV = et.k_voigt / 1e4

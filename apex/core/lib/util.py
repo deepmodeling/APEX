@@ -4,13 +4,11 @@ import re
 import numpy as np
 import requests
 
-#from dpgen import dlog
 from apex.core.calculator.lib import abacus_utils, lammps_utils, vasp_utils
+from apex.core.calculator import LAMMPS_INTER_TYPE as lammps_task_type
 from apex.core.lib.utils import cmd_append_log
 from dflow.python import upload_packages
 upload_packages.append(__file__)
-
-lammps_task_type = ["deepmd", "meam", "eam_fs", "eam_alloy"]  # 06/13 revised
 
 
 def voigt_to_stress(inpt):

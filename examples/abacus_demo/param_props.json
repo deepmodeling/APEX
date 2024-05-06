@@ -2,15 +2,15 @@
      "structures": ["confs/fcc-Al"],
      "interaction": {
          "type": "abacus",
-         "incar": "abacus_input/INPUT_phonon",
+         "incar": "abacus_input/INPUT",
          "potcar_prefix": "abacus_input",
-         "potcars": {"Al": "Al.PD04.PBE.UPF"},
-         "orb_files": {"Al":"Al_gga_10au_100Ry_3s3p2d.orb"}
+         "potcars": {"Al": "Al_ONCV_PBE-1.0.upf"},
+         "orb_files": {"Al":"Al_gga_9au_100Ry_4s4p1d.orb"}
      },
     "properties": [
         {
          "type":         "eos",
-         "skip":         true,
+         "skip":         false,
          "vol_start":    0.6,
          "vol_end":      1.4,
          "vol_step":     0.05
@@ -52,7 +52,7 @@
 	},
 	{
          "type":         "phonon",
-	 "skip":         false,
+	 "skip":         true,
 	 "BAND": "0.5000 0.5000 0.5000  0.0000 0.0000 0.0000  0.5000 0.0000 0.5000  0.5000 0.2500 0.7500",
 	 "supercell_size":[1,1,1],
 	 "MESH":[8,8,8],

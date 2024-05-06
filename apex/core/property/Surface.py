@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import re
-
 import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
@@ -35,28 +34,11 @@ class Surface(Property):
                 )
                 self.miller = parameter["max_miller"]
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
-            self.cal_type = parameter["cal_type"]
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": True,
                 "relax_vol": False,
             }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
         else:
             parameter["cal_type"] = "static"
             self.cal_type = parameter["cal_type"]
@@ -64,32 +46,20 @@ class Surface(Property):
                 "relax_pos": False,
                 "relax_shape": False,
                 "relax_vol": False,
-            }
-            if "cal_setting" not in parameter:
-                parameter["cal_setting"] = default_cal_setting
-            else:
-                if "relax_pos" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_pos"] = default_cal_setting[
-                        "relax_pos"
-                    ]
-                if "relax_shape" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_shape"] = default_cal_setting[
-                        "relax_shape"
-                    ]
-                if "relax_vol" not in parameter["cal_setting"]:
-                    parameter["cal_setting"]["relax_vol"] = default_cal_setting[
-                        "relax_vol"
-                    ]
-            self.cal_setting = parameter["cal_setting"]
+            }            
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
+        self.cal_type = parameter["cal_type"]
+        parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
+        for key in default_cal_setting:
+            parameter["cal_setting"].setdefault(key, default_cal_setting[key])
+        self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
         self.inter_param = inter_param if inter_param != None else {"type": "vasp"}
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            #dlog.warning("%s already exists" % path_to_work)
             logging.warning("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
@@ -101,11 +71,9 @@ class Surface(Property):
             init_path_list = glob.glob(
                 os.path.join(self.parameter["start_confs_path"], "*")
             )
-            struct_init_name_list = []
-            for ii in init_path_list:
-                struct_init_name_list.append(ii.split("/")[-1])
-            struct_output_name = path_to_work.split("/")[-2]
-            assert struct_output_name in struct_init_name_list
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
+            assert struct_output_name in struct_init_name_list, f"{struct_output_name} not in initial configuration names"
             path_to_equi = os.path.abspath(
                 os.path.join(
                     self.parameter["start_confs_path"],
@@ -130,7 +98,6 @@ class Surface(Property):
                 path_to_work,
                 self.parameter.get("reprod_last_frame", True),
             )
-            os.chdir(cwd)
 
         else:
             if refine:
@@ -140,7 +107,6 @@ class Surface(Property):
                     self.parameter["output_suffix"],
                     path_to_work,
                 )
-                os.chdir(cwd)
                 # record miller
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
@@ -154,15 +120,12 @@ class Surface(Property):
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
                     os.chdir(output_task)
-                    if os.path.isfile("miller.json"):
-                        os.remove("miller.json")
-                    if os.path.islink("miller.json"):
+                    if os.path.exists("miller.json"):
                         os.remove("miller.json")
                     os.symlink(
                         os.path.relpath(os.path.join(init_from_task, "miller.json")),
                         "miller.json",
                     )
-                os.chdir(cwd)
 
             else:
                 if self.inter_param["type"] == "abacus":
@@ -193,12 +156,9 @@ class Surface(Property):
                 )
 
                 os.chdir(path_to_work)
-                if os.path.isfile(POSCAR):
-                    os.remove(POSCAR)
-                if os.path.islink(POSCAR):
+                if os.path.exists(POSCAR):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
-                #           task_poscar = os.path.join(output, 'POSCAR')
                 for ii in range(len(all_slabs)):
                     output_task = os.path.join(path_to_work, "task.%06d" % ii)
                     os.makedirs(output_task, exist_ok=True)
@@ -229,8 +189,8 @@ class Surface(Property):
                         os.remove("POSCAR")
                     # record miller
                     dumpfn(all_slabs[ii].miller_index, "miller.json")
-                os.chdir(cwd)
-
+        
+        os.chdir(cwd)
         return task_list
 
     def post_process(self, task_list):
@@ -249,6 +209,17 @@ class Surface(Property):
 
         if not self.reprod:
             ptr_data += "Miller_Indices: \tSurf_E(J/m^2) EpA(eV) equi_EpA(eV)\n"
+
+            equi_path = os.path.abspath(
+                os.path.join(
+                    os.path.dirname(output_file), "../relaxation/relax_task"
+                )
+            )
+            equi_result = loadfn(os.path.join(equi_path, "result.json"))
+            equi_epa = equi_result["energies"][-1] / np.sum(
+                equi_result["atom_numbs"]
+            )
+
             for ii in all_tasks:
                 task_result = loadfn(os.path.join(ii, "result_task.json"))
                 natoms = np.sum(task_result["atom_numbs"])
@@ -257,28 +228,18 @@ class Surface(Property):
                     np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
                 )
 
-                equi_path = os.path.abspath(
-                    os.path.join(
-                        os.path.dirname(output_file), "../relaxation/relax_task"
-                    )
-                )
-                equi_result = loadfn(os.path.join(equi_path, "result.json"))
-                equi_epa = equi_result["energies"][-1] / np.sum(
-                    equi_result["atom_numbs"]
-                )
                 structure_dir = os.path.basename(ii)
-
                 Cf = 1.60217657e-16 / (1e-20 * 2) * 0.001
                 evac = (task_result["energies"][-1] - equi_epa * natoms) / AA * Cf
-
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
+                
                 ptr_data += "%-25s     %7.3f    %8.3f %8.3f\n" % (
                     str(miller_index) + "-" + structure_dir + ":",
                     evac,
                     epa,
                     equi_epa,
                 )
-                res_data[str(miller_index) + "-" + structure_dir] = [
+                res_data[str(miller_index) + "_" + structure_dir] = [
                     evac,
                     epa,
                     equi_epa,
