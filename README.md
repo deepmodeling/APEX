@@ -7,6 +7,7 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property calculations. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, ABACUS, and others.
 
+## v1.2 Main Features Update
 * Add a `retrieve` sub-command to allow results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
 * Support common **dflow operations** with terminal commands
 * Incorporate results `archive` function to both local paths and NoSQL database ([MongoDB](https://www.mongodb.com/) and [DynamoDB](https://aws.amazon.com/cn/dynamodb/))
@@ -25,6 +26,7 @@ If you use APEX in your future research, please cite the following paper for gen
 ## Table of Contents
 
 - [APEX: Alloy Property EXplorer](#apex-alloy-property-explorer)
+  - [v1.2 Main Features Update](#v12-main-features-update)
   - [How to cite APEX](#how-to-cite-apex)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
