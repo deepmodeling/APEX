@@ -33,6 +33,7 @@ If you use APEX in your future research, please cite the following paper for gen
 
 - [APEX: Alloy Property EXplorer](#apex-alloy-property-explorer)
   - [v1.2 Main Features Update](#v12-main-features-update)
+  - [APEX Bohrium App](#apex-bohrium-app)
   - [How to cite APEX](#how-to-cite-apex)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
