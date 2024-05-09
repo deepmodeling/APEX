@@ -140,6 +140,9 @@ class DashReportApp:
             if default_dataset:
                 break
 
+        radio_inline = False
+        if len(self.all_dimensions) > 10:
+            radio_inline = True
         layout = html.Div(
             [
                 html.H1("APEX Results Visualization Report", style={'textAlign': 'center'}),
@@ -147,7 +150,7 @@ class DashReportApp:
                 dcc.RadioItems(
                     id='confs-radio',
                     options=[{'label': name, 'value': name} for name in self.all_dimensions],
-                    value=default_dimension,
+                    value=default_dimension, inline=radio_inline,
                     style={"fontSize": UI_FRONTSIZE}
                 ),
                 html.Br(),
