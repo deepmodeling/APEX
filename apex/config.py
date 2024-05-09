@@ -280,7 +280,7 @@ class Config:
             self,
             dispatcher_config: dict
     ) -> DispatcherExecutor:
-        if not (self.context_type or self.machine):
+        if not (self.context_type or self.machine or self.dispatcher_config):
             executor = None
         else:
             # get arguments for instantiation of the DispatcherExecutor
