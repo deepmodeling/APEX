@@ -10,8 +10,11 @@ from apex.reporter.DashReportApp import DashReportApp
 
 def tag_dataset(orig_dataset: dict) -> dict:
     orig_work_path_list = [k for k in orig_dataset.keys()]
-    simplified_path_dict = simplify_paths(orig_work_path_list)
-    simplified_dataset = {simplified_path_dict[k]: v for k, v in orig_dataset.items()}
+    try:
+        simplified_path_dict = simplify_paths(orig_work_path_list)
+        simplified_dataset = {simplified_path_dict[k]: v for k, v in orig_dataset.items()}
+    except KeyError:
+        simplified_dataset = orig_dataset
     # replace data id with tag specified in the dataset if exists
     tagged_dataset = {}
     for k, v in simplified_dataset.items():
