@@ -12,8 +12,8 @@ from .property_report import *
 NO_GRAPH_LIST = ['relaxation']
 UI_FRONTSIZE = 18
 PLOT_FRONTSIZE = 18
-LINE_SIZE = 2
-MARKER_SIZE = 6
+LINE_SIZE = 3
+MARKER_SIZE = 8
 REF_LINE_SIZE = 4
 REF_MARKER_SIZE = 9
 
@@ -67,8 +67,8 @@ class DashReportApp:
     def __init__(self, datasets):
         dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
         self.datasets = datasets
-        self.all_dimensions = set()
-        self.all_datasets = set()
+        self.all_confs = set()
+        self.all_props = set()
         self.app = dash.Dash(
             __name__,
             suppress_callback_exceptions=True,
@@ -122,26 +122,26 @@ class DashReportApp:
 
     def generate_layout(self):
         for w in self.datasets.values():
-            self.all_dimensions.update(w.keys())
-            for dimension in w.values():
-                self.all_datasets.update(dimension.keys())
+            self.all_confs.update(w.keys())
+            for conf in w.values():
+                self.all_props.update(conf.keys())
 
         # find the first default combination of configuration and property exist
-        default_dimension = None
-        default_dataset = None
+        default_conf = None
+        default_prop = None
         for w_key, w in self.datasets.items():
             if not w:
                 continue
             for d_key, d in w.items():
                 if d:
-                    default_dimension = d_key
-                    default_dataset = next(iter(d.keys()))
+                    default_conf = d_key
+                    default_prop = next(iter(d.keys()))
                     break
-            if default_dataset:
+            if default_prop:
                 break
 
         radio_inline = False
-        if len(self.all_dimensions) > 10:
+        if len(self.all_confs) > 10:
             radio_inline = True
         layout = html.Div(
             [
@@ -149,16 +149,16 @@ class DashReportApp:
                 html.Label('Configuration:', style={'font-weight': 'bold', "fontSize": UI_FRONTSIZE}),
                 dcc.RadioItems(
                     id='confs-radio',
-                    options=[{'label': name, 'value': name} for name in self.all_dimensions],
-                    value=default_dimension, inline=radio_inline,
+                    options=[{'label': name, 'value': name} for name in self.all_confs],
+                    value=default_conf, inline=radio_inline,
                     style={"fontSize": UI_FRONTSIZE}
                 ),
                 html.Br(),
                 html.Label('Property:', style={'font-weight': 'bold', "fontSize": UI_FRONTSIZE}),
                 dcc.Dropdown(
                     id='props-dropdown',
-                    options=[{'label': name, 'value': name} for name in self.all_datasets],
-                    value=default_dataset,
+                    options=[{'label': name, 'value': name} for name in self.all_props],
+                    value=default_prop,
                     style={"fontSize": UI_FRONTSIZE}
                 ),
                 html.Br(),
@@ -174,7 +174,7 @@ class DashReportApp:
         prop_type = return_prop_type(selected_prop)
         valid_count = 0
         if prop_type not in NO_GRAPH_LIST:
-            for w_dimension, dataset in self.datasets.items():
+            for w_conf, dataset in self.datasets.items():
                 try:
                     _ = dataset[selected_confs][selected_prop]
                 except KeyError:
@@ -187,27 +187,27 @@ class DashReportApp:
             return {'display': 'block'}
 
     def update_dropdown_options(self, selected_confs):
-        all_datasets = set()
+        all_props = set()
         for w in self.datasets.values():
             if selected_confs in w:
-                all_datasets.update(w[selected_confs].keys())
+                all_props.update(w[selected_confs].keys())
 
-        return [{'label': name, 'value': name} for name in all_datasets]
+        return [{'label': name, 'value': name} for name in all_props]
 
     def update_graph(self, selected_prop, selected_confs):
         fig = go.Figure()
         prop_type = return_prop_type(selected_prop)
         color_generator = self.plotly_color_cycle()
         if prop_type not in NO_GRAPH_LIST:
-            for w_dimension, dataset in self.datasets.items():
+            for w_conf, dataset in self.datasets.items():
                 try:
                     data = dataset[selected_confs][selected_prop]['result']
                 except KeyError:
                     pass
                 else:
                     propCls = return_prop_class(prop_type)
-                    # trace_name = f"{w_dimension} - {selected_confs} - {selected_prop}"
-                    trace_name = w_dimension
+                    # trace_name = f"{w_conf} - {selected_confs} - {selected_prop}"
+                    trace_name = w_conf
                     traces, layout = propCls.plotly_graph(
                         data, trace_name,
                         color=next(color_generator)
@@ -286,8 +286,8 @@ class DashReportApp:
         tables = []
         prop_type = return_prop_type(selected_prop)
         if prop_type == 'relaxation':
-            for w_dimension, dataset in self.datasets.items():
-                table_title = html.H3(f"{w_dimension} - {selected_prop}")
+            for w_conf, dataset in self.datasets.items():
+                table_title = html.H3(f"{w_conf} - {selected_prop}")
                 clip_id = f"clip-{table_index}"
                 clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": UI_FRONTSIZE})
                 table = RelaxationReport.dash_table(dataset)
@@ -296,7 +296,7 @@ class DashReportApp:
                                        style={'width': '100%', 'display': 'inline-block'}))
                 table_index += 1
         else:
-            for w_dimension, dataset in self.datasets.items():
+            for w_conf, dataset in self.datasets.items():
                 try:
                     data = dataset[selected_confs][selected_prop]['result']
                 except KeyError:
@@ -304,7 +304,7 @@ class DashReportApp:
                 else:
                     propCls = return_prop_class(prop_type)
                     table_title = html.H3(
-                        f"{w_dimension} - {selected_confs} - {selected_prop}",
+                        f"{w_conf} - {selected_confs} - {selected_prop}",
                         style={"fontSize": UI_FRONTSIZE}
                     )
                     table, df = propCls.dash_table(data)
