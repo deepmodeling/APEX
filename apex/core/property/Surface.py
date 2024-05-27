@@ -174,11 +174,7 @@ class Surface(Property):
                         if os.path.exists(jj):
                             os.remove(jj)
                     task_list.append(output_task)
-                    logging.info(
-                        "# %03d generate " % ii,
-                        output_task,
-                        " \t %d atoms" % len(all_slabs[ii].sites),
-                    )
+                    logging.info(f"{ii} generate {output_task} {len(all_slabs[ii].sites)} atoms")
                     # make confs
                     all_slabs[ii].to("POSCAR.tmp", "POSCAR")
                     vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
