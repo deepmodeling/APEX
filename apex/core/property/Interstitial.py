@@ -33,7 +33,7 @@ class Interstitial(Property):
                 default_supercell = [1, 1, 1]
                 parameter["supercell"] = parameter.get("supercell", default_supercell)
                 self.supercell = parameter["supercell"]
-                self.insert_ele = parameter["insert_ele"]
+                self.insert_ele = parameter.get("insert_ele", None)
                 parameter["lattice_type"] = parameter.get("lattice_type", None)
                 self.lattice_type = parameter["lattice_type"]
                 parameter["voronoi_param"] = parameter.get("voronoi_param", {})
@@ -182,6 +182,8 @@ class Interstitial(Property):
                 self.insert_element_task = os.path.join(self.path_to_work, "element.out")
                 if os.path.isfile(self.insert_element_task):
                     os.remove(self.insert_element_task)
+                if not self.insert_ele:
+                    self.insert_ele = [str(ii) for ii in set(ss.composition.elements)]
                 for ii in self.insert_ele:
                     if self.structure_type in PREDEFINED_LIST:
                         # produce a pseudo interstitial structure for later modification
