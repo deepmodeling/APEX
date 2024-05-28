@@ -443,7 +443,7 @@ class Interstitial(Property):
             logging.info(f"gen {type_str}")
             os.chdir(cwd)
 
-        total_task = len(self.dss) + len(interstitial_dict)
+        total_task = len(self.dss) + len(interstitial_dict) - 1
 
         return total_task
 
