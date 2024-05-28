@@ -9,8 +9,10 @@ import numpy as np
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.defects.generators import VoronoiInterstitialGenerator
 from pymatgen.analysis.defects.core import Interstitial as pmgInterstitial
-from pymatgen.core.structure import Structure
+from pymatgen.core.structure import Structure, Lattice
 from pymatgen.core.sites import PeriodicSite
+from pymatgen.core.tensors import Tensor
+from pymatgen.core.operations import SymmOp
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import lammps_utils
@@ -23,6 +25,7 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 PREDEFINED_LIST = ['bcc', 'fcc', 'hcp']
+TOL = 1e-5
 
 class Interstitial(Property):
     def __init__(self, parameter, inter_param=None):
@@ -157,7 +160,9 @@ class Interstitial(Property):
                     ss = abacus_utils.stru2Structure(equi_contcar)
                 else:
                     ss = Structure.from_file(equi_contcar)
-
+                rot = Tensor.get_ieee_rotation(ss)
+                op = SymmOp.from_rotation_and_translation(rot)
+                ss.apply_operation(op)
                 # get structure type
                 os.chdir(self.path_to_work)
                 # convert site element into same type for a pseudo-structure just for simple lattice type judgment
@@ -171,6 +176,7 @@ class Interstitial(Property):
                 orig_st = StructureInfo(ss, symprec=0.1, angle_tolerance=5)
                 conv_ss = orig_st.conventional_structure
                 conv_ss.to("POSCAR", "POSCAR")
+                conv_ss.to("POSCAR_conv", "POSCAR")
                 ss = conv_ss
                 if self.lattice_type:
                     logging.info(msg=f'Adopt user indicated lattice type: {self.lattice_type}')
@@ -186,6 +192,27 @@ class Interstitial(Property):
                     self.insert_ele = [str(ii) for ii in set(ss.composition.elements)]
                 for ii in self.insert_ele:
                     if self.structure_type in PREDEFINED_LIST:
+                        # rotate and translate hcp structure to specific orientation for interstitial generation
+                        if self.structure_type == 'hcp':
+                            theta = -2 * np.pi / 3
+                            rot_m = np.array([
+                                [np.cos(theta), -np.sin(theta), 0],
+                                [np.sin(theta), np.cos(theta), 0],
+                                [0, 0, 1]
+                            ])
+                            op = SymmOp.from_rotation_and_translation(rotation_matrix=rot_m)
+                            ss.apply_operation(op)
+                            new_lattice = Lattice([
+                                ss.lattice.matrix[0] * -1, ss.lattice.matrix[1] * -1, ss.lattice.matrix[2]
+                            ])
+                            new_frac_coords = ss.frac_coords.copy()
+                            if not ((new_frac_coords[0][0] < 0.5 and new_frac_coords[0][2] < 0.5)\
+                                    or (new_frac_coords[0][0] > 0.5 and new_frac_coords[0][2] > 0.5)):
+                                new_frac_coords[0][2] = ss.frac_coords[1][2]
+                                new_frac_coords[1][2] = ss.frac_coords[0][2]
+                            new_ss = Structure(new_lattice, ss.species, new_frac_coords, coords_are_cartesian=False)
+                            ss = new_ss
+                            ss.to(os.path.join(self.path_to_work, 'POSCAR_conv'), 'POSCAR')
                         # produce a pseudo interstitial structure for later modification
                         vds = [pmgInterstitial(ss, PeriodicSite(ii, [0.12, 0.13, 0.14], ss.lattice))]
                     else:
@@ -255,7 +282,8 @@ class Interstitial(Property):
                     if not os.path.isfile("task.000000/POSCAR"):
                         raise RuntimeError("need task.000000 structure as reference")
 
-                    with open('POSCAR', "r") as fin:
+
+                    with open('POSCAR_conv', "r") as fin:
                         fin.readline()
                         scale = float(fin.readline().split()[0])
                         self.latt_param = float(fin.readline().split()[0])
@@ -268,13 +296,12 @@ class Interstitial(Property):
                         ss = ii.split()
                         if len(ss) > 3:
                             if (
-                                    abs(0.12 / self.supercell[0] - float(ss[0])) < 1e-5
-                                    and abs(0.13 / self.supercell[1] - float(ss[1])) < 1e-5
-                                    and abs(0.14 / self.supercell[2] - float(ss[2])) < 1e-5
+                                    abs(0.12 / self.supercell[0] - float(ss[0])) < TOL
+                                    and abs(0.13 / self.supercell[1] - float(ss[1])) < TOL
+                                    and abs(0.14 / self.supercell[2] - float(ss[2])) < TOL
                             ):
                                 chl = idx
-                    # pseudo-task only run original POSCAR to save calculation resources
-                    shutil.copyfile("POSCAR", "task.000000/POSCAR")
+                    shutil.rmtree("task.000000")
 
                     os.chdir(cwd)
                     # specify interstitial structures
@@ -283,9 +310,9 @@ class Interstitial(Property):
                             ss = ii.split()
                             if len(ss) > 3:
                                 if (
-                                        abs(0.5 / self.supercell[0] - float(ss[0])) < 1e-5
-                                        and abs(0.5 / self.supercell[1] - float(ss[1])) < 1e-5
-                                        and abs(0.5 / self.supercell[2] - float(ss[2])) < 1e-5
+                                        abs(0.5 / self.supercell[0] - float(ss[0])) < TOL
+                                        and abs(0.5 / self.supercell[1] - float(ss[1])) < TOL
+                                        and abs(0.5 / self.supercell[2] - float(ss[2])) < TOL
                                 ):
                                     center = idx
                         bcc_interstital_dict = {
@@ -306,16 +333,16 @@ class Interstitial(Property):
                             ss = ii.split()
                             if len(ss) > 3:
                                 if (
-                                        abs(1 / self.supercell[0] - float(ss[0])) < 1e-5
-                                        and abs(0.5 / self.supercell[1] - float(ss[1])) < 1e-5
-                                        and abs(0.5 / self.supercell[2] - float(ss[2])) < 1e-5
+                                        abs(1 / self.supercell[0] - float(ss[0])) < TOL
+                                        and abs(0.5 / self.supercell[1] - float(ss[1])) < TOL
+                                        and abs(0.5 / self.supercell[2] - float(ss[2])) < TOL
                                 ):
                                     face = idx
 
                                 if (
-                                        abs(1 / self.supercell[0] - float(ss[0])) < 1e-5
-                                        and abs(1 / self.supercell[1] - float(ss[1])) < 1e-5
-                                        and abs(1 / self.supercell[2] - float(ss[2])) < 1e-5
+                                        abs(1 / self.supercell[0] - float(ss[0])) < TOL
+                                        and abs(1 / self.supercell[1] - float(ss[1])) < TOL
+                                        and abs(1 / self.supercell[2] - float(ss[2])) < TOL
                                 ):
                                     corner = idx
 
@@ -351,9 +378,9 @@ class Interstitial(Property):
                             ss = ii.split()
                             if len(ss) > 3:
                                 if (
-                                        abs(1/3 / self.supercell[0] - float(ss[0])) < 1e-5
-                                        and abs(2/3 / self.supercell[1] - float(ss[1])) < 1e-5
-                                        and abs(0.25 / self.supercell[2] - float(ss[2])) < 1e-5
+                                        abs(1/3 / self.supercell[0] - float(ss[0])) < TOL
+                                        and abs(2/3 / self.supercell[1] - float(ss[1])) < TOL
+                                        and abs(0.25 / self.supercell[2] - float(ss[2])) < TOL
                                 ):
                                     center = idx
                         hcp_interstital_dict = {
@@ -389,7 +416,7 @@ class Interstitial(Property):
         cwd = os.getcwd()
         for ii, (type_str, adjust_dict) in enumerate(interstitial_dict.items()):
             output_task = os.path.join(
-                self.path_to_work, "task.%06d" % (len(self.dss) + ii)
+                self.path_to_work, "task.%06d" % (len(self.dss) + ii - 1)
             )
             os.makedirs(output_task, exist_ok=True)
             os.chdir(output_task)
@@ -419,6 +446,19 @@ class Interstitial(Property):
         total_task = len(self.dss) + len(interstitial_dict)
 
         return total_task
+
+    def _rotate_hcp(self, poscar):
+        ss = Structure.from_file(poscar)
+        theta = np.pi / 3
+        rot_m = np.array([
+            [np.cos(theta), -np.sin(theta), 0],
+            [np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1]
+        ])
+        op = SymmOp.from_rotation_and_translation(rot_m)
+        ss.apply_operation(op)
+        ss.to(poscar, "POSCAR")
+
 
     def post_process(self, task_list):
         if True:
