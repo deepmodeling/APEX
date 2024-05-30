@@ -137,6 +137,8 @@ def submit(
             flow_type=flow_type
         )
 
+        cwd = os.getcwd()
+        os.chdir(tmp_dir)
         flow_id = None
         flow_name = wf_config.flow_name
         submit_only = wf_config.submit_only
@@ -168,6 +170,7 @@ def submit(
                 name=flow_name,
                 labels=labels
             )
+        os.chdir(cwd)
 
     if not submit_only:
         # auto archive results
