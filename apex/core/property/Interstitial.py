@@ -502,7 +502,7 @@ class Interstitial(Property):
             equi_result = loadfn(os.path.join(equi_path, "result.json"))
             equi_epa = equi_result["energies"][-1] / sum(equi_result["atom_numbs"])
 
-            for idid, ii in enumerate(all_tasks[1:], start=1): # skip task.000000
+            for idid, ii in enumerate(all_tasks, start=0): # skip task.000000
                 structure_dir = os.path.basename(ii)
                 task_result = loadfn(all_res[idid])
                 interstitial_type = loadfn(os.path.join(ii, 'interstitial_type.json'))
