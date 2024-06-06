@@ -283,7 +283,6 @@ class Interstitial(Property):
                     if not os.path.isfile("task.000000/POSCAR"):
                         raise RuntimeError("need task.000000 structure as reference")
 
-
                     with open('POSCAR_conv', "r") as fin:
                         fin.readline()
                         scale = float(fin.readline().split()[0])
