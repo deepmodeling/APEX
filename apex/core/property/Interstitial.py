@@ -279,6 +279,7 @@ class Interstitial(Property):
 
                 # create pre-defined special SIA structure for bcc fcc and hcp
                 if self.structure_type in PREDEFINED_LIST:
+                    self.task_list = []
                     if not os.path.isfile("task.000000/POSCAR"):
                         raise RuntimeError("need task.000000 structure as reference")
 
