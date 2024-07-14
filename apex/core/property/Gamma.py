@@ -247,11 +247,7 @@ class Gamma(Property):
                             os.remove(jj)
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
-                    logging.info(
-                        "# %03d generate " % count,
-                        output_task,
-                        " \t %d atoms" % len(obtained_slab.sites)
-                    )
+                    logging.info(f"# {count} generate {output_task}, with{len(obtained_slab.sites)} atoms")
                     # make confs
                     obtained_slab.to("POSCAR.tmp", "POSCAR")
                     vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
