@@ -124,7 +124,7 @@ class Lat_param_T_Report(PropertyReport):
         lz = [values[2] for values in res_data.values()]
 
         temp = [values[3] for values in res_data.values()]
-        temp = [str(item) for item in vacuum_size]
+        temp = [str(item) for item in temp]
 
         trace_a = go.Scatter(x=temp, y=lx, mode='lines+markers', name='lx', line=dict(color='blue'))
         trace_b = go.Scatter(x=temp, y=ly, mode='lines+markers', name='ly', line=dict(color='green'))
