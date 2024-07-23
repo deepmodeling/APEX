@@ -18,7 +18,7 @@
 * Modify the single-step run command from `test` to `do` for improved clarity and consistencey
 
 ## APEX Bohrium App
-[![](https://img.shields.io/badge/APP-BohriumApp-orange.svg)](https://app.bohrium.dp.tech/apex/)
+[![](https://img.shields.io/badge/APP-BohriumApp-orange.svg)](https://bohrium.dp.tech/apps/apex)
 
 APEX also provides a web-based [Bohrium App](https://app.bohrium.dp.tech/apex/) for rapid and easy alloy property calculations without intensive JSON configuration (Note: one will need a Bohrium account to access this service).
 
