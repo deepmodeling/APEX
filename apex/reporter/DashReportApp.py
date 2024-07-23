@@ -33,6 +33,10 @@ def return_prop_class(prop_type: str):
         return GammaReport
     elif prop_type == 'phonon':
         return PhononReport
+    elif prop_type == 'DecohesionEnergy':
+        return DecohesionEnergyReport
+    elif prop_type == 'Lat_param_T':
+        return Lat_param_T_Report
 
 
 def return_prop_type(prop: str):
@@ -140,6 +144,9 @@ class DashReportApp:
             if default_dataset:
                 break
 
+        radio_inline = False
+        if len(self.all_dimensions) > 10:
+            radio_inline = True
         layout = html.Div(
             [
                 html.H1("APEX Results Visualization Report", style={'textAlign': 'center'}),
@@ -147,7 +154,7 @@ class DashReportApp:
                 dcc.RadioItems(
                     id='confs-radio',
                     options=[{'label': name, 'value': name} for name in self.all_dimensions],
-                    value=default_dimension,
+                    value=default_dimension, inline=radio_inline,
                     style={"fontSize": UI_FRONTSIZE}
                 ),
                 html.Br(),
