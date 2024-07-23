@@ -109,7 +109,7 @@ class Phonon(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            logging.info("phonon reproduce starts")
+            print("phonon reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -124,7 +124,7 @@ class Phonon(Property):
 
         else:
             if refine:
-                logging.info("phonon refine starts")
+                print("phonon refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -178,13 +178,13 @@ class Phonon(Property):
                 if not self.BAND:
                     # use seekpath to get band path
                     if self.seekpath_from_original:
-                        logging.info(msg='Band path (BAND) not indicated, using seekpath from original cell')
+                        print('Band path (BAND) not indicated, using seekpath from original cell')
                         sp = seekpath.get_path_orig_cell(
                             self.get_seekpath_structure(ss),
                             **self.seekpath_param
                         )
                     else:
-                        logging.info(msg='Band path (BAND) not indicated, using seekpath for it')
+                        print('Band path (BAND) not indicated, using seekpath for it')
                         sp = seekpath.get_path(
                             self.get_seekpath_structure(ss),
                             **self.seekpath_param
@@ -193,7 +193,7 @@ class Phonon(Property):
                     self.BAND, self.BAND_LABELS = self.band_list_2_phonopy_band_string(band_list)
                 else:
                     # use user input band path
-                    logging.info(msg=f'Band path (BAND) indicated, using: {self.BAND}')
+                    print(f'Band path (BAND) indicated, using: {self.BAND}')
                     band_list = self.phonopy_band_string_2_band_list(self.BAND, self.BAND_LABELS)
 
                 dumpfn(band_list, os.path.join(path_to_work, "band_path.json"), indent=4)
@@ -503,9 +503,9 @@ class Phonon(Property):
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
                 if os.path.exists("FORCE_SETS"):
-                    logging.info('FORCE_SETS is created')
+                    print('FORCE_SETS is created')
                 else:
-                    logging.info('FORCE_SETS can not be created')
+                    logging.warning('FORCE_SETS can not be created')
                 os.system('phonopy band.conf --abacus')
                 os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
 
@@ -524,7 +524,7 @@ class Phonon(Property):
                             self.supercell_size[1],
                             self.supercell_size[2]))
                     os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
-                    logging.info('band.dat is created')
+                    print('band.dat is created')
                     shutil.copyfile("band.dat", work_path/"band.dat")
 
                 elif self.approach == "displacement":
@@ -532,9 +532,9 @@ class Phonon(Property):
                     shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
                     os.system('phonopy -f task.0*/vasprun.xml')
                     if os.path.exists("FORCE_SETS"):
-                        logging.info('FORCE_SETS is created')
+                        print('FORCE_SETS is created')
                     else:
-                        logging.info('FORCE_SETS can not be created')
+                        logging.warning('FORCE_SETS can not be created')
                     os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
                         self.supercell_size[0],
                         self.supercell_size[1],

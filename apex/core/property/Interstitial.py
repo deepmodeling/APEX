@@ -94,7 +94,7 @@ class Interstitial(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            logging.info("interstitial reproduce starts")
+            print("interstitial reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -108,7 +108,7 @@ class Interstitial(Property):
 
         else:
             if refine:
-                logging.info("interstitial refine starts")
+                print("interstitial refine starts")
                 self.task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -179,7 +179,7 @@ class Interstitial(Property):
                 conv_ss.to("POSCAR_conv", "POSCAR")
                 ss = conv_ss
                 if self.lattice_type:
-                    logging.info(msg=f'Adopt user indicated lattice type: {self.lattice_type}')
+                    print(f'Adopt user indicated lattice type: {self.lattice_type}')
                     self.structure_type = self.lattice_type
                 os.chdir(cwd)
 
@@ -239,7 +239,7 @@ class Interstitial(Property):
                         #            dss.append(jj.generate_defect_structure(self.supercell))
                         self.dss = dss
 
-                logging.info(
+                print(
                     "gen interstitial with supercell "
                     + str(self.supercell)
                     + " with element "
@@ -440,7 +440,7 @@ class Interstitial(Property):
             with open("POSCAR", "w+") as fout:
                 for ii in new_pos_line:
                     print(ii, file=fout)
-            logging.info(f"gen {type_str}")
+            print(f"gen {type_str}")
             os.chdir(cwd)
 
         total_task = len(self.dss) + len(interstitial_dict) - 1
