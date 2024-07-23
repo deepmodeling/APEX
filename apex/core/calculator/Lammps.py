@@ -126,7 +126,6 @@ class Lammps(Task):
             os.path.join(output_dir, "conf.lmp"),
             lammps_utils.element_list(self.type_map),
         )
-
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
         prop_type = task_param.get("type", "relaxation")
@@ -273,6 +272,12 @@ class Lammps(Task):
                     "conf.lmp", self.type_map, self.inter_func, self.model_param
                 )
 
+            elif cal_type == "npt+ave/time":
+                fc = lammps_utils.make_lammps_Lat_param_T(
+                    "conf.lmp", self.type_map, self.inter_func, self.model_param
+                )
+
+
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
 
@@ -308,7 +313,7 @@ class Lammps(Task):
             return None
         
         self._parse_log_file(log_lammps, dumptime, energy, stress, virial, vol)
-
+        # 传递参数是列表时，函数访问过程中直接对变量进行修改
         type_map_list = lammps_utils.element_list(self.type_map)
         atom_numbs = self._calculate_atom_numbers(type_list, len(type_map_list))
 
@@ -518,6 +523,8 @@ class Lammps(Task):
     def forward_files(self, property_type="relaxation"):
         if self.inter_type in ["meam", "snap"]:
             return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
+        elif property_type == "Lat_param_T":
+            return ["in.lammps", "variable_Lat_param_T.in",os.path.basename(self.model)]
         else:
             return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
 
@@ -525,6 +532,8 @@ class Lammps(Task):
         if property_type not in ["eos"]:
             if self.inter_type in ["meam", "snap"]:
                 return ["in.lammps"] + list(map(os.path.basename, self.model))
+            elif property_type=="Lat_param_T":
+               return ["in.lammps", "variable_Lat_param_T.in", os.path.basename(self.model)]
             else:
                 return ["in.lammps", os.path.basename(self.model)]
         else:
@@ -536,6 +545,8 @@ class Lammps(Task):
     def backward_files(self, property_type="relaxation"):
         if property_type == "phonon":
             return ["outlog", "FORCE_CONSTANTS"]
+        elif property_type == "Lat_param_T":
+            return ["log.lammps", "outlog", "dump.relax","average_box.txt"]
         else:
             return ["log.lammps", "outlog", "dump.relax"]
 
