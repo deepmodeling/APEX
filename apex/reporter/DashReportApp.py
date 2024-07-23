@@ -36,7 +36,7 @@ def return_prop_class(prop_type: str):
     elif prop_type == 'DecohesionEnergy':
         return DecohesionEnergyReport
     elif prop_type == 'Lat_param_T':
-        return Lat_param_T_Reports
+        return Lat_param_T_Report
 
 
 def return_prop_type(prop: str):
