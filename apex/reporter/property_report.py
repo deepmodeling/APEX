@@ -116,6 +116,30 @@ class EOSReport(PropertyReport):
         )
 
         return table, df
+class Lat_param_T_Report(PropertyReport):
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        lx = [values[0] for values in res_data.values()]
+        ly = [values[1] for values in res_data.values()]
+        lz = [values[2] for values in res_data.values()]
+
+        temp = [values[3] for values in res_data.values()]
+        temp = [str(item) for item in vacuum_size]
+
+        trace_a = go.Scatter(x=temp, y=lx, mode='lines+markers', name='lx', line=dict(color='blue'))
+        trace_b = go.Scatter(x=temp, y=ly, mode='lines+markers', name='ly', line=dict(color='green'))
+        trace_c = go.Scatter(x=temp, y=lz , mode='lines+markers', name='lz', line=dict(color='red'))
+
+        trace = [trace_a, trace_b, trace_c]
+
+        layout = go.Layout(
+            title='Lat_param_T',
+            xaxis=dict(title='temperature (K)'),
+            yaxis=dict(title='lattice length (Å)'),
+            showlegend=True
+        )
+        return trace, layout
+
 
 class DecohesionEnergyReport(PropertyReport):
     @staticmethod
