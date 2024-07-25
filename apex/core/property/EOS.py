@@ -84,7 +84,7 @@ class EOS(Property):
         cwd = os.getcwd()
         task_list = []
         if self.reprod:
-            logging.info("eos reproduce starts")
+            print("eos reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -98,7 +98,7 @@ class EOS(Property):
 
         else:
             if refine:
-                logging.info("eos refine starts")
+                print("eos refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -127,7 +127,7 @@ class EOS(Property):
                     )
 
             else:
-                logging.info(
+                print(
                     "gen eos from "
                     + str(self.vol_start)
                     + " to "
@@ -136,9 +136,9 @@ class EOS(Property):
                     + str(self.vol_step)
                 )
                 if self.vol_abs:
-                    logging.info("treat vol_start and vol_end as absolute volume")
+                    print("treat vol_start and vol_end as absolute volume")
                 else:
-                    logging.info("treat vol_start and vol_end as relative volume")
+                    print("treat vol_start and vol_end as relative volume")
 
                 if self.inter_param["type"] == "abacus":
                     equi_contcar = os.path.join(

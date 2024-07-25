@@ -108,7 +108,7 @@ class Gamma(Property):
         cwd = os.getcwd()
 
         if self.reprod:
-            logging.info("gamma line reproduce starts")
+            print("gamma line reproduce starts")
             if "init_data_path" not in self.parameter:
                 raise RuntimeError("please provide the initial data path to reproduce")
             init_data_path = os.path.abspath(self.parameter["init_data_path"])
@@ -121,7 +121,7 @@ class Gamma(Property):
 
         else:
             if refine:
-                logging.info("gamma line refine starts")
+                print("gamma line refine starts")
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
@@ -247,7 +247,9 @@ class Gamma(Property):
                             os.remove(jj)
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
+
                     logging.info(f"# {count} generate {output_task}, with{len(obtained_slab.sites)} atoms")
+
                     # make confs
                     obtained_slab.to("POSCAR.tmp", "POSCAR")
                     vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
