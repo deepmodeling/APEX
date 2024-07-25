@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="apex-flow",
-    version="1.2.0",
+    version="1.2.6",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -14,6 +14,7 @@ setuptools.setup(
     url="https://github.com/deepmodeling/APEX.git",
     packages=setuptools.find_packages(),
     install_requires=[
+        "numpy<2.0.0",
         "pydflow>=1.7.83",
         "pymatgen>=2023.8.10",
         'pymatgen-analysis-defects>=2023.8.22',

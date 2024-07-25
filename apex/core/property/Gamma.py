@@ -82,7 +82,7 @@ class Gamma(Property):
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
-            logging.warning("%s already exists" % path_to_work)
+            logging.debug("%s already exists" % path_to_work)
         else:
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
@@ -247,11 +247,9 @@ class Gamma(Property):
                             os.remove(jj)
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
-                    print(
-                        "# %03d generate " % count,
-                        output_task,
-                        " \t %d atoms" % len(obtained_slab.sites)
-                    )
+
+                    logging.info(f"# {count} generate {output_task}, with{len(obtained_slab.sites)} atoms")
+
                     # make confs
                     obtained_slab.to("POSCAR.tmp", "POSCAR")
                     vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
