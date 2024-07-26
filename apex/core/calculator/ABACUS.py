@@ -148,6 +148,9 @@ class ABACUS(Task):
                 elif [relax_pos, relax_shape, relax_vol] == [False, True, True]:
                     self.modify_input(incar, "calculation", "cell-relax")
                     fix_atom = [True, True, True]
+                elif [relax_pos, relax_shape, relax_vol] == [True, False, True]:
+                    self.modify_input(incar, "calculation", "cell-relax")
+                    self.modify_input(incar, "fixed_axes", "shape")
                 elif [relax_pos, relax_shape, relax_vol] == [False, False, True]:
                     raise RuntimeError(
                         "relax volume but fix shape is not supported for ABACUS"
