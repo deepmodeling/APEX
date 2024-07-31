@@ -248,7 +248,7 @@ class Gamma(Property):
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
 
-                    logging.info(f"# {count} generate {output_task}, with{len(obtained_slab.sites)} atoms")
+                    logging.info(f"# {count} generate {output_task}, with {len(obtained_slab.sites)} atoms")
 
                     # make confs
                     obtained_slab.to("POSCAR.tmp", "POSCAR")
