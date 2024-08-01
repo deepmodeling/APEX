@@ -408,7 +408,7 @@ class Interstitial(Property):
                         output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                         os.chdir(output_task)
                         abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
+                        #os.remove("POSCAR")
         os.chdir(cwd)
         return self.task_list
 
