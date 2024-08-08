@@ -17,7 +17,7 @@ __package__ = "tests"
 class Test_Lat_param_T(unittest.TestCase):
     def setUp(self):
         _jdata = {
-            "structures": ["confs/fcc-Ti"],
+            "structures": ["confs/hcp-Ti"],
             "interaction": {
                 "type": "meam_spline",
                 "model": "lammps_input/Ti.meam.spline",
@@ -39,9 +39,9 @@ class Test_Lat_param_T(unittest.TestCase):
             ],
         }
 
-        self.equi_path = "confs/fcc-Ti/relaxation/relax_task"
+        self.equi_path = "confs/hcp-Ti/relaxation/relax_task"
         self.source_path = "equi/lammps"
-        self.target_path = "confs/fcc-Ti/Lat_param_T_00"
+        self.target_path = "confs/hcp-Ti/Lat_param_T_00"
 
         if not os.path.exists(self.equi_path):
             os.makedirs(self.equi_path)
@@ -52,7 +52,7 @@ class Test_Lat_param_T(unittest.TestCase):
 
         self.Lat_param_T = Lat_param_T(_jdata["properties"][0])
         self.Lammps = Lammps(
-            self.inter_param, os.path.join(self.source_path, "fcc-Ti-CONTCAR")
+            self.inter_param, os.path.join(self.source_path, "hcp-Ti-CONTCAR")
         )
 
     def tearDown(self):
@@ -84,7 +84,7 @@ class Test_Lat_param_T(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.Lat_param_T.make_confs(self.target_path, self.equi_path)
         shutil.copy(
-            os.path.join(self.source_path, "fcc-Ti-CONTCAR"),
+            os.path.join(self.source_path, "hcp-Ti-CONTCAR"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
 
