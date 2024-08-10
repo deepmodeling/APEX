@@ -32,7 +32,8 @@ def pack_upload_dir(
         upload_dir: os.PathLike,
         relax_param: dict,
         prop_param: dict,
-        flow_type: str
+        flow_type: str,
+        exclude_upload_files: List[str],
 ):
     """
     Pack the necessary files and directories into temp dir and upload it to dflow
@@ -75,9 +76,10 @@ def pack_upload_dir(
                 backup_path(path_to_prop)
 
     """copy necessary files and directories into temp upload directory"""
+    exclude_files = exclude_upload_files.append("all_result.json")
     copy_all_other_files(
         work_dir, upload_dir,
-        exclude_files=["all_result.json"],
+        exclude_files=exclude_files,
         include_dirs=list(include_dirs)
     )
     for ii in conf_dirs:
@@ -134,7 +136,8 @@ def submit(
             upload_dir=tmp_dir,
             relax_param=relax_param,
             prop_param=props_param,
-            flow_type=flow_type
+            flow_type=flow_type,
+            exclude_upload_files=wf_config.exclude_upload_files
         )
 
         cwd = os.getcwd()
