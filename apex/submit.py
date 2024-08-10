@@ -76,10 +76,10 @@ def pack_upload_dir(
                 backup_path(path_to_prop)
 
     """copy necessary files and directories into temp upload directory"""
-    exclude_files = exclude_upload_files.append("all_result.json")
+    exclude_upload_files.append("all_result.json")
     copy_all_other_files(
         work_dir, upload_dir,
-        exclude_files=exclude_files,
+        exclude_files=exclude_upload_files,
         include_dirs=list(include_dirs)
     )
     for ii in conf_dirs:
