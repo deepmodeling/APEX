@@ -76,6 +76,16 @@ class Lammps(Task):
                 "param_type": self.type_map,
                 "deepmd_version": deepmd_version,
             }
+        elif self.inter_type == "gap":
+            model_name = os.path.basename(self.model)
+            self.model_param = {
+                "type": self.inter_type,
+                "model_name": [model_name],
+                "param_type": self.type_map,
+                "init_string": self.inter.get("init_string", None),
+                "atomic_num_list": self.inter.get("atomic_num_list", None),
+                "deepmd_version": deepmd_version,
+            }
         else:
             model_name = os.path.basename(self.model)
             self.model_param = {
