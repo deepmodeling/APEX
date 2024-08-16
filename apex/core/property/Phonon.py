@@ -55,7 +55,7 @@ class Phonon(Property):
                 self.BAND_POINTS = parameter["BAND_POINTS"]
                 parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
                 self.BAND_CONNECTION = parameter["BAND_CONNECTION"]
-            parameter["cal_type"] = parameter.get("cal_type", "relaxation")
+            parameter["cal_type"] = parameter.get("cal_type", "static")
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": False,
