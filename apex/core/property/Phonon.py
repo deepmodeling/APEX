@@ -497,10 +497,12 @@ class Phonon(Property):
         if not self.reprod:
             os.chdir(work_path)
             if self.inter_param["type"] == 'abacus':
-                shutil.copyfile("task.000000/band.conf", "band.conf")
-                shutil.copyfile("task.000000/STRU.ori", "STRU")
-                shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
+                if not os.path.samefile("task.000000/band.conf", "band.conf"):
+                    shutil.copyfile("task.000000/band.conf", "band.conf")
+                if not os.path.samefile("task.000000/STRU.ori", "STRU"):
+                    shutil.copyfile("task.000000/STRU.ori", "STRU")
+                if not os.path.samefile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml"):
+                    shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
                 if os.path.exists("FORCE_SETS"):
                     print('FORCE_SETS is created')
