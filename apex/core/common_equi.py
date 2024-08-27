@@ -189,7 +189,11 @@ def post_equi(confs, inter_param):
         inter = make_calculator(inter_param, poscar)
         res = inter.compute(ii)
         contcar = os.path.join(ii, "CONTCAR")
-        ss = Structure.from_file(contcar)
+        try:
+            ss = Structure.from_file(contcar)
+        except FileNotFoundError:
+            logging.warning(f"No CONTCAR found in {ii}, skip")
+            continue
         st = StructureInfo(ss)
         struct_info_dict = {
             "space_group_symbol": st.space_group_symbol,

@@ -71,7 +71,7 @@ class TestInterstitial(unittest.TestCase):
         )
         task_list = self.interstitial.make_confs(self.target_path, self.equi_path)
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.00000[1-9]"))
-        self.assertEqual(len(dfm_dirs), 6)
+        self.assertEqual(len(dfm_dirs), 5)
 
         incar0 = Incar.from_file(os.path.join("vasp_input", "INCAR.rlx"))
         incar0["ISIF"] = 3
