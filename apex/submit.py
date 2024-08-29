@@ -204,6 +204,7 @@ def submit_workflow(
         tmp_work_dir = tempfile.TemporaryDirectory()
         config["mode"] = "debug"
         config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
+        logging.info(f'Debug mode activated, debug work directory: {config["debug_workdir"]}')
         s3_config["storage_client"] = None
 
     if flow_name:
