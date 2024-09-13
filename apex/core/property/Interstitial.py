@@ -318,7 +318,7 @@ class Interstitial(Property):
                         bcc_interstital_dict = {
                             'tetrahedral': {chl: [0.25, 0.5, 0]},
                             'octahedral': {chl: [0.5, 0.5, 0]},
-                            'crowdion': {chl: [0.25, 0.25, 0]},
+                            'crowdion': {chl: [0.25, 0.25, 0.25]},
                             '<111>dumbbell': {chl: [1 / 3, 1 / 3, 1 / 3],
                                               center: [2 / 3, 2 / 3, 2 / 3]},
                             '<110>dumbbell': {chl: [1 / 4, 3 / 4, 1 / 2],
