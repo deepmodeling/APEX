@@ -85,6 +85,9 @@ def make_equi(confs, inter_param, relax_param):
                     sys.to("abacus/stru", stru)
                 else:
                     raise FileNotFoundError("No file %s" % stru)
+            if not os.path.exists(os.path.join(ii, POSCAR)):
+                sys = dpdata.System(stru, fmt="abacus/stru")
+                sys.to("vasp/poscar", os.path.join(ii, POSCAR))
 
             shutil.copyfile(stru, os.path.join(ii, "STRU.bk"))
             abacus_utils.modify_stru_path(stru, "pp_orb/", inter_param)
