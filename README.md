@@ -275,7 +275,7 @@ Below are three examples (for detailed explanations of each parameter, please re
   | norm_deform  | Float          | 0.01    | The deformation in xx, yy, zz, defaul = 1e-2                                                                                      |
   | shear_deform | Float          | 0.01    | The deformation in other directions, default = 1e-2                                                                               |
   | conventional | Bool           | False   | Whether adopt conventional cell for deformation                                                                                   |
-  | ieee         | Bool           | True    | Whether rotate relaxed structure into IEEE-standard format before deformation ([ref](https://ieeexplore.ieee.org/document/26560)) |
+  | ieee         | Bool           | False   | Whether rotate relaxed structure into IEEE-standard format before deformation ([ref](https://ieeexplore.ieee.org/document/26560)) |
 
 ##### 3.1.2.3. Surface
   | Key words | Data structure | Example | Description |
