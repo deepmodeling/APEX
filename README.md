@@ -7,6 +7,8 @@
 
 [APEX](https://github.com/deepmodeling/APEX): Alloy Property EXplorer is a component of the [AI Square](https://aissquare.com/) project that involves the restructuring of the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module to develop a versatile and extensible Python package for general alloy property calculations. This package enables users to conveniently establish a wide range of cloud-native property-test workflows by utilizing various computational approaches, including LAMMPS, VASP, ABACUS, and others.
 
+![gif](./docs/images/apex_demo_high_0001.gif)
+
 ## v1.2 Main Features Update
 * Add a `retrieve` sub-command to allow results to be retrieved independently and manually for multiple properties (Remove `Distributor` and `Collector` OP)
 * Support common **dflow operations** with terminal commands
@@ -37,8 +39,14 @@ If you use APEX in your research, please cite the following paper for general pu
   - [How to cite APEX](#how-to-cite-apex)
   - [Table of Contents](#table-of-contents)
   - [1. Overview](#1-overview)
-  - [2. Easy Install](#2-easy-install)
-  - [3. User Guide](#3-user-guide)
+  - [2. Quick Start](#2-quick-start)
+    - [2.1. Install APEX](#21-install-apex)
+    - [2.2. Install Local Argo (Optional)](#22-install-local-argo-optional)
+    - [2.3. Submission Examples](#23-submission-examples)
+      - [2.3.1. Submit to Local Argo Service](#231-submit-to-local-argo-service)
+      - [2.3.2. Submit Without Argo Service](#232-submit-without-argo-service)
+      - [2.3.3. Submit to the Bohrium](#233-submit-to-the-bohrium)
+  - [3. Documents \& User Guide](#3-documents--user-guide)
     - [3.1. Before Submission](#31-before-submission)
       - [3.1.1. Global Setting](#311-global-setting)
       - [3.1.2. Calculation Parameters](#312-calculation-parameters)
@@ -57,10 +65,6 @@ If you use APEX in your research, please cite the following paper for general pu
       - [3.3.1. Retrieve Results Manually](#331-retrieve-results-manually)
       - [3.3.2. Archive Test Results](#332-archive-test-results)
       - [3.3.3. Results Visualization Report](#333-results-visualization-report)
-  - [4. Quick Start](#4-quick-start)
-    - [4.1. In the Bohrium](#41-in-the-bohrium)
-    - [4.2. In a Local Argo Service](#42-in-a-local-argo-service)
-    - [4.3. In a Local Environment](#43-in-a-local-environment)
 
 ## 1. Overview
 
@@ -91,21 +95,154 @@ APEX currently offers calculation methods for the following alloy properties:
 
 Moreover, APEX supports three types of calculators: **LAMMPS** for molecular dynamics simulations, and **VASP** and **ABACUS** for first-principles calculations.
 
-## 2. Easy Install
-Easy install by
+## 2. Quick Start
+### 2.1. Install APEX
+The latest version of APEX can be easily installed via `pypi` with following command:
 ```shell
 pip install apex-flow
 ```
-You may also clone the package firstly by
+The second approach is to intall from the source code. Firstly clone the code from repository:
 ```shell
 git clone https://github.com/deepmodeling/APEX.git
 ```
-then install APEX by
+then install APEX by:
 ```shell
 cd APEX
 pip install .
 ```
-## 3. User Guide
+
+### 2.2. Install Local Argo (Optional)
+APEX workflow can be boosted and better orgnized by the [Argo](https://argoproj.github.io/workflows/) workflow engine, which provides intuitive process monitoring UI and multiple user-friendly workflow management functions. 
+
+To enable this feature on your local computer, you can setup the dflow service by executing [installation scripts](./docs/scripts/) prepared based on Unix-like system. For instance, to install on a Linux system without root access:
+```shell
+bash install-linux-cn.sh
+```
+This process will automatically configure the required local tools, including Docker, Minikube, and Argo service, with the default port set to `127.0.0.1:2746`. To setup the service on Windows, please refer to the [dflow setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details.
+
+
+### 2.3. Submission Examples
+We present several case studies as introductory illustrations of APEX, tailored to distinct user scenarios. For our demonstration, we will utilize a [LAMMPS_example](./examples/lammps_demo) to compute the Equation of State (EOS) and elastic constants of molybdenum in both Body-Centered Cubic (BCC) and Face-Centered Cubic (FCC) phases. To begin, we will examine the files prepared within the working directory for this specific case.
+
+```
+lammps_demo
+├── confs
+│   ├── std-bcc
+│   │   └── POSCAR
+│   └── std-fcc
+│       └── POSCAR
+├── frozen_model.pb
+├── global_bohrium.json
+├── global_hpc.json
+├── param_joint.json
+├── param_props.json
+└── param_relax.json
+```
+There are three types of parameter files and two types of global config files, as well as a Deep Potential file of molybdenum `frozen_model.pb`. Under the directory of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
+
+#### 2.3.1. Submit to Local Argo Service
+Before this subsection, make sure you have setup a local Argo service environment. If not, please follow the instruction in [2.2. Install Local Argo (Optional)](#22-install-local-argo-optional) to do so.
+
+To submit workflow to local Argo service, with the default port set to `127.0.0.1:2746`. Consequently, one can modify the `global_hpc.json` file to submit a workflow. Here is an example to submit job to local LAMMPS env:
+```json
+{
+    "apex_image_name":"zhuoyli/apex_amd64",
+    "run_image_name": "zhuoyli/apex_amd64",
+    "run_command":"lmp -in in.lammps",
+    "batch_type": "Shell",
+    "context_type": "Local",
+    "local_root" : "./",
+    "remote_root": "/some/path/not/under/pwd/"
+}
+```
+Another example to submit job to a remote HPC. In this example, we attempt to distribute tasks to a remote node managed by [Slurm](https://slurm.schedmd.com). Users can replace the relevant parameters within the `machine` dictionary or specify `resources` and `tasks` according to [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) rules. Here is an example `global_hpc.json` file:
+```json
+{
+    "apex_image_name":"zhuoyli/apex_amd64",
+    "run_image_name": "zhuoyli/apex_amd64",
+    "run_command":"lmp -in in.lammps",
+    "context_type": "SSHContext",
+    "mechine":{
+      "batch_type": "Slurm",
+      "context_type": "SSHContext",
+      "local_root" : "./",
+      "remote_root": "/your/remote/tasks/path",
+      "clean_asynchronously": true,
+      "remote_profile": {
+          "hostname": "123.12.12.12",
+          "username": "USERNAME",
+          "password": "PASSWD",
+          "port": 22,
+          "timeout": 10
+      }
+    },
+    "resources":{
+        "number_node": 1,
+        "cpu_per_node": 4,
+        "gpu_per_node": 0,
+        "queue_name": "apex_test",
+        "group_size": 1,
+        "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
+        "custom_flags": [
+            "#SBATCH --partition=xlong",
+            "#SBATCH --ntasks=4",
+            "#SBATCH --mem=10G",
+            "#SBATCH --nodes=1",
+            "#SBATCH --time=1-00:00:00"
+            ]
+       }
+}
+```
+
+Then, one can submit a relaxation workflow via:
+```shell
+apex submit param_relax.json -c global_hpc.json
+```
+
+Upon submission of the workflow, progress can be monitored at local https://127.0.0.1:2746. If the argo is setup on system without monitor UI, you may try to port forward the `127.0.0.1:2746` to another PC by running following command on that PC:
+```shell
+ssh -nNT -L 127.0.0.1:2746:127.0.0.1:2746 USERNAME@123.12.12.12
+```
+Then, you can monitor the UI through https://127.0.0.1:2746
+
+#### 2.3.2. Submit Without Argo Service
+If your local computer experiences difficulties connecting to the internet or installing cloud-native infrastructures like Docker and Argo, APEX offers a **workflow local debug mode** that allows the flow to operate in a basic `Python3` environment, independent of the Docker container. Users will **not** be able to monitor the workflow through the workflow UI. However, the workflows are still running automatically.
+
+To enable this function, users can add an additional optional argument `-d` to the origin submission command, as demonstrated below:
+
+```shell
+apex submit -d param_relax.json -c global_hpc.json
+```
+
+In this approach, uses are not required to specify an image for executing APEX. Rather, APEX should be pre-installed in the default `Python3` environment to ensure proper functioning.
+
+#### 2.3.3. Submit to the Bohrium
+The most efficient method for submitting an APEX workflow is through the pre-built execution environment of Argo on the [Bohrium cloud platform](https://bohrium.dp.tech). This is especially convenient and robust for massive task-intensive workflows running concurrently. It is necessary to create a **Bohrium account** before running. Below is an example of a global.json file for this approach.
+
+```json
+{
+    "dflow_host": "https://workflows.deepmodeling.com",
+    "k8s_api_server": "https://workflows.deepmodeling.com",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
+    "email": "YOUR_EMAIL",
+    "password": "YOUR_PASSWD",
+    "program_id": 1234,
+    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
+    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
+    "lammps_run_command":"lmp -in in.lammps",
+    "scass_type":"c8_m31_1 * NVIDIA T4"
+}
+```
+Then, one can submit a relaxation workflow via:
+```shell
+apex submit param_relax.json -c global_bohrium.json
+```
+Remember to replace `email`, `password` and `program_id` of your own before submission. As for image, you can either build your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it at https://workflows.deepmodeling.com.
+
+You may also checkout our online [hand-on Bohrium notebook tutorial](https://bohrium.dp.tech/notebooks/15413) for submisson to Bohrium.
+
+## 3. Documents & User Guide
 
 ### 3.1. Before Submission
 In APEX, there are **three essential components** required before submitting a workflow:
@@ -546,107 +683,3 @@ Once the report app is opened (or manully via http://127.0.0.1:8050/), users can
       <img src="./docs/images/reporter_ui.png" alt="Fig3" style="zoom: 50%;">
       <p style='font-size:1.0rem; font-weight:none'>Figure 3. Demonstration of APEX Results Visualization Report </p>
   </div>
-
-
-
-## 4. Quick Start
-We present several case studies as introductory illustrations of APEX, tailored to distinct user scenarios. For our demonstration, we will utilize a [LAMMPS_example](./examples/lammps_demo) to compute the Equation of State (EOS) and elastic constants of molybdenum in both Body-Centered Cubic (BCC) and Face-Centered Cubic (FCC) phases. To begin, we will examine the files prepared within the working directory for this specific case.
-
-```
-lammps_demo
-├── confs
-│   ├── std-bcc
-│   │   └── POSCAR
-│   └── std-fcc
-│       └── POSCAR
-├── frozen_model.pb
-├── global_bohrium.json
-├── global_hpc.json
-├── param_joint.json
-├── param_props.json
-└── param_relax.json
-```
-There are three types of parameter files and two types of global config files, as well as a Deep Potential file of molybdenum `frozen_model.pb`. Under the directory of `confs`, structure file `POSCAR` of both phases have been prepared respectively.
-
-### 4.1. In the Bohrium
-The most efficient method for submitting an APEX workflow is through the preconfigured execution environment of dflow in the [Bohrium platform](https://bohrium.dp.tech). To do this, it may be necessary to create an account on Bohrium. Below is an example of a global.json file for this approach.
-
-```json
-{
-    "dflow_host": "https://workflows.deepmodeling.com",
-    "k8s_api_server": "https://workflows.deepmodeling.com",
-    "batch_type": "Bohrium",
-    "context_type": "Bohrium",
-    "email": "YOUR_EMAIL",
-    "password": "YOUR_PASSWD",
-    "program_id": 1234,
-    "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
-    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
-    "lammps_run_command":"lmp -in in.lammps",
-    "scass_type":"c8_m31_1 * NVIDIA T4"
-}
-```
-Then, one can submit a relaxation workflow via:
-```shell
-apex submit param_relax.json -c global_bohrium.json
-```
-Remember to replace `email`, `password` and `program_id` of your own before submission. As for image, you can either build your own or use public images from Bohrium or pulling from the Docker Hub. Once the workflow is submitted, one can monitor it at https://workflows.deepmodeling.com.
-
-### 4.2. In a Local Argo Service
-Additionally, a dflow environment can be installed in a local computer by executing [installation scripts](https://github.com/deepmodeling/dflow/tree/master/scripts) located in the dflow repository (users can also refer to the [dflow service setup manual](https://github.com/deepmodeling/dflow/tree/master/tutorials) for more details). For instance, to install on a Linux system without root access:
-```shell
-bash install-linux-cn.sh
-```
-This process will automatically configure the required local tools, including Docker, Minikube, and Argo service, with the default port set to `127.0.0.1:2746`. Consequently, one can modify the `global_hpc.json` file to submit a workflow to this container without a Bohrium account. Here is an example:
-
-```json
-{
-    "apex_image_name":"zhuoyli/apex_amd64",
-    "run_image_name": "zhuoyli/apex_amd64",
-    "run_command":"lmp -in in.lammps",
-    "batch_type": "Slurm",
-    "context_type": "SSHContext",
-    "local_root" : "./",
-    "remote_root": "/hpc/home/zyl/Downloads/remote_tasks",
-    "remote_host": "123.12.12.12",
-    "remote_username": "USERNAME",
-    "remote_password": "PASSWD",
-    "resources":{
-        "number_node": 1,
-        "cpu_per_node": 4,
-        "gpu_per_node": 0,
-        "queue_name": "apex_test",
-        "group_size": 1,
-        "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
-        "custom_flags": [
-            "#SBATCH --partition=xlong",
-            "#SBATCH --ntasks=4",
-            "#SBATCH --mem=10G",
-            "#SBATCH --nodes=1",
-            "#SBATCH --time=1-00:00:00"
-            ]
-       }
-}
-
-```
-In this example, we attempt to distribute tasks to a remote node managed by [Slurm](https://slurm.schedmd.com). Users can replace the relevant parameters within the `machine` dictionary or specify `resources` and `tasks` according to [DPDispatcher](https://docs.deepmodeling.com/projects/dpdispatcher/en/latest/index.html) rules.
-
-For the APEX image, it is publicly available on [Docker Hub](https://hub.docker.com) and can be pulled automatically. Users may also choose to pull the image beforehand or create their own Docker image in the Minikube environment locally using a [Dockerfile](./docs/Dockerfile) (please refer to [Docker's documentation](https://docs.docker.com/engine/reference/commandline/build/) for building instructions) to expedite pod initialization.
-
-Then, one can submit a relaxation workflow via:
-```shell
-apex submit param_relax.json -c global_hpc.json
-```
-
-Upon submission of the workflow, progress can be monitored at https://127.0.0.1:2746.
-
-### 4.3. In a Local Environment
-If your local computer experiences difficulties connecting to the internet, APEX offers a **workflow local debug mode** that allows the flow to operate in a basic `Python3` environment, independent of the Docker container. However, users will **not** be able to monitor the workflow through the Argo UI.
-
-To enable this feature, users can add an additional optional argument `-d` to the origin submission command, as demonstrated below:
-
-```shell
-apex submit -d param_relax.json -c global_hpc.json
-```
-
-In this approach, uses are not required to specify an image for executing APEX. Rather, APEX should be pre-installed in the default `Python3` environment to ensure proper functioning.
