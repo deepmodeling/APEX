@@ -22,7 +22,7 @@ from . import LAMMPS_INTER_TYPE
 upload_packages.append(__file__)
 
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
-
+MULTI_MODELS_INTER_TYPE = ["meam", "snap", "gap"]
 
 class Lammps(Task):
     def __init__(self, inter_parameter, path_to_poscar):
@@ -30,7 +30,7 @@ class Lammps(Task):
         self.inter_type = inter_parameter["type"]
         self.type_map = inter_parameter["type_map"]
         self.in_lammps = inter_parameter.get("in_lammps", "auto")
-        if self.inter_type in ["meam", "snap"]:
+        if self.inter_type in MULTI_MODELS_INTER_TYPE:
             self.model = list(map(os.path.abspath, inter_parameter["model"]))
         else:
             self.model = os.path.abspath(inter_parameter["model"])
@@ -76,6 +76,16 @@ class Lammps(Task):
                 "param_type": self.type_map,
                 "deepmd_version": deepmd_version,
             }
+        elif self.inter_type == "gap":
+            model_name = list(map(os.path.basename, self.model))
+            self.model_param = {
+                "type": self.inter_type,
+                "model_name": model_name,
+                "param_type": self.type_map,
+                "init_string": self.inter.get("init_string", None),
+                "atomic_num_list": self.inter.get("atomic_num_list", None),
+                "deepmd_version": deepmd_version,
+            }
         else:
             model_name = os.path.basename(self.model)
             self.model_param = {
@@ -101,10 +111,10 @@ class Lammps(Task):
 
     def make_potential_files(self, output_dir):
         parent_dir = os.path.join(output_dir, "../../")
-        if self.inter_type in ["meam", "snap"]:
-            model_lib, model_file = map(os.path.basename, self.model[:2])
-            targets = [self.model[0], self.model[1]]
-            link_names = [model_lib, model_file]
+        if self.inter_type in MULTI_MODELS_INTER_TYPE:
+            model_file = map(os.path.basename, self.model)
+            targets = self.model
+            link_names = list(model_file)
         else:
             model_file = os.path.basename(self.model)
             targets = [self.model]
@@ -516,19 +526,19 @@ class Lammps(Task):
         return result_dict
 
     def forward_files(self, property_type="relaxation"):
-        if self.inter_type in ["meam", "snap"]:
+        if self.inter_type in MULTI_MODELS_INTER_TYPE:
             return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
         else:
             return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
 
     def forward_common_files(self, property_type="relaxation"):
         if property_type not in ["eos"]:
-            if self.inter_type in ["meam", "snap"]:
+            if self.inter_type in MULTI_MODELS_INTER_TYPE:
                 return ["in.lammps"] + list(map(os.path.basename, self.model))
             else:
                 return ["in.lammps", os.path.basename(self.model)]
         else:
-            if self.inter_type in ["meam", "snap"]:
+            if self.inter_type in MULTI_MODELS_INTER_TYPE:
                 return list(map(os.path.basename, self.model))
             else:
                 return [os.path.basename(self.model)]

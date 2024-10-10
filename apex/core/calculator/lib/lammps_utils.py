@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 
 import os
-import random
-import subprocess as sp
-import sys
+import re
 
 import dpdata
 from dpdata.periodic_table import Element
 from packaging.version import Version
 
 from apex.core.lib import util
+from apex.core.constants import PERIOD_ELEMENTS_BY_SYMBOL
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -153,11 +152,20 @@ def inter_snap(param):
 
 
 def inter_gap(param):
+    init_string = param["init_string"]
+    atomic_num_list = param["atomic_num_list"]
+    if init_string is None:
+        with open(param["model_name"][0], "r") as fp:
+            xml_contents = fp.read()
+        init_string = re.search(r'label="([^"]*)"', xml_contents).group(1)
+    if atomic_num_list is None:
+        atomic_num_list = [PERIOD_ELEMENTS_BY_SYMBOL.index(e) + 1 for e in param["param_type"]]
+
     ret = ""
     line = "pair_style      quip \n"
-    line += "pair_coeff      * * %s " % param["model_name"][0]
-    for ii in param["param_type"]:
-        line += ii + " "
+    line += f'pair_coeff      * * {param["model_name"][0]} "Potential xml_label={init_string}"  '
+    for ii in atomic_num_list:
+        line += str(ii) + " "
     line += "\n"
     ret += line
     return ret

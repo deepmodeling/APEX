@@ -184,7 +184,7 @@ class Surface(Property):
                     vasp_utils.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
                     if self.inter_param["type"] == "abacus":
                         abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
+                        #os.remove("POSCAR")
                     # record miller
                     dumpfn(all_slabs[ii].miller_index, "miller.json")
         

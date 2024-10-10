@@ -55,7 +55,7 @@ class Phonon(Property):
                 self.BAND_POINTS = parameter["BAND_POINTS"]
                 parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
                 self.BAND_CONNECTION = parameter["BAND_CONNECTION"]
-            parameter["cal_type"] = parameter.get("cal_type", "relaxation")
+            parameter["cal_type"] = parameter.get("cal_type", "static")
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": False,
@@ -485,6 +485,12 @@ class Phonon(Property):
         # return type -> list[list[dict[Any, Any]]]
         return band_list
 
+    @staticmethod
+    def check_same_copy(src, dst):
+        if os.path.samefile(src, dst):
+            return
+        shutil.copyfile(src, dst)
+
     def _compute_lower(self, output_file, all_tasks, all_res):
         cwd = Path.cwd()
         work_path = Path(output_file).parent.absolute()
@@ -497,10 +503,9 @@ class Phonon(Property):
         if not self.reprod:
             os.chdir(work_path)
             if self.inter_param["type"] == 'abacus':
-                shutil.copyfile("task.000000/band.conf", "band.conf")
-                shutil.copyfile("task.000000/STRU.ori", "STRU")
-                shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
+                self.check_same_copy("task.000000/band.conf", "band.conf")
+                self.check_same_copy("task.000000/STRU.ori", "STRU")
+                self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
                 os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
                 if os.path.exists("FORCE_SETS"):
                     print('FORCE_SETS is created')
@@ -510,9 +515,8 @@ class Phonon(Property):
                 os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
 
             elif self.inter_param["type"] == 'vasp':
-                shutil.copyfile("task.000000/band.conf", "band.conf")
-                if not os.path.samefile("task.000000/POSCAR-unitcell", "POSCAR-unitcell"):
-                    shutil.copyfile("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
+                self.check_same_copy("task.000000/band.conf", "band.conf")
+                self.check_same_copy("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
 
                 if self.approach == "linear":
                     os.chdir(all_tasks[0])
@@ -528,8 +532,8 @@ class Phonon(Property):
                     shutil.copyfile("band.dat", work_path/"band.dat")
 
                 elif self.approach == "displacement":
-                    shutil.copyfile("task.000000/band.conf", "band.conf")
-                    shutil.copyfile("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
+                    self.check_same_copy("task.000000/band.conf", "band.conf")
+                    self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
                     os.system('phonopy -f task.0*/vasprun.xml')
                     if os.path.exists("FORCE_SETS"):
                         print('FORCE_SETS is created')

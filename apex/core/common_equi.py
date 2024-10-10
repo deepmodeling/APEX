@@ -85,9 +85,14 @@ def make_equi(confs, inter_param, relax_param):
                     sys.to("abacus/stru", stru)
                 else:
                     raise FileNotFoundError("No file %s" % stru)
+            if not os.path.exists(os.path.join(ii, POSCAR)):
+                sys = dpdata.System(stru, fmt="abacus/stru")
+                sys.to("vasp/poscar", os.path.join(ii, POSCAR))
 
             shutil.copyfile(stru, os.path.join(ii, "STRU.bk"))
             abacus_utils.modify_stru_path(stru, "pp_orb/", inter_param)
+            orig_poscar = poscar
+            orig_POSCAR = POSCAR
             poscar = os.path.abspath(stru)
             POSCAR = "STRU"
         if not os.path.exists(poscar):
@@ -105,6 +110,8 @@ def make_equi(confs, inter_param, relax_param):
         if os.path.isfile(POSCAR):
             os.remove(POSCAR)
         os.symlink(os.path.relpath(poscar), POSCAR)
+        if inter_param["type"] == "abacus":
+            os.symlink(os.path.relpath(orig_poscar), orig_POSCAR)
         os.chdir(cwd)
     task_dirs.sort()
     # generate task files

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import logging
-import os, re
+import os, re, glob
 
 import dpdata
 import numpy as np
@@ -410,16 +410,23 @@ def final_stru(abacus_path):
             out_stru = bool(line.split()[1])
     logf = os.path.join(abacus_path, "OUT.%s/running_%s.log" % (suffix, calculation))
     if calculation in ["relax", "cell-relax"]:
-        if not out_stru:
+        if os.path.isfile(os.path.join(abacus_path, "OUT.%s/STRU_ION_D" % suffix)):
             return "OUT.%s/STRU_ION_D" % suffix
         else:
-            with open(logf) as f1:
-                lines = f1.readlines()
-            for i in range(1, len(lines)):
-                if lines[-i][36:41] == "istep":
-                    max_step = int(lines[-i].split()[-1])
-                    break
-            return "OUT.%s/STRU_ION%d_D" % (suffix, max_step)
+            # find the final name by STRU_ION*_D,
+            # for abacus version < v3.2.2, there has no STRU_ION_D file but has STRU_ION0_D STRU_ION1_D ... STRU_ION10_D ...
+            # so we need to find the last STRU_ION*_D file
+            stru_ions = glob.glob(
+                os.path.join(abacus_path, f"OUT.{suffix}/STRU_ION*_D")
+            )
+            if len(stru_ions) > 0:
+                # sort the file name by the number in the file name
+                stru_ions.sort(key=lambda x: int(x.split("_")[-2][3:]))
+                final_stru_ion = os.path.basename(stru_ions[-1])
+                return f"OUT.{suffix}/{final_stru_ion}"
+            else:
+                # if there has no STRU_ION_D, return the input STRU
+                return "STRU"
     elif calculation == "md":
         with open(logf) as f1:
             lines = f1.readlines()

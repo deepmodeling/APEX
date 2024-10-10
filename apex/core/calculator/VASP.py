@@ -78,8 +78,9 @@ class VASP(Task):
 
         # revise INCAR based on the INCAR provided in the "interaction"
         else:
+            approach = None
             if prop_type == "phonon":
-                approach = task_param.get("approach", "linear")
+                approach = task_param.get("approach")
                 logging.info(f"No specification of INCAR for {prop_type} calculation, will auto-generate")
                 if approach == "linear":
                     incar = incar_upper(Incar.from_str(
@@ -131,14 +132,15 @@ class VASP(Task):
                     )
                     incar["ISIF"] = isif
 
-            elif cal_type == "static":
+            elif cal_type == "static" and not approach == "linear":
                 nsw = 0
                 if not ("NSW" in incar and incar.get("NSW") == nsw):
                     logging.info(
                         "%s setting NSW to %d" % (self.make_input_file.__name__, nsw)
                     )
                     incar["NSW"] = nsw
-
+            elif cal_type == "static" and approach == "linear":
+                pass
             else:
                 raise RuntimeError("not supported calculation type for VASP")
 

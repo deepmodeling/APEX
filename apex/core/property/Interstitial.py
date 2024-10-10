@@ -318,7 +318,7 @@ class Interstitial(Property):
                         bcc_interstital_dict = {
                             'tetrahedral': {chl: [0.25, 0.5, 0]},
                             'octahedral': {chl: [0.5, 0.5, 0]},
-                            'crowdion': {chl: [0.25, 0.25, 0]},
+                            'crowdion': {chl: [0.25, 0.25, 0.25]},
                             '<111>dumbbell': {chl: [1 / 3, 1 / 3, 1 / 3],
                                               center: [2 / 3, 2 / 3, 2 / 3]},
                             '<110>dumbbell': {chl: [1 / 4, 3 / 4, 1 / 2],
@@ -408,7 +408,7 @@ class Interstitial(Property):
                         output_task = os.path.join(self.path_to_work, "task.%06d" % ii)
                         os.chdir(output_task)
                         abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
+                        #os.remove("POSCAR")
         os.chdir(cwd)
         return self.task_list
 
