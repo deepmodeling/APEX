@@ -248,7 +248,7 @@ class Gamma(Property):
                     task_list.append(output_task)
                     # print("# %03d generate " % ii, output_task)
 
-                    logging.info(f"# {count} generate {output_task}, with{len(obtained_slab.sites)} atoms")
+                    logging.info(f"# {count} generate {output_task}, with {len(obtained_slab.sites)} atoms")
 
                     # make confs
                     obtained_slab.to("POSCAR.tmp", "POSCAR")
@@ -256,7 +256,7 @@ class Gamma(Property):
                     vasp_utils.sort_poscar("POSCAR", "POSCAR", ptypes)
                     if self.inter_param["type"] == "abacus":
                         abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
+                        #os.remove("POSCAR")
                     # vasp.perturb_xz('POSCAR', 'POSCAR', self.pert_xz)
                     # record miller
                     dumpfn(self.plane_miller, "miller.json")
@@ -433,7 +433,7 @@ class Gamma(Property):
 
     def __stru_fix(self, stru) -> None:
         fix_dict = {"true": True, "false": False}
-        fix_xyz = [fix_dict[i] for i in self.addfix]
+        fix_xyz = [fix_dict[i] for i in self.add_fix]
         abacus_utils.stru_fix_atom(stru, fix_atom=fix_xyz)
 
     def __inLammpes_fix(self, inLammps) -> None:

@@ -59,6 +59,7 @@ class Config:
     group_size: int = None
     pool_size: int = None
     upload_python_packages: list = field(default_factory=list)
+    exclude_upload_files: list = field(default_factory=list)
     lammps_image_name: str = None
     lammps_run_command: str = None
     vasp_image_name: str = None

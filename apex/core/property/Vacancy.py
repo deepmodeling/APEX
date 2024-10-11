@@ -167,7 +167,7 @@ class Vacancy(Property):
                     dss[ii].to("POSCAR", "POSCAR")
                     if self.inter_param["type"] == "abacus":
                         abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
+                        #os.remove("POSCAR")
                     # np.savetxt('supercell.out', self.supercell, fmt='%d')
                     dumpfn(self.supercell, "supercell.json")
         os.chdir(cwd)
