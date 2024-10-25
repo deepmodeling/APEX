@@ -137,7 +137,7 @@ class Config:
             }
             if self.machine:
                 update_dict(self.machine_dict, self.machine)
-        elif self.context_type in ["LocalContext", "localcontext"
+        elif self.context_type in ["LocalContext", "localcontext",
                                                    "Local", "local"]:
             self.machine_dict = {
                 "batch_type": self.batch_type,
@@ -148,7 +148,7 @@ class Config:
             }
             if self.machine:
                 update_dict(self.machine_dict, self.machine)
-        elif self.context_type in ["LazyLocalContext", "lazylocalcontext"
+        elif self.context_type in ["LazyLocalContext", "lazylocalcontext",
                                                        "LazyLocal", "lazylocal"]:
             self.machine_dict = {
                 "batch_type": self.batch_type,
