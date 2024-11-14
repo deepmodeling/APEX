@@ -35,6 +35,8 @@ class Elastic(Property):
             self.conventional = parameter["conventional"]
             parameter.setdefault("ieee", False)
             self.ieee = parameter["ieee"]
+            parameter.setdefault("modulus_type", "voigt")
+            self.modulus_type = parameter["modulus_type"]
         parameter.setdefault("cal_type", "relaxation")
         self.cal_type = parameter["cal_type"]
         default_cal_setting = {
@@ -272,8 +274,16 @@ class Elastic(Property):
             res_data["elastic_tensor"].append(c_ii)
             ptr_data += "\n"
 
-        BV = et.k_voigt / 1e4
-        GV = et.g_voigt / 1e4
+        if self.modulus_type == "voigt":
+            BV = et.k_voigt / 1e4
+            GV = et.g_voigt / 1e4
+        elif self.modulus_type == "reuss":
+            BV = et.k_reuss / 1e4
+            GV = et.g_reuss / 1e4
+        elif self.modulus_type == "vrh":
+            BV = et.k_vrh / 1e4
+            GV = et.g_vrh / 1e4
+
         EV = 9 * BV * GV / (3 * BV + GV)
         uV = 0.5 * (3 * BV - 2 * GV) / (3 * BV + GV)
 
