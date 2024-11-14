@@ -11,5 +11,5 @@
     "run_command":"lmp -in in.lammps",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "scass_type":"c16_m62_1 * NVIDIA T4"
+    "scass_type":"1 * NVIDIA P100_16g"
 }
