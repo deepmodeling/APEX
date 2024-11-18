@@ -1,7 +1,7 @@
 import glob
 import os
 from multiprocessing import Pool
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 
 from apex.core.calculator.calculator import make_calculator
 from apex.core.property.Elastic import Elastic
@@ -54,6 +54,9 @@ def make_property(confs, inter_param, property_list):
     conf_dirs.sort()
     for ii in conf_dirs:
         sepline(ch=ii, screen=True)
+        path_to_equi = os.path.join(ii, "relaxation", "relax_task")
+        structure_dict = loadfn(os.path.join(path_to_equi, "structure.json"))
+        mismatch = structure_dict.get("mismatch", False)
         for jj in property_list:
             do_refine, suffix = handle_prop_suffix(jj)
             if not suffix:
@@ -63,8 +66,11 @@ def make_property(confs, inter_param, property_list):
             # determine the suffix: from scratch or refine
 
             property_type = jj["type"]
-            path_to_equi = os.path.join(ii, "relaxation", "relax_task")
             path_to_work = os.path.join(ii, property_type + "_" + suffix)
+            skip_mismatch = jj.get("skip_mismatch", False)
+            if mismatch and skip_mismatch:
+                print("Skip mismatched structure")
+                continue
 
             create_path(path_to_work)
 
