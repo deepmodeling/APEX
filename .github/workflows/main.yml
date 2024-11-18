@@ -29,6 +29,6 @@ jobs:
         export DFLOW_DEBUG=1
         coverage run -m unittest -v -f 
         coverage report
-    - uses: codecov/codecov-action@v4
+    - uses: codecov/codecov-action@v5
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
