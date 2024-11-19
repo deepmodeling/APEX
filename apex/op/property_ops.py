@@ -1,5 +1,6 @@
 import os, glob, pathlib, shutil, subprocess, logging
 from pathlib import Path
+from monty.serialization import loadfn
 from typing import List
 from dflow.python import (
     OP,
@@ -65,7 +66,20 @@ class PropsMake(OP):
         create_path(str(abs_path_to_prop))
         conf_path = abs_path_to_prop.parent
         prop_name = abs_path_to_prop.name
+
+        # break subworkflow if mismatch stop is set
         path_to_equi = conf_path / "relaxation" / "relax_task"
+        structure_dict = loadfn(os.path.join(path_to_equi, "structure.json"))
+        mismatch = structure_dict.get("mismatch", False)
+        skip_mismatch = prop_param.get("skip_mismatch", False)
+        if mismatch and skip_mismatch:
+            print("Skipped due to mismatched relaxed structure")
+            return OPIO({
+                'output_work_path': abs_path_to_prop,
+                'task_names': [],
+                'njobs': 0,
+                'task_paths': []
+            })
 
         inter_param_prop = inter_param
         if "cal_setting" in prop_param and "overwrite_interaction" in prop_param["cal_setting"]:
@@ -141,6 +155,13 @@ class PropsPost(OP):
         task_names = op_in["task_names"]
         path_to_prop = op_in["path_to_prop"]
         inter_type = inter_param["type"]
+
+        if len(task_names) == 0:
+            print("Skip post property")
+            return OPIO({
+                'retrieve_path': []
+            })
+
         copy_dir_list_input = [path_to_prop.split('/')[0]]
         os.chdir(input_all)
         copy_dir_list = []
