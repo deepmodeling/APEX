@@ -55,7 +55,10 @@ def make_property(confs, inter_param, property_list):
     for ii in conf_dirs:
         sepline(ch=ii, screen=True)
         path_to_equi = os.path.join(ii, "relaxation", "relax_task")
-        structure_dict = loadfn(os.path.join(path_to_equi, "structure.json"))
+        try:
+            structure_dict = loadfn(os.path.join(path_to_equi, "structure.json"))
+        except FileNotFoundError:
+            structure_dict = {}
         mismatch = structure_dict.get("mismatch", False)
         for jj in property_list:
             do_refine, suffix = handle_prop_suffix(jj)

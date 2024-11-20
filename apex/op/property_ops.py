@@ -69,7 +69,10 @@ class PropsMake(OP):
 
         # break subworkflow if mismatch stop is set
         path_to_equi = conf_path / "relaxation" / "relax_task"
-        structure_dict = loadfn(os.path.join(path_to_equi, "structure.json"))
+        try:
+            structure_dict = loadfn(os.path.join(path_to_equi, "structure.json"))
+        except FileNotFoundError:
+            structure_dict = {}
         mismatch = structure_dict.get("mismatch", False)
         skip_mismatch = prop_param.get("skip_mismatch", False)
         if mismatch and skip_mismatch:
