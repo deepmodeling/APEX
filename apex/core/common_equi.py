@@ -15,7 +15,7 @@ from apex.core.mpdb import get_structure
 from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
-lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
+lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace', 'nep']
 
 
 def make_equi(confs, inter_param, relax_param):

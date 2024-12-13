@@ -138,6 +138,16 @@ def inter_mace(param):
     ret += line
     return ret
 
+def inter_nep(param):
+    ret = ""
+    line = "pair_style      nep \n"
+    line += "pair_coeff      * * %s " % param["model_name"][0]
+    for ii in param["param_type"]:
+        line += ii + " "
+    line += "\n"
+    ret += line
+    return ret
+
 
 def inter_snap(param):
     ret = ""
