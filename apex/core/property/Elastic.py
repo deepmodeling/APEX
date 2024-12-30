@@ -287,14 +287,14 @@ class Elastic(Property):
         EV = 9 * BV * GV / (3 * BV + GV)
         uV = 0.5 * (3 * BV - 2 * GV) / (3 * BV + GV)
 
-        res_data["BV"] = BV
-        res_data["GV"] = GV
-        res_data["EV"] = EV
-        res_data["uV"] = uV
-        ptr_data += "# Bulk   Modulus BV = %.2f GPa\n" % BV
-        ptr_data += "# Shear  Modulus GV = %.2f GPa\n" % GV
-        ptr_data += "# Youngs Modulus EV = %.2f GPa\n" % EV
-        ptr_data += "# Poission Ratio uV = %.2f\n " % uV
+        res_data["B"] = BV
+        res_data["G"] = GV
+        res_data["E"] = EV
+        res_data["u"] = uV
+        ptr_data += "# Bulk   Modulus B = %.2f GPa\n" % BV
+        ptr_data += "# Shear  Modulus G = %.2f GPa\n" % GV
+        ptr_data += "# Youngs Modulus E = %.2f GPa\n" % EV
+        ptr_data += "# Poission Ratio u = %.2f\n " % uV
 
         dumpfn(res_data, output_file, indent=4)
 
