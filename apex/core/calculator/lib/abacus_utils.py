@@ -4,7 +4,7 @@ import os, re, glob
 
 import dpdata
 import numpy as np
-from pymatgen.core.structure import Structure
+from pymatgen.core import Structure
 
 from . import abacus_scf
 from dflow.python import upload_packages

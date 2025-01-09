@@ -8,4 +8,5 @@ LAMMPS_INTER_TYPE = [
     'gap',
     'rann',
     'mace',
+    'nep'
 ]

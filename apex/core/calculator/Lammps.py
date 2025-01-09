@@ -14,7 +14,8 @@ from apex.core.calculator.lib.lammps_utils import (
     inter_snap,
     inter_gap,
     inter_rann,
-    inter_mace
+    inter_mace,
+    inter_nep
 )
 from .Task import Task
 from dflow.python import upload_packages
@@ -55,6 +56,8 @@ class Lammps(Task):
             self.inter_func = inter_rann
         elif self.inter_type == "mace":
             self.inter_func = inter_mace
+        elif self.inter_type == "nep":
+            self.inter_func = inter_nep
         else:
             self.inter_func = inter_eam_alloy
 

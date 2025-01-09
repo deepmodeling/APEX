@@ -413,6 +413,7 @@ Below are three examples (for detailed explanations of each parameter, please re
   | shear_deform | Float          | 0.01    | The deformation in other directions, default = 1e-2                                                                               |
   | conventional | Bool           | False   | Whether adopt conventional cell for deformation                                                                                   |
   | ieee         | Bool           | False   | Whether rotate relaxed structure into IEEE-standard format before deformation ([ref](https://ieeexplore.ieee.org/document/26560)) |
+  | modulus_type | String         | "voigt"   | Bulk and shear modulus average type (default: "voigt"). Choose from "voigt", "reuss" and "vrh"                                    |
 
 ##### 3.1.2.3. Surface
   | Key words | Data structure | Example | Description |
