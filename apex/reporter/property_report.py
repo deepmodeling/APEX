@@ -131,17 +131,17 @@ class ElasticReport(PropertyReport):
         c44 = elastic_tensor[3][3]
         c55 = elastic_tensor[4][4]
         c66 = elastic_tensor[5][5]
-        BV = res_data['BV']
-        GV = res_data['GV']
-        EV = res_data['EV']
-        uV = res_data['uV']
+        BV = res_data['B']
+        GV = res_data['G']
+        EV = res_data['E']
+        uV = res_data['u']
 
         polar = go.Scatterpolar(
             name=name,
             r=[c11, c12, c13, c22, c23, c33,
                c44, c55, c66, BV, GV, EV, uV],
             theta=['C11', 'C12', 'C13', 'C22', 'C23', 'C33',
-                   'C44', 'C55', 'C66', 'BV', 'GV', 'EV', 'uV'],
+                   'C44', 'C55', 'C66', 'B', 'G', 'E', 'u'],
             fill='none'
         )
 
@@ -156,15 +156,15 @@ class ElasticReport(PropertyReport):
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
         ph = '-'
         et = res_data['elastic_tensor']
-        BV = res_data['BV']
-        GV = res_data['GV']
-        EV = res_data['EV']
-        uV = res_data['uV']
+        BV = res_data['B']
+        GV = res_data['G']
+        EV = res_data['E']
+        uV = res_data['u']
         null_t = [' '] * 6
-        BV_t = ['BV', BV, ph, ph, ph, ph]
-        GV_t = ['GV', GV, ph, ph, ph, ph]
-        EV_t = ['EV', EV, ph, ph, ph, ph]
-        uV_t = ['uV', uV, ph, ph, ph, ph]
+        BV_t = ['B', BV, ph, ph, ph, ph]
+        GV_t = ['G', GV, ph, ph, ph, ph]
+        EV_t = ['E', EV, ph, ph, ph, ph]
+        uV_t = ['u', uV, ph, ph, ph, ph]
         table_tensor = [et[0], et[1], et[2], et[3], et[4], et[5],
                         null_t, BV_t, GV_t, EV_t, uV_t]
 

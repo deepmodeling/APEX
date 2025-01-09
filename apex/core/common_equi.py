@@ -5,6 +5,7 @@ import logging
 import dpdata
 from monty.serialization import dumpfn
 from pymatgen.core.structure import Structure
+from pymatgen.analysis.structure_matcher import StructureMatcher
 from apex.core.calculator.lib import abacus_utils
 from apex.core.lib import crys
 from apex.core.calculator.calculator import make_calculator
@@ -14,7 +15,7 @@ from apex.core.mpdb import get_structure
 from apex.core.structure import StructureInfo
 from dflow.python import upload_packages
 upload_packages.append(__file__)
-lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
+lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace', 'nep']
 
 
 def make_equi(confs, inter_param, relax_param):
@@ -201,13 +202,23 @@ def post_equi(confs, inter_param):
         except FileNotFoundError:
             logging.warning(f"No CONTCAR found in {ii}, skip")
             continue
+        try:
+            init_ss = Structure.from_file(poscar)
+        except FileNotFoundError:
+            logging.warning(f"No POSCAR found in {ii}, skip")
+            continue
         st = StructureInfo(ss)
+        matcher = StructureMatcher()
+        is_match = matcher.fit(init_ss, ss)
+        if not is_match:
+            logging.warning(f"Structure mismatch after relaxation in {ii}")
         struct_info_dict = {
             "space_group_symbol": st.space_group_symbol,
             "space_group_number": st.space_group_number,
             "point_group_symbol": st.point_group_symbol,
             "crystal_system": st.crystal_system,
             "lattice_type": st.lattice_type,
+            "mismatch": not is_match,
         }
 
         dumpfn(struct_info_dict, os.path.join(ii, "structure.json"), indent=4)
