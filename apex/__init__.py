@@ -1,5 +1,5 @@
 import os
-__version__ = '1.2.12'
+__version__ = '1.2.13'
 LOCAL_PATH = os.getcwd()
 
 
