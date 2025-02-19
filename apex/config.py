@@ -202,7 +202,7 @@ class Config:
             "username": self.email,
             "phone": self.phone,
             "password": self.password,
-            "program_id": self.program_id
+            "project_id": self.program_id
         }
         if self.bohrium_config:
             update_dict(bohrium_config, self.bohrium_config)
