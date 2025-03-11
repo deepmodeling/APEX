@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="apex-flow",
-    version="1.2.13",
+    version="1.2.14",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -18,7 +18,7 @@ setuptools.setup(
         "pydflow>=1.7.83",
         "pymatgen>=2023.8.10",
         'pymatgen-analysis-defects>=2023.8.22',
-        "dpdata>=0.2.13",
+        "dpdata==0.2.17",
         "dpdispatcher",
         "phonopy",
         "plotly",
