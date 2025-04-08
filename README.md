@@ -25,11 +25,11 @@
 APEX also provides a web-based [Bohrium App](https://bohrium.dp.tech/apps/apex) for rapid and easy alloy property calculations without intensive JSON configuration (Note: one will need a Bohrium account to access this service).
 
 ## How to cite APEX
-[![](https://img.shields.io/badge/DOI-10.48550/arXiv.2404.17330-red.svg)](https://doi.org/10.48550/arXiv.2404.17330)
+[![](https://img.shields.io/badge/DOI-10.1038/s41524_025_01580_y-red.svg)](https://doi.org/10.1038/s41524-025-01580-y)
 
 If you use APEX in your research, please cite the following paper for general purpose: 
 
-> Z. Li, T. Wen, Y. Zhang, X. Liu, C. Zhang, A. S. L. S. Pattamatta, X. Gong, B. Ye, H.Wang, L. Zhang, D. J. Srolovitz, An extendable cloud-native alloy property explorer (2024). arXiv:2404.17330.
+> Li, Z., Wen, T., Zhang, Y. et al. APEX: an automated cloud-native material property explorer. npj Comput Mater 11, 88 (2025). https://doi.org/10.1038/s41524-025-01580-y
 
 ## Table of Contents
 
