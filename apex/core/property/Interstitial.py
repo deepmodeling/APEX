@@ -24,7 +24,6 @@ from dflow.python import upload_packages
 
 upload_packages.append(__file__)
 
-PREDEFINED_LIST = ['bcc', 'fcc', 'hcp']
 TOL = 1e-5
 
 class Interstitial(Property):
@@ -41,6 +40,9 @@ class Interstitial(Property):
                 self.lattice_type = parameter["lattice_type"]
                 parameter["voronoi_param"] = parameter.get("voronoi_param", {})
                 self.voronoi_param = parameter["voronoi_param"]
+                parameter["special_list"] = parameter.get("special_list", ['bcc', 'fcc', 'hcp'])
+                self.special_list = parameter["special_list"]
+
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             default_cal_setting = {
                 "relax_pos": True,
@@ -191,7 +193,7 @@ class Interstitial(Property):
                 if not self.insert_ele:
                     self.insert_ele = [str(ii) for ii in set(ss.composition.elements)]
                 for ii in self.insert_ele:
-                    if self.structure_type in PREDEFINED_LIST:
+                    if self.structure_type in self.special_list:
                         # rotate and translate hcp structure to specific orientation for interstitial generation
                         if self.structure_type == 'hcp':
                             theta = -2 * np.pi / 3
@@ -278,7 +280,7 @@ class Interstitial(Property):
                 os.chdir(self.path_to_work)
 
                 # create pre-defined special SIA structure for bcc fcc and hcp
-                if self.structure_type in PREDEFINED_LIST:
+                if self.structure_type in self.special_list:
                     self.task_list = []
                     if not os.path.isfile("task.000000/POSCAR"):
                         raise RuntimeError("need task.000000 structure as reference")
