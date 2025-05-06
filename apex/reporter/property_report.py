@@ -188,6 +188,106 @@ class ElasticReport(PropertyReport):
         return table, df
 
 
+class CohesiveEnergyReport(PropertyReport):
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        lattice = []
+        cohesive_energy = []
+        for k, v in res_data.items():
+            lattice.append(float(k))
+            cohesive_energy.append(float(v))
+            
+        # 计算标度化晶格参数 a/a0，假设第一个值为a0
+        a0 = lattice[0] if lattice else 1.0
+        scaled_lattice = [a/a0 for a in lattice]
+        
+        df = pd.DataFrame({
+            "Scaled Lattice Parameter": scaled_lattice,
+            "Cohesive Energy": cohesive_energy
+        })
+        
+        # 设置线型和标记样式
+        line_style = kwargs.get('line_style', 'solid')
+        marker_symbol = kwargs.get('marker_symbol', 'circle')
+        line_color = kwargs.get('line_color', random_color())
+        line_width = kwargs.get('line_width', 2)
+        
+        trace = go.Scatter(
+            name=name,
+            x=df['Scaled Lattice Parameter'],
+            y=df['Cohesive Energy'],
+            mode='lines+markers',
+            line=dict(color=line_color, width=line_width, dash=line_style),
+            marker=dict(symbol=marker_symbol, size=8)
+        )
+        
+        # 添加零能量参考线
+        zero_line = go.Scatter(
+            x=[min(scaled_lattice), max(scaled_lattice)],
+            y=[0, 0],
+            mode='lines',
+            line=dict(color='blue', width=1, dash='dot'),
+            showlegend=False
+        )
+        
+        layout = go.Layout(
+            title='Cohesive Energy',
+            xaxis=dict(
+                title_text="Scaled lattice parameter a/a<sub>0</sub>",
+                title_font=dict(
+                    size=18,
+                    color="#7f7f7f"
+                ),
+                range=[0.5, 2.5]  # 设置x轴范围类似于示例图
+            ),
+            yaxis=dict(
+                title_text="Cohesive energy E<sub>coh</sub> (eV/atom)",
+                title_font=dict(
+                    size=18,
+                    color="#7f7f7f"
+                ),
+                range=[-7, 8]  # 设置y轴范围类似于示例图
+            ),
+            showlegend=True,
+            legend=dict(
+                x=0.7,
+                y=0.9,
+                bgcolor='rgba(255, 255, 255, 0.5)'
+            )
+        )
+        
+        return [trace, zero_line], layout
+
+    @staticmethod
+    def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
+        lattice = []
+        cohesive_energy = []
+        for k, v in res_data.items():
+            lattice.append(float(k))
+            cohesive_energy.append(float(v))
+            
+        # 计算标度化晶格参数 a/a0
+        a0 = lattice[0] if lattice else 1.0
+        scaled_lattice = [a/a0 for a in lattice]
+            
+        df = pd.DataFrame({
+            "Lattice Constant (Å)": round_format(lattice, decimal),
+            "Scaled Lattice Parameter (a/a0)": round_format(scaled_lattice, decimal),
+            "Cohesive Energy (eV/atom)": round_format(cohesive_energy, decimal)
+        })
+
+        table = dash_table.DataTable(
+            data=df.to_dict('records'),
+            columns=[{'name': i, 'id': i} for i in df.columns],
+            style_table={'width': TABLE_WIDTH,
+                         'minWidth': TABLE_MIN_WIDTH,
+                         'overflowX': 'auto'},
+            style_cell={'textAlign': 'left'}
+        )
+
+        return table, df
+
+
 class SurfaceReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):
