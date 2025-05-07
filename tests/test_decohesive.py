@@ -8,27 +8,27 @@ from monty.serialization import loadfn
 from pymatgen.core import Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.io.vasp import Incar
-
-from apex.core.property.DecohesionEnergy import DecohesionEnergy
+from apex.core.property.Decohesive import Decohesive
 import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
+from apex.reporter.property_report import DecohesiveReport
 
-class TestDecohesionEnergy(unittest.TestCase):
+class TestDecohesive(unittest.TestCase):
     def setUp(self):
         _jdata = {
-            "structures": ["confs/mp-141"],
+            "structures": ["confs/std-fcc"],
             "interaction": {
                 "type": "vasp",
                 "incar": "vasp_input/INCAR.rlx",
                 "potcar_prefix": ".",
-                "potcars": {"Yb": "vasp_input/POTCAR"},
+                "potcars": {"Li": "vasp_input/POTCAR"},
             },
             "properties": [
                 {
-                    "type": "DecohesionEnergy",
+                    "type": "decohesive",
                     "min_slab_size": 15,
                     "max_vacuum_size": 10,
                     "vacuum_size_step": 5,
@@ -38,9 +38,9 @@ class TestDecohesionEnergy(unittest.TestCase):
             ],
         }
 
-        self.equi_path = "confs/mp-141/relaxation/relax_task"
+        self.equi_path = "confs/std-fcc/relaxation/relax_task"
         self.source_path = "equi/vasp"
-        self.target_path = "confs/mp-141/DecohesionEnergy_00"
+        self.target_path = "confs/std-fcc/decohesive_00"
         if not os.path.exists(self.equi_path):
             os.makedirs(self.equi_path)
 
@@ -48,32 +48,31 @@ class TestDecohesionEnergy(unittest.TestCase):
         self.inter_param = _jdata["interaction"]
         self.prop_param = _jdata["properties"]
 
-        self.DecohesionEnergy = DecohesionEnergy(_jdata["properties"][0])
+        self.decohesive = Decohesive(_jdata["properties"][0])
 
     def tearDown(self):
-        if os.path.exists(os.path.abspath(os.path.join(self.equi_path, ".."))):
-            shutil.rmtree(os.path.abspath(os.path.join(self.equi_path, "..")))
         if os.path.exists(self.equi_path):
             shutil.rmtree(self.equi_path)
         if os.path.exists(self.target_path):
             shutil.rmtree(self.target_path)
 
     def test_task_type(self):
-        self.assertEqual("DecohesionEnergy", self.DecohesionEnergy.task_type())
+        self.assertEqual("decohesive", self.decohesive.task_type())
 
     def test_task_param(self):
-        self.assertEqual(self.prop_param[0], self.DecohesionEnergy.task_param())
+        self.assertEqual(self.prop_param[0], self.decohesive.task_param())
 
     def test_make_confs_0(self):
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
             with self.assertRaises(RuntimeError):
-                self.DecohesionEnergy.make_confs(self.target_path, self.equi_path)
+                self.decohesive.make_confs(self.target_path, self.equi_path)
         shutil.copy(
-            os.path.join(self.source_path, "mp-141.vasp"),
+            os.path.join(self.source_path, "CONTCAR"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
-        task_list = self.DecohesionEnergy.make_confs(self.target_path, self.equi_path)
+        task_list = self.decohesive.make_confs(self.target_path, self.equi_path)
         self.assertEqual(len(task_list), 3)
+
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
 
         incar0 = Incar.from_file(os.path.join("vasp_input", "INCAR.rlx"))
@@ -84,6 +83,7 @@ class TestDecohesionEnergy(unittest.TestCase):
             os.path.realpath(os.path.join(self.equi_path, "CONTCAR")),
             os.path.realpath(os.path.join(self.target_path, "POSCAR")),
         )
+
         ref_st = Structure.from_file(os.path.join(self.target_path, "POSCAR"))
         dfm_dirs.sort()
         num = 0
@@ -93,11 +93,11 @@ class TestDecohesionEnergy(unittest.TestCase):
             st1_file = os.path.join(ii, "POSCAR.tmp")
             self.assertTrue(os.path.isfile(st1_file))
             st1 = Structure.from_file(st1_file)
-            decohesion_energy_json_file = os.path.join(ii, "decohesion_energy.json")
-            decohesion_energy_json = loadfn(decohesion_energy_json_file)
+            decohesive_json_file = os.path.join(ii, "decohesive.json")
+            decohesive_json = loadfn(decohesive_json_file)
             sl = self.__gen_slab_pmg(
                 ref_st,
-                tuple(decohesion_energy_json["miller_index"]),
+                tuple(decohesive_json["miller_index"]),
                 self.prop_param[0]["min_slab_size"],
                 self.prop_param[0]["vacuum_size_step"] * num,
             )
@@ -105,7 +105,7 @@ class TestDecohesionEnergy(unittest.TestCase):
             # slb = sl.get_slab()
             st2 = Structure(sl.lattice, sl.species, sl.frac_coords)
             self.assertEqual(len(st1), len(st2))
-
+    
     def __gen_slab_pmg(self, structure: Structure,
                        plane_miller, slab_size, vacuum_size) -> Structure:
 
@@ -144,4 +144,48 @@ class TestDecohesionEnergy(unittest.TestCase):
                          coords=new_frac_coords, species=sorted_species)
 
         return slab_new
+    
+class TestDecohesiveReport(unittest.TestCase):
+    def setUp(self):
+        self.res_data = {
+            "0_task.000000": [0, 1, 2e9],
+            "5_task.000000": [5, 6, 7e9],
+            "10_task.000000": [10, 11, 12e9],
+        }
+        
+        self.formatted_data_energy = {}
+        self.formatted_data_stress = {}
+        for k, v in self.res_data.items():
+            if isinstance(v, list) and len(v) == 3:
+                self.formatted_data_energy[k] = v[1]
+                self.formatted_data_stress[k] = v[2]
+    
+    def test_plotly_graph(self):
+        traces, layout = DecohesiveReport.plotly_graph(self.res_data, "test_material")
+        
+        self.assertEqual(len(traces), 2)
+        self.assertEqual(traces[0].name, "test_material Decohesion Energy")
+        self.assertEqual(traces[0].mode, "lines+markers")
+        
+        decohesive_energy = list(self.formatted_data_energy.values())
+        self.assertEqual(list(traces[0].y), decohesive_energy)
 
+        decohesive_stress = list(self.formatted_data_stress.values())
+        self.assertEqual(list(traces[1].y), [s / 1e9 for s in decohesive_stress])
+        
+        self.assertEqual(layout.title.text, "Decohesion Energy and Stress")
+        self.assertIn("Separation Distance (A)", layout.xaxis.title.text)
+        self.assertIn("Decohesion Energy", layout.yaxis.title.text)
+        self.assertIn("Decohesion Stress", layout.yaxis2.title.text)
+
+    def test_dash_table(self):
+        table, df = DecohesiveReport.dash_table(self.res_data)
+        
+        self.assertEqual(len(df), len(self.formatted_data_energy))
+        self.assertEqual(len(df.columns), 3)
+        
+        self.assertIn("Separation Distance (A)", df.columns)
+        self.assertIn("Decohesion Energy (J/m^2)", df.columns)
+        self.assertIn("Decohesion Stress (GPa)", df.columns)
+
+    

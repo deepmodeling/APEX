@@ -12,18 +12,12 @@ from pymatgen.core.surface import SlabGenerator
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property
-from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
-class DecohesionEnergy(Property):
+class Decohesive(Property):
     def __init__(self, parameter, inter_param=None):
-        '''
-               core parameter for make_confs[POSCAR]：
-               min_slab_size  max_vacuum_size  vacuum_size_step
-               miller_index
-        '''
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
         if not self.reprod:
@@ -36,11 +30,11 @@ class DecohesionEnergy(Property):
                 parameter["vacuum_size_step"]=parameter.get("vacuum_size_step", 1)
                 self.vacuum_size_step = parameter["vacuum_size_step"]
                 self.miller_index = tuple(parameter["miller_index"])
-            parameter["cal_type"] = parameter.get("cal_type", "relaxation")
+            parameter["cal_type"] = parameter.get("cal_type", "static")
             default_cal_setting = {
                 "relax_pos": False,
                 "relax_shape": False,
-                "relax_vol": False,
+                "relax_vol": False
             }
         else:
             parameter["cal_type"] = "static"
@@ -48,7 +42,7 @@ class DecohesionEnergy(Property):
             default_cal_setting = {
                 "relax_pos": False,
                 "relax_shape": False,
-                "relax_vol": False,
+                "relax_vol": False
             }
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
@@ -68,6 +62,24 @@ class DecohesionEnergy(Property):
             os.makedirs(path_to_work)
         path_to_equi = os.path.abspath(path_to_equi)
 
+        if "start_confs_path" in self.parameter and os.path.exists(
+            self.parameter["start_confs_path"]
+        ):
+            init_path_list = glob.glob(
+                os.path.join(self.parameter["start_confs_path"], "*")
+            )
+            struct_init_name_list = [os.path.basename(ii) for ii in init_path_list]
+            struct_output_name = os.path.basename(os.path.dirname(path_to_work))
+            assert struct_output_name in struct_init_name_list, f"{struct_output_name} not in initial configuration names"
+            path_to_equi = os.path.abspath(
+                os.path.join(
+                    self.parameter["start_confs_path"],
+                    struct_output_name,
+                    "relaxation",
+                    "relax_task"
+                )
+            )
+
         task_list = []
         cwd = os.getcwd()
 
@@ -81,107 +93,77 @@ class DecohesionEnergy(Property):
                 init_data_path,
                 self.init_from_suffix,
                 path_to_work,
-                self.parameter.get("reprod_last_frame", True),
+                self.parameter.get("reprod_last_frame", True)
             )
 
         else:
-            if refine:
-                logging.info("surface refine starts")
-                task_list = make_refine(
-                    self.parameter["init_from_suffix"],
-                    self.parameter["output_suffix"],
-                    path_to_work,
-                )
-                # record miller
-                init_from_path = re.sub(
-                    self.parameter["output_suffix"][::-1],
-                    self.parameter["init_from_suffix"][::-1],
-                    path_to_work[::-1],
-                    count=1,
-                )[::-1]
-                task_list_basename = list(map(os.path.basename, task_list))
-
-                for ii in task_list_basename:
-                    init_from_task = os.path.join(init_from_path, ii)
-                    output_task = os.path.join(path_to_work, ii)
-                    os.chdir(output_task)
-                    if os.path.isfile("decohesion_energy.json"):
-                        os.remove("decohesion_energy.json")
-                    if os.path.islink("decohesion_energy.json"):
-                        os.remove("decohesion_energy.json")
-                    os.symlink(
-                        os.path.relpath(os.path.join(init_from_task, "decohesion_energy.json")),
-                        "decohesion_energy.json",)
+            if self.inter_param["type"] == "abacus":
+                CONTCAR = abacus_utils.final_stru(path_to_equi)
+                POSCAR = "STRU"
             else:
+                CONTCAR = "CONTCAR"
+                POSCAR = "POSCAR"
+            equi_contcar = os.path.join(path_to_equi, CONTCAR)
+            if not os.path.exists(equi_contcar):
+                raise RuntimeError("please do relaxation first")
+
+            if self.inter_param["type"] == "abacus":
+                stru = dpdata.System(equi_contcar, fmt="stru")
+                stru.to("contcar", "CONTCAR.tmp")
+                ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
+                ss = Structure.from_file("CONTCAR.tmp")
+                os.remove("CONTCAR.tmp")
+            else:
+                ptypes = vasp_utils.get_poscar_types(equi_contcar)
+                ss = Structure.from_file(equi_contcar)
+
+            # gen slabs with different vacuum sizes
+            all_slabs = []
+            vacuum = []
+            num = 0
+            while self.vacuum_size_step * num <= self.max_vacuum_size:
+                vacuum_size = self.vacuum_size_step * num
+                slabs = self.__gen_slab_pmg(ss, self.miller_index, self.min_slab_size, vacuum_size)
+                num += 1
+                all_slabs.append(slabs)
+                vacuum.append(vacuum_size)
+
+            os.chdir(path_to_work)
+            if os.path.exists(POSCAR):
+                os.remove(POSCAR)
+            os.symlink(os.path.relpath(equi_contcar), POSCAR)
+
+            for ii in range(len(all_slabs)):
+                output_task = os.path.join(path_to_work, "task.%06d" % ii)
+                os.makedirs(output_task, exist_ok=True)
+                os.chdir(output_task)
+                for jj in [
+                    "INCAR",
+                    "POTCAR",
+                    "POSCAR",
+                    "conf.lmp",
+                    "in.lammps",
+                    "STRU"
+                ]:
+                    if os.path.exists(jj):
+                        os.remove(jj)
+                task_list.append(output_task)
+
+                print(
+                    "# %03d generate " % ii,
+                    output_task,
+                    " \t %d atoms" % len(all_slabs[ii].sites)
+                )
+
+                all_slabs[ii].to("POSCAR.tmp", "POSCAR")
+                vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
+                vasp_utils.sort_poscar("POSCAR", "POSCAR", ptypes)
+                vasp_utils.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
                 if self.inter_param["type"] == "abacus":
-                    CONTCAR = abacus_utils.final_stru(path_to_equi)
-                    POSCAR = "STRU"
-                else:
-                # refine = false && reproduce = false && self.inter_param["type"]== "vasp"
-                    CONTCAR = "CONTCAR"
-                    POSCAR = "POSCAR"
-                equi_contcar = os.path.join(path_to_equi, CONTCAR)
-                if not os.path.exists(equi_contcar):
-                    raise RuntimeError("please do relaxation first")
-
-                if self.inter_param["type"] == "abacus":
-                    stru = dpdata.System(equi_contcar, fmt="stru")
-                    stru.to("contcar", "CONTCAR.tmp")
-                    ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
-                    ss = Structure.from_file("CONTCAR.tmp")
-                    os.remove("CONTCAR.tmp")
-                else:
-                    ptypes = vasp_utils.get_poscar_types(equi_contcar)
-                    # element type read vasp fifth line
-                    ss = Structure.from_file(equi_contcar)
-
-                # gen POSCAR of Slab
-                all_slabs = []
-                vacuum = []
-                num = 0
-                while self.vacuum_size_step * num <= self.max_vacuum_size:
-                    vacuum_size = self.vacuum_size_step * num
-                    slabs = self.__gen_slab_pmg(ss, self.miller_index, self.min_slab_size, vacuum_size)
-                    num = num + 1
-                    all_slabs.append(slabs)
-                    vacuum.append(vacuum_size)
-
-                os.chdir(path_to_work)
-                if os.path.exists(POSCAR):
-                    os.remove(
-                        POSCAR)
-                os.symlink(os.path.relpath(equi_contcar), POSCAR)
-                for ii in range(len(all_slabs)):
-                    output_task = os.path.join(path_to_work, "task.%06d" % ii)
-                    os.makedirs(output_task, exist_ok=True)
-                    os.chdir(output_task)
-                    for jj in [
-                        "INCAR",
-                        "POTCAR",
-                        "POSCAR",
-                        "conf.lmp",
-                        "in.lammps",
-                        "STRU",
-                    ]:
-                        if os.path.exists(jj):
-                            os.remove(jj)
-                    task_list.append(output_task)
-
-                    logging.info(
-                        "# %03d generate " % ii,
-                        output_task,
-                        " \t %d atoms" % len(all_slabs[ii].sites),
-                    )
-
-                    all_slabs[ii].to("POSCAR.tmp", "POSCAR")
-                    vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
-                    vasp_utils.sort_poscar("POSCAR", "POSCAR", ptypes)
-                    vasp_utils.perturb_xz("POSCAR", "POSCAR", self.pert_xz)
-                    if self.inter_param["type"] == "abacus":
-                        abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
-                        os.remove("POSCAR")
-                    decohesion_energy = {"miller_index": self.miller_index, "vacuum_size":vacuum[ii]}
-                    dumpfn(decohesion_energy, "decohesion_energy.json", indent=4)
+                    abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
+                    os.remove("POSCAR")
+                decohesive = {"miller_index": self.miller_index, "vacuum_size":vacuum[ii]}
+                dumpfn(decohesive, "decohesive.json", indent=4)
         os.chdir(cwd)
         return task_list
 
@@ -194,14 +176,16 @@ class DecohesionEnergy(Property):
     def task_param(self):
         return self.parameter
 
-    def _compute_lower(self, output_file, all_tasks, all_res) -> [dict, str]:
+    def _compute_lower(self, output_file, all_tasks, all_res):
         output_file = os.path.abspath(output_file)
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
+
         if not self.reprod:
             vacuum_size_step = loadfn(os.path.join(os.path.dirname(output_file), "param.json"))["vacuum_size_step"]
             ptr_data += ("Miller Index: " + str(loadfn(os.path.join(os.path.dirname(output_file), "param.json"))["miller_index"]) + "\n")
-            ptr_data += "Vacuum_size(e-10 m):\tDecohesion_E(J/m^2) Decohesion_S(Pa)\n"
+            ptr_data += "Vacuum_size(A):\tDecohesion_E(J/m^2) Decohesion_S(Pa)\n"
+
             pre_task_result = loadfn(os.path.join(all_tasks[0],"result_task.json"))
             pre_evac = 0
             equi_evac = pre_task_result["energies"][-1]
@@ -213,18 +197,18 @@ class DecohesionEnergy(Property):
                 structure_dir = os.path.basename(ii)
                 Cf = 1.60217657e-16 / 1e-20  * 0.001
                 evac = (task_result["energies"][-1] - equi_evac) / AA * Cf
-                vacuum_size = loadfn(os.path.join(ii, "decohesion_energy.json"))["vacuum_size"]
+                vacuum_size = loadfn(os.path.join(ii, "decohesive.json"))["vacuum_size"]
                 stress = (evac - pre_evac) / vacuum_size_step * 1e10
 
                 ptr_data += "%-30s   % 7.3f     %10.3e \n" % (
                     str(vacuum_size) + "-" + structure_dir + ":",
                     evac,
-                    stress,
+                    stress
                 )
                 res_data[str(vacuum_size) + "_" + structure_dir] = [
-                    evac,
-                    stress,
                     vacuum_size,
+                    evac,
+                    stress
                 ]
                 pre_evac = evac
 

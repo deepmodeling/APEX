@@ -117,56 +117,135 @@ class EOSReport(PropertyReport):
 
         return table, df
 
-class DecohesionEnergyReport(PropertyReport):
+
+class CohesiveReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):
-        decohesion_e = [values[0] for values in res_data.values()]
-        stress = [values[1] for values in res_data.values()]
-        vacuum_size = [values[2] for values in res_data.values()]
+        lattice = []
+        epa = []
+        cohesive_energy = []
+        for k, m in res_data.items():
+            lattice.append(float(k))
+            epa.append(float(m["total_energy"]))
+            cohesive_energy.append(float(m["cohesive_energy"]))
+        
+        df = pd.DataFrame({
+            "ScaledLattice": lattice,
+            "CohesiveEnergy(eV/atom)": cohesive_energy
+        })
+        
+        trace = go.Scatter(
+            name=name,
+            x=df['ScaledLattice'],
+            y=df['CohesiveEnergy(eV/atom)'],
+            mode='lines+markers'
+        )
+        
+        zero_line = go.Scatter(
+            x=[min(lattice), max(lattice)],
+            y=[0, 0],
+            mode='lines',
+            line=dict(color='blue', width=1, dash='dot'),
+            showlegend=False
+        )
+
+        layout = go.Layout(
+            title='Cohesive Energy',
+            xaxis=dict(
+                title_text="Scaled Lattice Parameter a/a<sub>0</sub>",
+                title_font=dict(
+                    size=18,
+                    color="#7f7f7f"
+                ),
+            ),
+            yaxis=dict(
+                title_text="Cohesive Energy E<sub>coh</sub> (eV/atom)",
+                title_font=dict(
+                    size=18,
+                    color="#7f7f7f"
+                ),
+            )
+        )
+        
+        return [trace, zero_line], layout
+
+    @staticmethod
+    def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
+        lattice = []
+        epa = []
+        cohesive_energy = []
+        for k, m in res_data.items():
+            lattice.append(float(k))
+            epa.append(float(m["total_energy"]))
+            cohesive_energy.append(float(m["cohesive_energy"]))
+            
+        df = pd.DataFrame({
+            "Scaled Lattice Parameter (a/a0)": round_format(lattice, decimal),
+            "Cohesive Energy (eV/atom)": round_format(cohesive_energy, decimal)
+        })
+
+        table = dash_table.DataTable(
+            data=df.to_dict('records'),
+            columns=[{'name': i, 'id': i} for i in df.columns],
+            style_table={'width': TABLE_WIDTH,
+                         'minWidth': TABLE_MIN_WIDTH,
+                         'overflowX': 'auto'},
+            style_cell={'textAlign': 'left'}
+        )
+
+        return table, df
+    
+    
+class DecohesiveReport(PropertyReport):
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        vacuum_size = [values[0] for values in res_data.values()]
+        decohesion_e = [values[1] for values in res_data.values()]
+        stress = [values[2] for values in res_data.values()]
         vacuum_size = [str(item) for item in vacuum_size]
         df = pd.DataFrame({
-            "separation distance (A)": vacuum_size,
-            "Decohesion energy (J/m^2)": decohesion_e,
-            "Decohesion stress (GPa)": [s / 1e9 for s in stress],
+            "Separation Distance (A)": vacuum_size,
+            "Decohesion Energy (J/m^2)": decohesion_e,
+            "Decohesion Stress (GPa)": [s / 1e9 for s in stress],
         })
         trace_E = go.Scatter(
             name=f"{name} Decohesion Energy",
-            x=df['separation distance (A)'],
-            y=df['Decohesion energy (J/m^2)'],
+            x=df['Separation Distance (A)'],
+            y=df['Decohesion Energy (J/m^2)'],
             mode='lines+markers',
             yaxis='y1'
         )
 
         trace_S = go.Scatter(
             name=f"{name} Decohesion Stress",
-            x=df['separation distance (A)'],
-            y=df['Decohesion stress (GPa)'],
+            x=df['Separation Distance (A)'],
+            y=df['Decohesion Stress (GPa)'],
             mode='lines+markers',
             yaxis='y2'
         )
         layout = go.Layout(
             title=dict(
                 text='Decohesion Energy and Stress',
-                x=0.5,  # 标题居中
+                x=0.5,
                 xanchor='center'
             ),
             xaxis=dict(
-                title_text="separation distance (A)",
+                title_text="Separation Distance (A)",
                 title_font=dict(
                     size=18,
                     color="#7f7f7f"
                 )
             ),
             yaxis=dict(
-                title="Decohesion energy (J/m^2)",
-                titlefont=dict(
+                title="Decohesion Energy (J/m^2)",
+                title_font=dict(
                     size=18,
                     color="#7f7f7f"
                 )
             ),
             yaxis2=dict(
-                title="Decohesion stress (GPa)",
-                titlefont=dict(
+                title="Decohesion Stress (GPa)",
+                title_font=dict(
                     size=18,
                     color="#7f7f7f"
                 ),
@@ -179,14 +258,14 @@ class DecohesionEnergyReport(PropertyReport):
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
-        decohesion_e = [values[0] for values in res_data.values()]
-        stress = [values[1] for values in res_data.values()]
-        vacuum_size = [values[2] for values in res_data.values()]
+        vacuum_size = [values[0] for values in res_data.values()]
+        decohesion_e = [values[1] for values in res_data.values()]
+        stress = [values[2] for values in res_data.values()]
         vacuum_size = [str(item) for item in vacuum_size]
         df = pd.DataFrame({
-            "separation distance (A)": vacuum_size,
-            "Decohesion energy (J/m^2)": round_format(decohesion_e, decimal),
-            "Decohesion stress (GPa)": round_format([s / 1e9 for s in stress], decimal),
+            "Separation Distance (A)": vacuum_size,
+            "Decohesion Energy (J/m^2)": round_format(decohesion_e, decimal),
+            "Decohesion Stress (GPa)": round_format([s / 1e9 for s in stress], decimal),
         })
         table = dash_table.DataTable(
             data=df.to_dict('records'),
