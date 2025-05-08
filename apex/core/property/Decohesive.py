@@ -184,7 +184,7 @@ class Decohesive(Property):
         if not self.reprod:
             vacuum_size_step = loadfn(os.path.join(os.path.dirname(output_file), "param.json"))["vacuum_size_step"]
             ptr_data += ("Miller Index: " + str(loadfn(os.path.join(os.path.dirname(output_file), "param.json"))["miller_index"]) + "\n")
-            ptr_data += "Vacuum_size(A):\tDecohesion_E(J/m^2) Decohesion_S(Pa)\n"
+            ptr_data += "Vacuum_size(A) \tDecohesion_E(J/m^2) \tDecohesion_S(Pa)\n"
 
             pre_task_result = loadfn(os.path.join(all_tasks[0],"result_task.json"))
             pre_evac = 0
@@ -200,8 +200,8 @@ class Decohesive(Property):
                 vacuum_size = loadfn(os.path.join(ii, "decohesive.json"))["vacuum_size"]
                 stress = (evac - pre_evac) / vacuum_size_step * 1e10
 
-                ptr_data += "%-30s   % 7.3f     %10.3e \n" % (
-                    str(vacuum_size) + "-" + structure_dir + ":",
+                ptr_data += "%7.3f   % 7.3f     %10.3e \n" % (
+                    vacuum_size,
                     evac,
                     stress
                 )
