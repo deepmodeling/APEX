@@ -404,7 +404,6 @@ class CohesiveEnergyReport(PropertyReport):
             lattice.append(float(k))
             cohesive_energy.append(float(v))
             
-        # 计算标度化晶格参数 a/a0，假设第一个值为a0
         a0 = lattice[0] if lattice else 1.0
         scaled_lattice = [a/a0 for a in lattice]
         
@@ -413,7 +412,6 @@ class CohesiveEnergyReport(PropertyReport):
             "Cohesive Energy": cohesive_energy
         })
         
-        # 设置线型和标记样式
         line_style = kwargs.get('line_style', 'solid')
         marker_symbol = kwargs.get('marker_symbol', 'circle')
         line_color = kwargs.get('line_color', random_color())
@@ -428,7 +426,6 @@ class CohesiveEnergyReport(PropertyReport):
             marker=dict(symbol=marker_symbol, size=8)
         )
         
-        # 添加零能量参考线
         zero_line = go.Scatter(
             x=[min(scaled_lattice), max(scaled_lattice)],
             y=[0, 0],
@@ -445,7 +442,7 @@ class CohesiveEnergyReport(PropertyReport):
                     size=18,
                     color="#7f7f7f"
                 ),
-                range=[0.5, 2.5]  # 设置x轴范围类似于示例图
+                range=[0.5, 2.5]  
             ),
             yaxis=dict(
                 title_text="Cohesive energy E<sub>coh</sub> (eV/atom)",
@@ -453,7 +450,7 @@ class CohesiveEnergyReport(PropertyReport):
                     size=18,
                     color="#7f7f7f"
                 ),
-                range=[-7, 8]  # 设置y轴范围类似于示例图
+                range=[-7, 8]  
             ),
             showlegend=True,
             legend=dict(
@@ -473,7 +470,6 @@ class CohesiveEnergyReport(PropertyReport):
             lattice.append(float(k))
             cohesive_energy.append(float(v))
             
-        # 计算标度化晶格参数 a/a0
         a0 = lattice[0] if lattice else 1.0
         scaled_lattice = [a/a0 for a in lattice]
             
