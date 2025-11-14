@@ -181,6 +181,7 @@ class CohesiveReport(PropertyReport):
             
         df = pd.DataFrame({
             "Scaled Lattice Parameter (a/a0)": round_format(lattice, decimal),
+            "Total Energy (eV/atom)": round_format(epa, decimal),
             "Cohesive Energy (eV/atom)": round_format(cohesive_energy, decimal)
         })
 
@@ -921,4 +922,3 @@ class PhononReport(PropertyReport):
         )
 
         return table, df
-

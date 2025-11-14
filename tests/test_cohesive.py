@@ -4,16 +4,20 @@ import shutil
 import sys
 import unittest
 
-import dpdata
+import json
 import numpy as np
-from monty.serialization import loadfn
-from pymatgen.io.vasp import Incar
 from apex.core.property.Cohesive import Cohesive
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
-from apex.reporter.property_report import CohesiveReport
+# Optional import: reporter stack depends on pandas/plotly, which may not be present
+try:
+    from apex.reporter.property_report import CohesiveReport  # type: ignore
+    _HAS_REPORT_DEPS = True
+except Exception:
+    CohesiveReport = None  # type: ignore
+    _HAS_REPORT_DEPS = False
 
 class TestCohesive(unittest.TestCase):
     def setUp(self):
@@ -72,33 +76,44 @@ class TestCohesive(unittest.TestCase):
         self.assertEqual(self.prop_param[0], self.cohesive.task_param())
 
     def test_make_confs_0(self):
-
+        # Expect failure when equilibrium structure is missing
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
             with self.assertRaises(RuntimeError):
                 self.cohesive.make_confs(self.target_path, self.equi_path)
+
+        # Provide equilibrium structure and generate tasks
         shutil.copy(
             os.path.join(self.source_path, "CONTCAR"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
-        dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
+        tasks = self.cohesive.make_confs(self.target_path, self.equi_path)
+        dfm_dirs = sorted(glob.glob(os.path.join(self.target_path, "task.*")))
+        # compare absolute paths to avoid rel/abs mismatches
+        abs_dfm = [os.path.realpath(p) for p in dfm_dirs]
+        abs_tasks = [os.path.realpath(p) for p in tasks]
+        self.assertEqual(abs_dfm, abs_tasks)
 
-        incar0 = Incar.from_file(os.path.join("vasp_input", "INCAR.rlx"))
-        incar0["ISIF"] = 2
-        incar0["NSW"] = 0
+        # Expect 41 tasks from 0.8 to 1.2 inclusive with step 0.01
+        self.assertEqual(len(dfm_dirs), 41)
 
         for ii in dfm_dirs:
             self.assertTrue(os.path.isfile(os.path.join(ii, "POSCAR")))
             cohesive_json_file = os.path.join(ii, "cohesive.json")
             self.assertTrue(os.path.isfile(cohesive_json_file))
-            cohesive_json = loadfn(cohesive_json_file)
+            with open(cohesive_json_file, "r") as fp:
+                cohesive_json = json.load(fp)
             self.assertEqual(
                 os.path.realpath(os.path.join(ii, "POSCAR.orig")),
                 os.path.realpath(os.path.join(self.equi_path, "CONTCAR")),
             )
-            sys = dpdata.System(os.path.join(ii, "POSCAR"))
-            self.assertAlmostEqual(
-                cohesive_json["lattice"], np.linalg.norm(sys["cells"][0], axis=1)[0]
-            )
+
+            # Parse POSCAR directly to obtain |a| and compare with logged lattice
+            with open(os.path.join(ii, "POSCAR"), "r") as f:
+                lines = f.readlines()
+            scale = float(lines[1].strip())
+            cell = np.array([[float(x) for x in line.split()] for line in lines[2:5]]) * scale
+            a_len = np.linalg.norm(cell, axis=1)[0]
+            self.assertAlmostEqual(cohesive_json["lattice"], a_len, places=6)
 
     def test_make_confs_1(self):
         self.cohesive.reprod = True
@@ -109,6 +124,7 @@ class TestCohesive(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.cohesive.make_confs(self.target_path, self.equi_path)
 
+@unittest.skipUnless(_HAS_REPORT_DEPS, "report dependencies not available")
 class TestCohesiveReport(unittest.TestCase):
     def setUp(self):
         self.res_data = {
@@ -145,9 +161,10 @@ class TestCohesiveReport(unittest.TestCase):
         table, df = CohesiveReport.dash_table(self.res_data)
         
         self.assertEqual(len(df), len(self.formatted_data))
-        self.assertEqual(len(df.columns), 2)
+        self.assertEqual(len(df.columns), 3)
         
         self.assertIn("Scaled Lattice Parameter (a/a0)", df.columns)
+        self.assertIn("Total Energy (eV/atom)", df.columns)
         self.assertIn("Cohesive Energy (eV/atom)", df.columns)
         
         self.assertEqual(len(table.data), len(self.formatted_data))
