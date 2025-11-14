@@ -4,6 +4,8 @@ from monty.serialization import loadfn
 from apex.core.common_equi import (make_equi, run_equi, post_equi)
 from apex.core.common_prop import (make_property, run_property, post_property)
 from apex.utils import get_flow_type, load_config_file
+from apex.archive import archive_workdir
+from apex.config import Config
 
 
 def do_step(param_dict: dict, step: str, machine_dict: dict = None):
@@ -36,6 +38,18 @@ def do_step(param_dict: dict, step: str, machine_dict: dict = None):
         else:
             print('Posting relaxation results locally...')
             post_equi(structures, inter_parameter)
+            # Auto-archive to generate/update all_result.json locally (parity with `apex submit`)
+            try:
+                cfg = Config(**(machine_dict or {}))
+                archive_workdir(
+                    relax_param=param_dict,
+                    props_param=None,
+                    config=cfg,
+                    work_dir=os.getcwd(),
+                    flow_type='relax'
+                )
+            except Exception as e:  # non-fatal; keep local post succeeding
+                print(f"[archive] skipped: {e}")
 
     elif step in ['make_props', 'run_props', 'post_props']:
         param = param_dict["properties"]
@@ -56,6 +70,18 @@ def do_step(param_dict: dict, step: str, machine_dict: dict = None):
         else:
             print('Posting property results locally...')
             post_property(structures, inter_parameter, param)
+            # Auto-archive to generate/update all_result.json locally (parity with `apex submit`)
+            try:
+                cfg = Config(**(machine_dict or {}))
+                archive_workdir(
+                    relax_param=None,
+                    props_param=param_dict,
+                    config=cfg,
+                    work_dir=os.getcwd(),
+                    flow_type='props'
+                )
+            except Exception as e:  # non-fatal; keep local post succeeding
+                print(f"[archive] skipped: {e}")
 
 
 def do_step_from_args(parameter: str, step: str, machine_file: os.PathLike = None):
