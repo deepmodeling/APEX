@@ -5,17 +5,7 @@
 # APEX: Alloy Property EXplorer
 [![](https://img.shields.io/badge/release-1.2.0-blue.svg)](https://github.com/deepmodeling/APEX)
 
-**What’s new in v1.2**
 
-- Added `retrieve` sub-command for manual result downloads (replaces Distributor/Collector operators).
-- Command-line access to common dflow operations (`list`, `get`, `stop`, etc.).
-- Result archiving to local files, MongoDB, or DynamoDB.
-- Introduced `report` sub-command for Dash-based visualisation and comparison.
-- Automated band-path detection via [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) in phonon workflows.
-- Eight predefined HCP interstitial configurations.
-- New LAMMPS interaction types: ML pair styles (`snap`, `gap`, `rann`, `mace`) and `meam-spline`.
-- Renamed the single-step command from `test` to `do` for clarity.  
----
 
 [APEX](https://github.com/deepmodeling/APEX) helps materials scientists build reliable alloy property workflows that run on local machines, on-premises clusters, or the Bohrium cloud. It refactors the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module into a flexible, dflow-powered Python package that prepares tasks, dispatches calculations, monitors progress, and collects results for calculators such as **LAMMPS**, **VASP**, and **ABACUS**.
 
