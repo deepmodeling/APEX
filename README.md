@@ -5,176 +5,236 @@
 # APEX: Alloy Property EXplorer
 [![](https://img.shields.io/badge/release-1.2.0-blue.svg)](https://github.com/deepmodeling/APEX)
 
+**What’s new in v1.2**
+
+- Added `retrieve` sub-command for manual result downloads (replaces Distributor/Collector operators).
+- Command-line access to common dflow operations (`list`, `get`, `stop`, etc.).
+- Result archiving to local files, MongoDB, or DynamoDB.
+- Introduced `report` sub-command for Dash-based visualisation and comparison.
+- Automated band-path detection via [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) in phonon workflows.
+- Eight predefined HCP interstitial configurations.
+- New LAMMPS interaction types: ML pair styles (`snap`, `gap`, `rann`, `mace`) and `meam-spline`.
+- Renamed the single-step command from `test` to `do` for clarity.  
+---
+
 [APEX](https://github.com/deepmodeling/APEX) helps materials scientists build reliable alloy property workflows that run on local machines, on-premises clusters, or the Bohrium cloud. It refactors the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module into a flexible, dflow-powered Python package that prepares tasks, dispatches calculations, monitors progress, and collects results for calculators such as **LAMMPS**, **VASP**, and **ABACUS**.
 
-![gif](./docs/images/apex_demo_high_0001.gif)
+
+<div style="text-align: center;">
+    <img src="./docs/images/apex_demo_high_0001.gif" alt="Fig1" style="zoom: 100%;">
+
+</div>
+
+The comprehensive architecture of APEX is demonstrated below:
+
+<div style="text-align: center;">
+    <img src="./docs/images/flowchart.png" alt="Fig1" style="zoom: 40%;">
+    <p style='font-size:1.0rem; font-weight:none'>Figure 1. Schematic diagram of APEX</p>
+</div>
+
+
+APEX currently offers calculation methods for the following alloy properties:
+
+* Equation of State (EOS)
+* Elastic constants
+* Surface energy
+* Interstitial formation energy
+* Vacancy formation energy
+* Generalized stacking fault energy (Gamma line)
+* Phonon spectra
 
 ## What's Inside
-- [Quickstart: Submit Your First APEX Job](#quickstart-submit-your-first-apex-job)
-- [Installation Options](#installation-options)
-- [Execution Backends](#execution-backends)
-- [Prepare Your Input Files](#prepare-your-input-files)
-- [Submit and Monitor Workflows](#submit-and-monitor-workflows)
-- [Run Individual Steps](#run-individual-steps)
-- [After Submission](#after-submission)
-- [Feature Highlights](#feature-highlights)
-- [Detailed Parameter Reference](#detailed-parameter-reference)
+- [Installation](#1installation)
+  - [Install APEX](#11-install-apex)
+  - [Install Argo](#12-install-argo)
+- [Quick Start](#2-quick-start)
+  - [Work Directory Structure](#21-work-directory-structure)
+  - [Calculation Parameter Files](#22-calculation-parameter-files)
+  - [Global Configuration Files](#23-global-configuration-files)
+  - [Submit Your First Workflow](#24-submit-your-first-workflow)
+  - [Check Your Results](#25-check-your-results)
+- [User Menu](#3-user-menu)
+  - [Execution Backends](#31-execution-backends)
+  - [Prepare Your Input Files](#32-prepare-your-input-files)
+  - [Calculation Parameter File Types](#33-calculation-parameter-file-types)
+  - [Submit and Monitor Workflows](#34-submit-and-monitor-workflows)
+  - [Run Individual Steps](#35-run-individual-steps)
+  - [After Submission](#36-after-submission)
+- [Detailed Parameter Reference](#4-detailed-parameter-reference)
+  - [Global Configuration](#41-global-configuration-globaljson)
+  - [Calculation Parameters](#42-calculation-parameters-paramjson)
+  - [EOS](#eos)
+  - [Elastic](#elastic)
+  - [Surface](#surface)
+  - [Vacancy](#vacancy)
+  - [Interstitial](#interstitial)
+  - [Gamma Line](#gamma-line-generalised-stacking-fault)
+  - [Phonon Spectra](#phonon-spectra)
 - [More Resources](#more-resources)
 
-## Quickstart: Submit Your First APEX Job
+## 1.Installation
+### 1.1. Install APEX
 
-Follow these five steps to run the bundled LAMMPS demo (`examples/lammps_demo`) and understand the full submission flow.
+There are two ways to install APEX:
 
-1. **Install APEX**
+#### Option 1: Install from PyPI (recommended for most users)
 
-   ```shell
-   pip install apex-flow
-   ```
-
-   Or install from source:
-
-   ```shell
-   git clone https://github.com/deepmodeling/APEX.git
-   cd APEX
-   pip install .
-   ```
-
-2. **Grab the example workspace**
-
-   If you installed from PyPI, clone the repository to access the ready-to-run examples:
-
-   ```shell
-   git clone https://github.com/deepmodeling/APEX.git
-   cd APEX/examples/lammps_demo
-   ```
-
-   (When installing from source you already have these files under `examples/`.) The directory contains structure files, parameter JSON files, and a Deep Potential model.
-
-3. **Tell APEX where to run**
-
-   Pick the backend that matches your environment and adjust the corresponding global configuration file:
-
-   - **Local debug mode (no Docker/Argo required)**  
-     Add the `-d` flag when submitting and keep a minimal global config such as `global_local_debug.json`:
-
-     ```json
-     {
-         "context_type": "Local",
-         "batch_type": "Shell",
-         "local_root": "./",
-         "run_command": "lmp -in in.lammps"
-     }
-     ```
-
-     APEX executes every step inside your current Python environment; ensure the necessary executables (LAMMPS, VASP, etc.) are on `PATH`.
-
-   - **Local Argo or on-prem HPC**  
-     Use `global_hpc.json` (or create your own) and point it to your scheduler or local Argo service:
-
-     ```json
-     {
-         "apex_image_name": "zhuoyli/apex_amd64",
-         "run_image_name": "zhuoyli/apex_amd64",
-         "run_command": "lmp -in in.lammps",
-         "context_type": "SSHContext",
-         "machine": {
-             "batch_type": "Slurm",
-             "context_type": "SSHContext",
-             "local_root": "./",
-             "remote_root": "/your/remote/tasks/path",
-             "clean_asynchronously": true,
-             "remote_profile": {
-                 "hostname": "123.12.12.12",
-                 "username": "USERNAME",
-                 "password": "PASSWD",
-                 "port": 22,
-                 "timeout": 10
-             }
-         },
-         "resources": {
-             "number_node": 1,
-             "cpu_per_node": 4,
-             "gpu_per_node": 0,
-             "queue_name": "apex_test",
-             "group_size": 1,
-             "module_list": ["deepmd-kit/2.1.0/cpu_binary_release"],
-             "custom_flags": [
-                 "#SBATCH --partition=xlong",
-                 "#SBATCH --ntasks=4",
-                 "#SBATCH --mem=10G",
-                 "#SBATCH --nodes=1",
-                 "#SBATCH --time=1-00:00:00"
-             ]
-         }
-     }
-     ```
-
-     Point `dflow_host` and `k8s_api_server` to your Argo endpoint (defaults to `https://127.0.0.1:2746` if you run the local scripts in `docs/scripts/`).
-
-   - **Bohrium cloud (fully managed)**  
-     Fill in your credentials inside `global_bohrium.json`:
-
-     ```json
-     {
-         "dflow_host": "https://workflows.deepmodeling.com",
-         "k8s_api_server": "https://workflows.deepmodeling.com",
-         "batch_type": "Bohrium",
-         "context_type": "Bohrium",
-         "email": "YOUR_EMAIL",
-         "password": "YOUR_PASSWD",
-         "program_id": 1234,
-         "apex_image_name": "registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
-         "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
-         "lammps_run_command": "lmp -in in.lammps",
-         "scass_type": "c8_m31_1 * NVIDIA T4"
-     }
-     ```
-
-4. **Submit the workflow**
-
-   Run the command from the example directory. Choose the parameter file that matches the workflow you want:
-
-   ```shell
-   # Relaxation workflow
-   apex submit param_relax.json -c global_hpc.json
-
-   # Property workflow
-   apex submit param_props.json -c global_hpc.json
-
-   # Joint (relax + property) workflow
-   apex submit param_joint.json -c global_hpc.json
-   ```
-
-   Replace `global_hpc.json` with the config for your backend. Add `-d` for local debug mode.
-
-5. **Monitor and collect results**
-
-   - Watch the Argo UI at `https://127.0.0.1:2746` (local) or `https://workflows.deepmodeling.com` (Bohrium). Use SSH port forwarding if the cluster has no direct UI access:  
-     ```shell
-     ssh -nNT -L 127.0.0.1:2746:127.0.0.1:2746 USERNAME@123.12.12.12
-     ```
-   - CLI shortcuts: `apex list`, `apex get -i <workflow-id>`, `apex getsteps -i <workflow-id>`.
-   - Retrieve outputs manually if necessary:  
-     ```shell
-     apex retrieve -i <workflow-id> -c global_hpc.json
-     ```  
-     Results land in your work directory as `all_result.json`. Launch `apex report` for an interactive Dash dashboard.
-
-## Installation Options
-
-- **PyPI (recommended for most users)**  
   ```shell
   pip install apex-flow
   ```
+#### Option 2: Install from Source (latest features / development)
 
-- **From source (latest features / development)**  
   ```shell
   git clone https://github.com/deepmodeling/APEX.git
   cd APEX
   pip install .
   ```
 
-## Execution Backends
+### 1.2. Install Argo
+
+APEX recommends integrating [Argo](https://argoproj.github.io/workflows/) workflow engine for enhanced automation and visualization.
+
+- If you are using the **Bohrium platform**, Argo is already included—you can skip installation.
+- For **local cluster** workflows, installing Argo is recommended for better process visualization, monitoring, and task scheduling.
+
+#### Install Local Argo (Optional)
+
+To install Argo locally on Linux (no root required), execute the setup script:
+
+```
+bash install-linux-cn.sh
+```
+
+This will automatically configure Docker, Minikube, and Argo service.
+Once enabled, access the workflow dashboard at `http://127.0.0.1:2746`.
+
+
+
+---
+## 2. Quick Start
+
+To submit an APEX workflow, you need to organize three essential components in your working directory:
+
+1. **A work directory** with initial structures and computational files
+2. **Calculation parameter files** specifying what to compute
+3. **Global configuration files** specifying where and how to compute
+
+We present a quick example using a [LAMMPS_example](./examples/lammps/lammps_tutorial1_quick_start/lammps_example1.1_Mo) to compute the Equation of State (EOS) and elastic constants of molybdenum (Mo) metal in both Body-Centered Cubic (BCC) phase.
+
+### 2.1. Work Directory Structure
+
+Create your working directory with the following structure:
+
+```
+lammps_demo/
+├── confs/
+│   ├── std-bcc/
+│       └── POSCAR
+├── frozen_model.pb
+├── global_bohrium.json
+└── param_joint.json
+```
+
+**Directory Organization:**
+
+- **`confs/` subdirectory**: Contains initial crystal structures in POSCAR format for different phases (BCC, FCC). These are the starting geometries for your calculations. To compute the properties of Mo in BCC/FCC phases, you can download the corresponding POSCAR files from [Materials Project](https://next-gen.materialsproject.org/materials/mp-129?formula=Mo).
+
+- **`frozen_model.pb`**: The machine learning potential model file (or other force field files). This is the pre-trained model used to perform the calculations.
+
+- **`param_*.json` files**: Specify the computational requirements:
+  - `param_joint.json` - Parameters for structure relaxation and property calculations
+
+
+- **`global_bohrium.json`**: Provides computing resource information for Bohrium cloud platform execution.
+
+### 2.2. Calculation Parameter Files
+
+Calculation parameter files define what properties to compute and with what parameters.
+
+#### Joint Parameter File
+
+This file contains parameters for geometry optimization, structure relaxation and property calculations:
+
+<span style="color: red">**Important:** The Json format does not support adding annotations. The annotations provided below are for reference only.</span>
+```json
+{
+  "structures":            ["confs/std-*"],  # Input structure paths
+  "interaction": {
+    "type":           "deepmd",              # Interaction type
+    "model":          "frozen_model.pb",     # Model file path
+    "type_map":       {"Mo": 0}              # Element type mapping
+  },
+  "relaxation": {
+    "cal_setting":   {
+      "etol":       0,        # Energy tolerance
+      "ftol":     1e-10,      # Force tolerance
+      "maxiter":   5000,      # Maximum iterations
+      "maximal":  500000      # Maximum evaluation steps
+    }
+  },
+  "properties": [
+    {
+      "type":         "eos",                 # Property type: Equation of State
+      "vol_start":    0.6,                   # Starting volume (relative)
+      "vol_end":      1.4,                   # End volume (relative)
+      "vol_step":     0.1,                   # Volume step
+    },
+    {
+      "type":         "elastic",             # Property type: Elastic constants
+    }
+  ]
+}
+```
+
+### 2.3. Global Configuration Files
+
+Global configuration files specify where and how your workflows should be executed.
+
+#### Configuration for Bohrium Cloud Platform
+
+Create `global_bohrium.json` to submit workflows to the Bohrium cloud platform:
+
+```json
+{
+  "dflow_host": "https://workflows.deepmodeling.com",
+  "k8s_api_server": "https://workflows.deepmodeling.com",
+  "batch_type": "Bohrium",
+  "context_type": "Bohrium",
+  "email": "YOUR_EMAIL",
+  "password": "YOUR_PASSWD",
+  "program_id": 1234,
+  "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
+  "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
+  "lammps_run_command":"lmp -in in.lammps",
+  "scass_type":"c8_m31_1 * NVIDIA T4"
+}
+```
+
+<span style="color: red">**Important:** Replace `YOUR_EMAIL`, `YOUR_PASSWD` and `program_id` with your own Bohrium account credentials.</span>
+
+### 2.4. Submit Your First Workflow
+
+Once you have prepared all necessary files and configuration, submit your workflow using the Bohrium platform (as shown in the Quick Start example):
+
+```shell
+apex submit param_joint.json -c global_bohrium.json
+```
+
+Monitor the workflow progress at https://workflows.deepmodeling.com.
+
+### 2.5. Check Your Results
+After the job is finished, you can check your results by:
+
+```shell
+apex report
+```
+
+**For other submission examples, please refer to [Lammps_tutorial](./examples/lammps/apex_tutorial_en.md).**
+
+
+
+## 3. User menu
+### 3.1. Execution Backends
 
 APEX builds on [dflow](https://github.com/deepmodeling/dflow) to orchestrate cloud-native workflows. Choose the backend that matches your infrastructure:
 
@@ -183,7 +243,7 @@ APEX builds on [dflow](https://github.com/deepmodeling/dflow) to orchestrate clo
 - **Remote HPC via DPDispatcher**: Define SSH credentials, scheduler options, and resource requirements inside your global config. APEX hands off the `run` step to DPDispatcher to submit jobs to Slurm or other supported schedulers.
 - **Bohrium cloud**: Leverage the managed Argo service and curated container images on [Bohrium](https://bohrium.dp.tech). You only need valid account credentials and program ID.
 
-## Prepare Your Input Files
+### 3.2 Prepare Your Input Files
 
 Every submission needs three pieces:
 
@@ -209,7 +269,7 @@ lammps_demo
 └── param_relax.json
 ```
 
-### Calculation parameter file types
+### 3.3 Calculation parameter file types
 
 | Type | File format | Required dictionaries | Typical use |
 |------|-------------|-----------------------|-------------|
@@ -219,7 +279,7 @@ lammps_demo
 
 Paths in these files should be relative to the work directory. The examples above cover standard Deep Potential workflows; see `docs/Hands_on_auto-test.pdf` for a complete walk-through.
 
-## Submit and Monitor Workflows
+### 3.4 Submit and Monitor Workflows
 
 APEX chooses the workflow type from the parameter files you provide:
 
@@ -248,7 +308,7 @@ Common management commands:
 | `apex resume -i <id>` | Resume a suspended workflow. |
 | `apex stop -i <id>` / `apex suspend -i <id>` / `apex terminate -i <id>` | Control workflow execution. |
 
-## Run Individual Steps
+### 3.5 Run Individual Steps
 
 For fine-grained debugging you can execute single steps locally via `apex do`:
 
@@ -267,7 +327,7 @@ For fine-grained debugging you can execute single steps locally via `apex do`:
 
 The same pattern applies to property calculations (`make_props`, `run_props`, `post_props`).
 
-## After Submission
+### 3.6 After Submission
 
 - **Manual retrieval**  
   ```shell
@@ -287,22 +347,11 @@ The same pattern applies to property calculations (`make_props`, `run_props`, `p
   ```
   Launch a Dash app (http://127.0.0.1:8050/) to explore multiple result sets side-by-side.
 
-## Feature Highlights
 
-**What’s new in v1.2**
 
-- Added `retrieve` sub-command for manual result downloads (replaces Distributor/Collector operators).
-- Command-line access to common dflow operations (`list`, `get`, `stop`, etc.).
-- Result archiving to local files, MongoDB, or DynamoDB.
-- Introduced `report` sub-command for Dash-based visualisation and comparison.
-- Automated band-path detection via [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) in phonon workflows.
-- Eight predefined HCP interstitial configurations.
-- New LAMMPS interaction types: ML pair styles (`snap`, `gap`, `rann`, `mace`) and `meam-spline`.
-- Renamed the single-step command from `test` to `do` for clarity.
+## 4. Detailed Parameter Reference
 
-## Detailed Parameter Reference
-
-### Global configuration (`global*.json`)
+### 4.1 Global configuration (`global*.json`)
 
 #### Basic config
 
@@ -353,7 +402,7 @@ The same pattern applies to property calculations (`make_props`, `run_props`, `p
 | `program_id` | Integer | `None` | Bohrium program ID. |
 | `scass_type` | String | `None` | Bohrium node type. |
 
-### Calculation parameters (`param*.json`)
+### 4.2. Calculation parameters (`param*.json`)
 
 The JSON schema inherits from `dpgen.autotest`. Below are example snippets for each workflow type:
 
