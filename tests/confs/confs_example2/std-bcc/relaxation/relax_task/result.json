@@ -1,0 +1,149 @@
+{
+    "@module": "dpdata.system",
+    "@class": "LabeledSystem",
+    "data": {
+        "atom_numbs": [
+            2
+        ],
+        "atom_names": [
+            "Mo"
+        ],
+        "atom_types": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "int64",
+            "data": [
+                0,
+                0
+            ]
+        },
+        "orig": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "int64",
+            "data": [
+                0,
+                0,
+                0
+            ]
+        },
+        "cells": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": [
+                [
+                    [
+                        3.162367268,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        3.162367268,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        3.162367268
+                    ]
+                ]
+            ]
+        },
+        "coords": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": [
+                [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        1.58118,
+                        1.58118,
+                        1.58118
+                    ]
+                ]
+            ]
+        },
+        "energies": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": [
+                -21.85624081
+            ]
+        },
+        "forces": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": [
+                [
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                ]
+            ]
+        },
+        "virials": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": [
+                [
+                    [
+                        -0.12360818244965875,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        -0.12360818244965875,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        -0.12360818244965875
+                    ]
+                ]
+            ]
+        },
+        "stress": {
+            "@module": "numpy",
+            "@class": "array",
+            "dtype": "float64",
+            "data": [
+                [
+                    [
+                        -6.26211,
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        -6.26211,
+                        0.0
+                    ],
+                    [
+                        0.0,
+                        0.0,
+                        -6.26211
+                    ]
+                ]
+            ]
+        }
+    }
+}

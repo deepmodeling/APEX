@@ -1,0 +1,11 @@
+{
+    "type": "abacus",
+    "incar": "abacus_input/INPUT",
+    "potcar_prefix": "abacus_input",
+    "potcars": {
+        "Al": "Al_ONCV_PBE-1.0.upf"
+    },
+    "orb_files": {
+        "Al": "Al_gga_9au_100Ry_4s4p1d.orb"
+    }
+}

@@ -1,0 +1,76 @@
+{
+     "structures": ["confs/fcc-Al"],
+     "interaction": {
+         "type": "abacus",
+         "incar": "abacus_input/INPUT",
+         "potcar_prefix": "abacus_input",
+         "potcars": {"Al": "Al_ONCV_PBE-1.0.upf"},
+         "orb_files": {"Al":"Al_gga_9au_100Ry_4s4p1d.orb"}
+     },
+     "relaxation": {
+            "cal_type":      "relaxation",
+            "cal_setting":  {"relax_pos":true,
+                         "relax_shape":true,
+                         "relax_vol":true}
+                         },
+
+    "properties": [
+        {
+         "type":         "eos",
+         "skip":         false,
+         "vol_start":    0.6,
+         "vol_end":      1.4,
+         "vol_step":     0.05
+        },
+        {
+         "type":         "elastic",
+          "skip":         true,
+         "norm_deform":  1e-2,
+         "shear_deform": 1e-2
+        },
+	{
+         "type":           "surface",
+         "skip":         true,
+         "min_slab_size":  10,
+         "min_vacuum_size":11,
+         "max_miller":     2,
+         "cal_type":       "static"
+        },
+      {
+         "type":         "interstitial",
+         "skip":         true,
+         "supercell":   [1, 1, 1],
+         "insert_ele":  ["Mo"]
+        },
+	  {
+	  "type":            "gamma",
+	  "skip":            true,
+      "plane_miller":    [1,2,3],
+      "slip_direction":  [1,1,-1],
+	  "hcp": {
+        	"plane_miller":    [0,0,0,1],
+        	"slip_direction":  [2,-1,-1,0],
+		    "slip_length": 1
+		},
+      "supercell_size":   [1,1,20],
+      "vacuum_size": 15,
+	  "add_fix": ["true","true","false"],
+      "n_steps":         20
+	},
+	{
+         "type":         "phonon",
+	 "skip":         true,
+	 "BAND": "0.5000 0.5000 0.5000  0.0000 0.0000 0.0000  0.5000 0.0000 0.5000  0.5000 0.2500 0.7500",
+	 "supercell_size":[1,1,1],
+	 "MESH":[8,8,8],
+	 "PRIMITIVE_AXES": "0 1/2 1/2  1/2 0 1/2  1/2 1/2 0",
+	 "BAND_POINTS":21,
+	 "BAND_CONNECTION" :true,
+	 "cal_setting": {
+	 	"K_POINTS": [6,6,6,0,0,0],
+	 	"input_prop": "abacus_input/INPUT_phonon"
+	}
+    }
+
+        ]
+}
