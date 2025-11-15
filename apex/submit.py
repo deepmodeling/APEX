@@ -201,10 +201,23 @@ def submit_workflow(
         wf_config.submit_only = True
     # set pre-defined dflow debug mode settings
     if is_debug:
-        tmp_work_dir = tempfile.TemporaryDirectory()
+        # Prefer an explicit debug_workdir from config; otherwise, try to place
+        # the debug work under the configured remote_root (if any) to mimic the
+        # user's desired filesystem layout; fall back to a temp dir.
+        debug_dir = config_dict.get("debug_workdir")
+        if not debug_dir:
+            base_dir = wf_config.remote_root or os.getcwd()
+            # Put artifacts in a hidden folder to avoid clutter
+            debug_dir = os.path.join(base_dir, "dflow_debug")
+        try:
+            os.makedirs(debug_dir, exist_ok=True)
+        except Exception:
+            # Final fallback: system temp
+            debug_dir = tempfile.mkdtemp(prefix="apex-debug-")
         config["mode"] = "debug"
-        config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
+        config["debug_workdir"] = debug_dir
         logging.info(f'Debug mode activated, debug work directory: {config["debug_workdir"]}')
+        # Use local filesystem instead of object storage in debug
         s3_config["storage_client"] = None
 
     if flow_name:
