@@ -80,24 +80,6 @@ There are two ways to install APEX:
   pip install .
   ```
 
-### 1.2. Install Argo
-
-APEX recommends integrating [Argo](https://argoproj.github.io/workflows/) workflow engine for enhanced automation and visualization.
-
-- If you are using the **Bohrium platform**, Argo is already included—you can skip installation.
-- For **local cluster** workflows, installing Argo is recommended for better process visualization, monitoring, and task scheduling.
-
-#### Install Local Argo (Optional)
-
-To install Argo locally on Linux (no root required), execute the setup script:
-
-```
-bash install-linux-cn.sh
-```
-
-This will automatically configure Docker, Minikube, and Argo service.
-Once enabled, access the workflow dashboard at `http://127.0.0.1:2746`.
-
 
 
 ---
