@@ -200,7 +200,7 @@ After the job is finished, you can check your results by:
 apex report
 ```
 
-**For other submission examples, please refer to [Lammps_tutorial](./examples/lammps/apex_tutorial_en.md).**
+**For other submission examples, please refer to [Lammps_tutorial](./examples/lammps/apex_lammps_tutorial.md).**
 
 
 
