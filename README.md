@@ -36,7 +36,6 @@ APEX currently offers calculation methods for the following alloy properties:
 ## What's Inside
 - [Installation](#1installation)
   - [Install APEX](#11-install-apex)
-  - [Install Argo](#12-install-argo)
 - [Quick Start](#2-quick-start)
   - [Work Directory Structure](#21-work-directory-structure)
   - [Calculation Parameter Files](#22-calculation-parameter-files)
