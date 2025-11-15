@@ -1,7 +1,0 @@
-LOG INIT:dpdispatcher log direct to /gauss9/home/cityu/chefan/APEX/examples/lammps_example7/dpdispatcher.log
-LOG INIT:dpdispatcher log direct to /gauss9/home/cityu/chefan/APEX/examples/lammps_example7/dpdispatcher.log
-LOG INIT:dpdispatcher log direct to /gauss9/home/cityu/chefan/APEX/examples/lammps_example7/dpdispatcher.log
-2025-11-08 15:50:49,335 - INFO : info:check_all_finished: False
-2025-11-08 15:50:49,377 - INFO : job: 09439a78a4e281a78dc7342f100027d52a4d9a71 submit; job_id is 98443
-2025-11-08 15:51:20,506 - INFO : job: 09439a78a4e281a78dc7342f100027d52a4d9a71 98443 finished
-LOG INIT:dpdispatcher log direct to /gauss9/home/cityu/chefan/APEX/examples/lammps_example7/dpdispatcher.log

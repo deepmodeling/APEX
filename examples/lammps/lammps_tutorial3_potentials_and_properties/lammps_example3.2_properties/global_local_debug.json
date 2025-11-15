@@ -1,7 +1,0 @@
-{
-    "context_type": "Local",
-    "batch_type": "Shell",
-    "local_root": "./",
-    "remote_root": "./",
-    "run_command": "lmp -in in.lammps"
-}
