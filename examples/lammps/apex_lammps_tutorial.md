@@ -230,6 +230,10 @@ Submit jobs to remote HPC clusters managed by SLURM scheduler.
 ```bash
 apex submit -d param_joint.json -c global_hpc.json
 ```
+**To run in background**:
+```bash
+nohup apex submit -d param_joint.json -c global_hpc.json > apex.log 2>&1 &
+```
 
 #### Monitoring
 
