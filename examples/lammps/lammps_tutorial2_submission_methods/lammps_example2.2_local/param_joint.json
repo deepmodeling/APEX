@@ -1,5 +1,5 @@
 {
-    "structures":            ["confs/std-*"],
+    "structures":            ["confs/std-fcc"],
     "interaction": {
             "type":          "eam_alloy",
             "model":          "Al.eam.alloy",
