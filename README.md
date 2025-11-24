@@ -34,31 +34,31 @@ APEX currently offers calculation methods for the following alloy properties:
 * Phonon spectra
 
 ## What's Inside
-- [Installation](#1installation)
-  - [Install APEX](#11-install-apex)
-- [Quick Start](#2-quick-start)
-  - [Work Directory Structure](#21-work-directory-structure)
-  - [Calculation Parameter Files](#22-calculation-parameter-files)
-  - [Global Configuration Files](#23-global-configuration-files)
-  - [Submit Your First Workflow](#24-submit-your-first-workflow)
-  - [Check Your Results](#25-check-your-results)
-- [User Menu](#3-user-menu)
-  - [Execution Backends](#31-execution-backends)
-  - [Prepare Your Input Files](#32-prepare-your-input-files)
-  - [Calculation Parameter File Types](#33-calculation-parameter-file-types)
-  - [Submit and Monitor Workflows](#34-submit-and-monitor-workflows)
-  - [Run Individual Steps](#35-run-individual-steps)
-  - [After Submission](#36-after-submission)
-- [Detailed Parameter Reference](#4-detailed-parameter-reference)
-  - [Global Configuration](#41-global-configuration-globaljson)
-  - [Calculation Parameters](#42-calculation-parameters-paramjson)
-  - [EOS](#eos)
-  - [Elastic](#elastic)
-  - [Surface](#surface)
-  - [Vacancy](#vacancy)
-  - [Interstitial](#interstitial)
-  - [Gamma Line](#gamma-line-generalised-stacking-fault)
-  - [Phonon Spectra](#phonon-spectra)
+- [1. Installation](#1installation)
+  - [1.1 Install APEX](#11-install-apex)
+- [2. Quick Start](#2-quick-start)
+  - [2.1 Work Directory Structure](#21-work-directory-structure)
+  - [2.2 Calculation Parameter Files](#22-calculation-parameter-files)
+  - [2.3 Global Configuration Files](#23-global-configuration-files)
+  - [2.4 Submit Your First Workflow](#24-submit-your-first-workflow)
+  - [2.5 Check Your Results](#25-check-your-results)
+- [3. User Menu](#3-user-menu)
+  - [3.1 Execution Backends](#31-execution-backends)
+  - [3.2 Prepare Your Input Files](#32-prepare-your-input-files)
+  - [3.3 Calculation Parameter File Types](#33-calculation-parameter-file-types)
+  - [3.4 Submit and Monitor Workflows](#34-submit-and-monitor-workflows)
+  - [3.5 Run Individual Steps](#35-run-individual-steps)
+  - [3.6 After Submission](#36-after-submission)
+- [4. Detailed Parameter Reference](#4-detailed-parameter-reference)
+  - [4.1 Global Configuration](#41-global-configuration-globaljson)
+  - [4.2 Calculation Parameters](#42-calculation-parameters-paramjson)
+  - [4.3 EOS](#eos)
+  - [4.4 Elastic](#elastic)
+  - [4.5 Surface](#surface)
+  - [4.6 Vacancy](#vacancy)
+  - [4.7 Interstitial](#interstitial)
+  - [4.8 Gamma Line](#gamma-line-generalised-stacking-fault)
+  - [4.9 Phonon Spectra](#phonon-spectra)
 - [More Resources](#more-resources)
 
 ## 1.Installation
@@ -200,7 +200,7 @@ After the job is finished, you can check your results by:
 apex report
 ```
 
-**For other submission examples, please refer to [Lammps_tutorial](./examples/lammps/apex_tutorial_en.md).**
+**For other submission examples, please refer to [Lammps_tutorial](./examples/lammps/apex_lammps_tutorial.md).**
 
 
 
