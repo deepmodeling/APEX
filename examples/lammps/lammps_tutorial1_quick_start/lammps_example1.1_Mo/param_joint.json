@@ -1,5 +1,5 @@
 {
-    "structures":            ["confs/std-bcc"],
+    "structures":            ["confs/std-fcc"],
     "interaction": {
             "type":           "deepmd",
             "model":          "frozen_model.pb",
