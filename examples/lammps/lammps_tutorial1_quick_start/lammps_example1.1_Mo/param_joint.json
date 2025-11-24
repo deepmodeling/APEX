@@ -1,4 +1,4 @@
-
+{
     "structures":            ["confs/std-bcc"],
     "interaction": {
             "type":           "deepmd",
