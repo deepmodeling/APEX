@@ -386,13 +386,27 @@ class Lammps(Task):
                 else:
                     raise RuntimeError("not supported calculation setting for LAMMPS")
 
+            elif task_type in ["annealing", "Annealing"]:
+                # MD annealing schedule: equilibrate -> ramp -> hold -> cool
+                fc = lammps_utils.make_lammps_annealing(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+
             elif cal_type == "static":
                 fc = lammps_utils.make_lammps_eval(
                     "conf.lmp", self.type_map, self.inter_func, self.model_param
                 )
             elif cal_type == "npt+ave/time":
                 fc = lammps_utils.make_lammps_FiniteTlatt(
-                    "conf.lmp", self.type_map, self.inter_func, self.model_param
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
                 )
 
             else:
@@ -649,6 +663,8 @@ class Lammps(Task):
             return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
         elif property_type == "finitetlatt":
             return ["in.lammps", "variable_FiniteTlatt.in", os.path.basename(self.model)]
+        elif property_type in ["annealing", "Annealing"]:
+            return ["in.lammps", "variable_Annealing.in", os.path.basename(self.model)]
         else:
             return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
 
@@ -658,6 +674,8 @@ class Lammps(Task):
                 return ["in.lammps"] + list(map(os.path.basename, self.model))
             elif property_type == "finitetlatt":
                 return ["in.lammps", "variable_FiniteTlatt.in", os.path.basename(self.model)]
+            elif property_type in ["annealing", "Annealing"]:
+                return ["in.lammps", "variable_Annealing.in", os.path.basename(self.model)]
             else:
                 return ["in.lammps", os.path.basename(self.model)]
         else:
@@ -681,5 +699,7 @@ class Lammps(Task):
             ]
         elif property_type == "finitetlatt":
             return ["log.lammps", "outlog", "dump.relax", "average_box.txt"]
+        elif property_type in ["annealing", "Annealing"]:
+            return ["log.lammps", "outlog", "dump.anneal_ramp", "dump.anneal_cool", "restart.*"]
         else:
             return ["log.lammps", "outlog", "dump.relax"]

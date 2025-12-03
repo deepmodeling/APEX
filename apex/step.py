@@ -86,9 +86,71 @@ def do_step(param_dict: dict, step: str, machine_dict: dict = None):
 
 def do_step_from_args(parameter: str, step: str, machine_file: os.PathLike = None):
     print('-------Singel Step Local Debug Mode--------')
-    do_step(
-        param_dict=loadfn(parameter),
-        step=step,
-        machine_dict=load_config_file(machine_file)
-    )
+    param_dict = loadfn(parameter)
+    mcfg = load_config_file(machine_file)
+    if step in ['make', 'run', 'post']:
+        _do_step_combined(param_dict, step, mcfg)
+    else:
+        do_step(
+            param_dict=param_dict,
+            step=step,
+            machine_dict=mcfg
+        )
     print('Completed!')
+
+
+def _do_step_combined(param_dict: dict, step: str, machine_dict: dict = None):
+    """
+    Combined local steps that auto-detect json type and sequence:
+    - make:   relax -> props (for joint), otherwise corresponding only
+    - run:    relax -> props (for joint), otherwise corresponding only
+    - post:   relax -> props (for joint), otherwise corresponding only, then archive once
+    """
+    flow = get_flow_type(param_dict)  # 'relax' | 'props' | 'joint'
+    structures = param_dict.get('structures')
+    inter_parameter = param_dict.get('interaction')
+
+    # Helper to get mdata or warn
+    def _mdata_or_warn():
+        if not machine_dict:
+            raise RuntimeWarning(
+                'Miss configuration file for dpdispatcher (indicate by optional args -c). '
+                'Jobs will be running on the local shell.'
+            )
+        return machine_dict
+
+    # make
+    if step == 'make':
+        if flow in ['relax', 'joint']:
+            make_equi(structures, inter_parameter, param_dict['relaxation'])
+        if flow in ['props', 'joint']:
+            make_property(structures, inter_parameter, param_dict['properties'])
+        return
+
+    # run
+    if step == 'run':
+        mdata = _mdata_or_warn()
+        if flow in ['relax', 'joint']:
+            run_equi(structures, inter_parameter, mdata)
+        if flow in ['props', 'joint']:
+            run_property(structures, inter_parameter, param_dict['properties'], mdata)
+        return
+
+    # post
+    if step == 'post':
+        if flow in ['relax', 'joint']:
+            post_equi(structures, inter_parameter)
+        if flow in ['props', 'joint']:
+            post_property(structures, inter_parameter, param_dict['properties'])
+        # archive once for combined post
+        try:
+            cfg = Config(**(machine_dict or {}))
+            archive_workdir(
+                relax_param=param_dict if flow in ['relax', 'joint'] else None,
+                props_param=param_dict if flow in ['props', 'joint'] else None,
+                config=cfg,
+                work_dir=os.getcwd(),
+                flow_type=flow,
+            )
+        except Exception as e:
+            print(f"[archive] skipped: {e}")

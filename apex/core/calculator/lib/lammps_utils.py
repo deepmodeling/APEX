@@ -273,11 +273,11 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
-        "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
+        "thermo_style    custom step temp pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\ntimestep ${timestep}\nvariable        N equal step\nvariable        V equal vol\nvariable        Vatom equal ${V}/count(all)\nvariable        Temp equal temp\nvariable        pote equal c_mype\nvariable        Etotal equal etotal\nvariable        Press equal press\nvariable        stepVal equal step\nvariable        stepVal equal step\ncompute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}\n"
     )
     ret += "dump            1 all custom 100 dump.relax id type xs ys zs fx fy fz\n"  # 06/09 give dump.relax
     ret += "run    0\n"
-    ret += "variable        N equal count(all)\n"
+    ret += "variable        N equal step\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        tmplx equal lx\n"
@@ -364,7 +364,7 @@ def make_lammps_equi(
             ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
             ret += "fix             1 all box/relax tri 0.0 \n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-    ret += "variable        N equal count(all)\n"
+    ret += "variable        N equal step\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        tmplx equal lx\n"
@@ -418,7 +418,7 @@ def make_lammps_elastic(
     ret += "dump            1 all custom 100 dump.relax id type xs ys zs fx fy fz\n"
     ret += "min_style       cg\n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-    ret += "variable        N equal count(all)\n"
+    ret += "variable        N equal step\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        Pxx equal pxx\n"
@@ -436,11 +436,34 @@ def make_lammps_elastic(
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     return ret
 
-def make_lammps_FiniteTlatt(conf, type_map, interaction, param):
+def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None):
+    """Build LAMMPS input for finite-T lattice parameter sampling.
+
+    This mirrors the TiAl workflow: equilibrate, then time-average box lengths.
+
+    - Uses variables defined in `variable_FiniteTlatt.in` for temperature and
+      averaging controls (N_every/N_repeat/N_freq/equi_step/ave_step/nx/ny/nz).
+    - Supports thermostat/ensemble selection via optional `cal_setting` keys:
+      thermostat: "nose_hoover" (default) | "langevin"
+      ensemble:   "isothermal" (default) | "adiabatic"
+      tdamp/pdamp: damping parameters; velocity_seed/dump_step optional.
+    """
     type_map_list = element_list(type_map)
     deepmd_version = param.get("deepmd_version", None)
     dump_step = 100
-    # detour sychronizing problem of dumping in new version of deepmd-kit >=2.1.5
+    tdamp = "${tdamp}"
+    pdamp = "${pdamp}"
+    thermostat = "nose_hoover"
+    ensemble = "isothermal"
+    velocity_seed = 12345
+    if cal_setting is not None:
+        dump_step = int(cal_setting.get("dump_step", dump_step))
+        tdamp = cal_setting.get("tdamp", tdamp)
+        pdamp = cal_setting.get("pdamp", pdamp)
+        thermostat = cal_setting.get("thermostat", thermostat)
+        ensemble = cal_setting.get("ensemble", ensemble)
+        velocity_seed = cal_setting.get("velocity_seed", velocity_seed)
+
     ret = ""
     ret += "include  variable_FiniteTlatt.in\n"
     ret += "clear\n"
@@ -457,22 +480,36 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param):
     ret += interaction(param)
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
-    ret += (
-        "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
-    )
-    ret += "velocity all create ${temperature} 12345 mom yes rot yes dist gaussian\n"
-    ret += f"fix 1 all npt temp ${{temperature}} ${{temperature}} ${{tdamp}} aniso 0.0 0.0 ${{pdamp}}\n"
+    ret += ("thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n")
+
+    ret += f"velocity all create ${{temperature}} {int(velocity_seed)} mom yes rot yes dist gaussian\n"
+
+    if ensemble == "adiabatic":
+        ret += f"fix 1 all nph aniso 1.0 1.0 {pdamp} drag 1.0\n"
+    elif thermostat == "langevin":
+        ret += f"fix 1 all nph aniso 1.0 1.0 {pdamp} drag 1.0\n"
+        ret += f"fix 5 all langevin ${{temperature}} ${{temperature}} {tdamp} {int(velocity_seed)}\n"
+    else:
+        ret += (
+            f"fix 1 all npt temp ${{temperature}} ${{temperature}} {tdamp} "
+            f"aniso 0.0 0.0 {pdamp}\n"
+        )
+
     ret += "run ${equi_step}\n"
     ret += "reset_timestep 0 \n"
+
+    # Sampling stage
     ret += f"dump            1 all custom  {dump_step} dump.relax id type xs ys zs fx fy fz\n"
     ret += "variable lx equal lx \n"
     ret += "variable ly equal ly \n"
     ret += "variable lz equal lz \n"
     ret += "fix 2 all ave/time ${N_every} ${N_repeat} ${N_freq}  v_lx v_ly v_lz  ave running file average_box.txt\n"
     ret += "run ${ave_step} \n"
-    ret += "variable        N equal count(all)\n"
+
+    # Bookkeeping outputs
+    ret += "variable        N equal step\n"
     ret += "variable        V equal vol\n"
-    ret += "variable        E equal \"c_mype\"\n"
+    ret += 'variable        E equal "c_mype"\n'
     ret += "variable        tmplx equal lx\n"
     ret += "variable        tmply equal ly\n"
     ret += "variable        Pxx equal pxx\n"
@@ -484,13 +521,13 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param):
     ret += "variable        Epa equal ${E}/${N}\n"
     ret += "variable        Vpa equal ${V}/${N}\n"
     ret += "variable        AA equal (${tmplx}*${tmply})\n"
-    ret += "print \"All done\"\n"
-    ret += "print \"Total number of atoms = ${N}\"\n"
-    ret += "print \"Final energy per atoms = ${Epa}\"\n"
-    ret += "print \"Final volume per atoms = ${Vpa}\"\n"
-    ret += "print \"Final Base area = ${AA}\"\n"
-    ret += "print \"Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}\"\n"
-    ret += "print \"Final Length (box_x box_y box_z) = ${lx} ${ly} ${lz}\"\n"
+    ret += 'print "All done"\n'
+    ret += 'print "Total number of atoms = ${N}"\n'
+    ret += 'print "Final energy per atoms = ${Epa}"\n'
+    ret += 'print "Final volume per atoms = ${Vpa}"\n'
+    ret += 'print "Final Base area = ${AA}"\n'
+    ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
+    ret += 'print "Final Length (box_x box_y box_z) = ${lx} ${ly} ${lz}"\n'
     return ret
 
 def make_lammps_press_relax(
@@ -547,7 +584,7 @@ def make_lammps_press_relax(
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
     ret += "fix             1 all box/relax aniso ${Px} \n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-    ret += "variable        N equal count(all)\n"
+    ret += "variable        N equal step\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        Pxx equal pxx\n"
@@ -564,6 +601,122 @@ def make_lammps_press_relax(
     ret += 'print "Final energy per atoms = ${Epa} eV"\n'
     ret += 'print "Final volume per atoms = ${Vpa} A^3"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
+    return ret
+
+def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
+    """LAMMPS input for annealing: equilibrate -> heat (ramp) -> optional hold -> cool.
+
+    Uses variables provided by `variable_Annealing.in` in the task directory.
+    - thermostat: nose_hoover | langevin
+    - ensemble: for nose_hoover: npt|nvt; for langevin: nph|nve (barostat on/off)
+    """
+
+    # Power-user override: if a user template is provided, return its content.
+    if cal_setting is not None:
+        template_in = cal_setting.get("template_in")
+        if template_in:
+            try:
+                with open(template_in, "r") as fp:
+                    return fp.read()
+            except Exception:
+                pass
+    type_map_list = element_list(type_map)
+    dump_step = int(cal_setting.get("dump_step", 1000))
+    tdamp = cal_setting.get("tdamp", 100)
+    pdamp = cal_setting.get("pdamp", 1000)
+    thermostat = cal_setting.get("thermostat", "nose_hoover")
+    ensemble = cal_setting.get("ensemble", "npt")
+    vseed = int(cal_setting.get("velocity_seed", 12345))
+
+    ret = ""
+    ret += "include  variable_Annealing.in\n"
+    ret += "clear\n"
+    ret += "units \tmetal\n"
+    ret += "dimension\t3\n"
+    ret += "boundary\tp p p\n"
+    ret += "atom_style\tatomic\n"
+    ret += "box         tilt large\n"
+    ret += "read_data   %s\n" % conf
+    ret += "replicate   ${nx} ${ny} ${nz}\n"
+    for ii in range(len(type_map)):
+        ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
+    ret += "neigh_modify    every 1 delay 0 check no\n"
+    ret += interaction(param)
+    ret += "compute         mype all pe\n"
+    ret += "thermo          100\n"
+    ret += ("thermo_style    custom step temp pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n")
+
+    # Initialize velocities and equilibrate at start_temp
+    ret += f"velocity all create ${{start_temp}} {vseed} mom yes rot yes dist gaussian\n"
+
+    if thermostat == "langevin":
+        # Langevin + barostat (nph) or without (nve)
+        if ensemble == "nve":
+            ret += "fix 1 all nve\n"
+        else:
+            ret += f"fix 1 all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
+        ret += f"fix tg all langevin ${{start_temp}} ${{start_temp}} {tdamp} {vseed}\n"
+    else:
+        # Nose-Hoover NPT or NVT
+        if ensemble == "nvt":
+            ret += f"fix 1 all nvt temp ${{start_temp}} ${{start_temp}} {tdamp}\n"
+        else:
+            ret += f"fix 1 all npt temp ${{start_temp}} ${{start_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
+
+    ret += "run ${equi_step}\n"
+    ret += "unfix 1\n"
+    if thermostat == "langevin":
+        ret += "unfix tg\n"
+
+    # Temperature ramp to target_temp
+    if thermostat == "langevin":
+        if ensemble == "nve":
+            ret += "fix 1 all nve\n"
+        else:
+            ret += f"fix 1 all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
+        ret += f"fix tg all langevin ${{start_temp}} ${{target_temp}} {tdamp} {vseed}\n"
+    else:
+        if ensemble == "nvt":
+            ret += f"fix 1 all nvt temp ${{start_temp}} ${{target_temp}} {tdamp}\n"
+        else:
+            ret += f"fix 1 all npt temp ${{start_temp}} ${{target_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
+    ret += f"dump            1 all custom  {dump_step} dump.anneal_ramp id type xs ys zs fx fy fz\n"
+    ret += "fix heat_log all print ${rdf_interval} \"v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press\" file heating_interval.dat screen no title \"# TimeStep v_N v_Temp v_Vatom v_pote v_Etotal v_Press\"\n"
+    ret += "run ${ramp_step}\n"
+    ret += "unfix heat_log\n"
+    ret += "unfix rdf_ramp\n"
+    ret += "undump 1\n"
+    ret += "unfix 1\n"
+    if thermostat == "langevin":
+        ret += "unfix tg\n"
+
+        # Optional hold at target_temp
+    ret += "if \"${hold_step} > 0\" then \"fix 1 all nvt temp ${target_temp} ${target_temp} %d\" \"run ${hold_step}\" \"unfix 1\"\n" % tdamp
+
+    # Cool to end_temp
+    if thermostat == "langevin":
+        if ensemble == "nve":
+            ret += "fix 1 all nve\n"
+        else:
+            ret += f"fix 1 all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
+        ret += f"fix tg all langevin ${{target_temp}} ${{end_temp}} {tdamp} {vseed}\n"
+    else:
+        if ensemble == "nvt":
+            ret += f"fix 1 all nvt temp ${{target_temp}} ${{end_temp}} {tdamp}\n"
+        else:
+            ret += f"fix 1 all npt temp ${{target_temp}} ${{end_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
+    ret += f"dump            2 all custom  {dump_step} dump.anneal_cool id type xs ys zs fx fy fz\n"
+    ret += "fix rdf_cool all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] file rdf_cool.dat mode vector\n"
+    ret += "fix cool_log all print ${rdf_interval} \"v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press\" file cooling_interval.dat screen no title \"# TimeStep v_N v_Temp v_Vatom v_pote v_Etotal v_Press\"\n"
+    ret += "run ${cool_step}\n"
+    ret += "unfix cool_log\n"
+    ret += "unfix rdf_cool\n"
+    ret += "undump 2\n"
+    ret += "unfix 1\n"
+    if thermostat == "langevin":
+        ret += "unfix tg\n"
+
+    ret += 'print "All done"\n'
     return ret
 
 """

@@ -15,10 +15,11 @@ from apex import (
     __version__,
 )
 from apex.config import Config
-from apex.step import do_step_from_args
-from apex.submit import submit_from_args
-from apex.archive import archive_from_args
-from apex.report import report_from_args
+"""
+Avoid importing heavy submodules at CLI startup. We'll import the
+corresponding subcommand module lazily inside the branch to reduce
+startup latency (pymatgen/dpdata/dash can add seconds on cold start).
+"""
 from apex.utils import load_config_file
 
 
@@ -98,11 +99,17 @@ def parse_args():
         type=str,
         choices=[
             'make_relax', 'run_relax', 'post_relax',
-            'make_props', 'run_props', 'post_props'
+            'make_props', 'run_props', 'post_props',
+            'make', 'run', 'post'
         ],
-        help="Specify step name to be tested: "
-             "(make_relax | run_relax | post_relax |"
-             " make_props | run_props | post_props)"
+        help=(
+            "Specify step name: "
+            "(make_relax | run_relax | post_relax | "
+            "make_props | run_props | post_props | "
+            "make | run | post).\n"
+            "Combined steps (make/run/post) will auto-detect json type: "
+            "for joint files they do relax then props; for relax/props-only they do the corresponding part."
+        )
     )
     parser_do.add_argument(
         "-c", "--config",
@@ -457,6 +464,11 @@ def parse_args():
         default='.',
         help="(Optional) Working directory or json file path to be reported",
     )
+    parser_report.add_argument(
+        "--static",
+        action="store_true",
+        help="Generate static HTML report (report_static.html) for each work path instead of launching Dash app",
+    )
 
     ##########################################
     # RSS
@@ -581,6 +593,7 @@ def main():
     # parse args
     parser, args = parse_args()
     if args.cmd == 'submit':
+        from apex.submit import submit_from_args
         header()
         submit_from_args(
             parameters=args.parameter,
@@ -783,6 +796,7 @@ def main():
             else:
                 logging.warning(f"Step {key} with status: {step['phase']} will be skipping...({task_left} more left)")
     elif args.cmd == 'do':
+        from apex.step import do_step_from_args
         header()
         do_step_from_args(
             parameter=args.parameter,
@@ -790,6 +804,7 @@ def main():
             step=args.step
         )
     elif args.cmd == 'archive':
+        from apex.archive import archive_from_args
         archive_from_args(
             parameters=args.json,
             config_file=args.config,
@@ -801,10 +816,12 @@ def main():
             is_result=args.result
         )
     elif args.cmd == 'report':
+        from apex.report import report_from_args
         header()
         report_from_args(
             config_file=args.config,
             path_list=args.work,
+            static=args.static,
         )
     elif args.cmd == 'rss':
         from apex.rss import rss_from_args

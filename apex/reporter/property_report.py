@@ -285,42 +285,75 @@ class FiniteTlattReport(PropertyReport):
     """Report lattice parameters as a function of temperature."""
 
     @staticmethod
-    def _sorted_arrays(res_data):
-        # sort by temperature to ensure monotonic curves
-        sorted_vals = sorted(res_data.values(), key=lambda v: float(v[3]))
-        lx = [float(v[0]) for v in sorted_vals]
-        ly = [float(v[1]) for v in sorted_vals]
-        lz = [float(v[2]) for v in sorted_vals]
-        temps = [float(v[3]) for v in sorted_vals]
-        return temps, lx, ly, lz
+    def _normalized_data(res_data, relax_abc=None):
+        data = {}
+        for value in res_data.values():
+            if isinstance(value, (list, tuple)) and len(value) >= 4:
+                a, b, c, temp = (
+                    float(value[0]),
+                    float(value[1]),
+                    float(value[2]),
+                    float(value[3]),
+                )
+            elif isinstance(value, dict):
+                a = float(value.get("a", 0.0))
+                b = float(value.get("b", 0.0))
+                c = float(value.get("c", 0.0))
+                temp = float(value.get("temperature", 0.0))
+            else:
+                continue
+            data[temp] = {"a": a, "b": b, "c": c}
+        if relax_abc and 0.0 not in data:
+            a0, b0, c0 = relax_abc
+            data[0.0] = {"a": float(a0), "b": float(b0), "c": float(c0)}
+        return data
 
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):
-        temps, lx, ly, lz = FiniteTlattReport._sorted_arrays(res_data)
+        data = FiniteTlattReport._normalized_data(
+            res_data, relax_abc=kwargs.get("relax_abc")
+        )
+        temps = sorted(data.keys())
+        x_values = [
+            str(int(temp)) if abs(temp - round(temp)) < 1e-6 else str(temp)
+            for temp in temps
+        ]
+        a_values = [data[temp]["a"] for temp in temps]
+        b_values = [data[temp]["b"] for temp in temps]
+        c_values = [data[temp]["c"] for temp in temps]
 
-        trace_a = go.Scatter(x=temps, y=lx, mode='lines+markers', name='a (lx)', line=dict(color='blue'))
-        trace_b = go.Scatter(x=temps, y=ly, mode='lines+markers', name='b (ly)', line=dict(color='green'))
-        trace_c = go.Scatter(x=temps, y=lz, mode='lines+markers', name='c (lz)', line=dict(color='red'))
+        trace_a = go.Scatter(x=x_values, y=a_values, mode='lines+markers', name='a', line=dict(color='blue'))
+        trace_b = go.Scatter(x=x_values, y=b_values, mode='lines+markers', name='b', line=dict(color='green'))
+        trace_c = go.Scatter(x=x_values, y=c_values, mode='lines+markers', name='c', line=dict(color='red'))
 
         layout = go.Layout(
             title='Finite Temperature Lattice Parameters',
             xaxis=dict(title='Temperature (K)'),
-            yaxis=dict(title='Lattice parameter (Å)'),
+            yaxis=dict(title='Lattice length (Å)'),
             showlegend=True
         )
         return [trace_a, trace_b, trace_c], layout
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 6, **kwargs) -> dash_table.DataTable:
-        temps, lx, ly, lz = FiniteTlattReport._sorted_arrays(res_data)
-        df = pd.DataFrame(
-            {
-                "Temperature (K)": round_format(temps, decimal),
-                "a (Å)": round_format(lx, decimal),
-                "b (Å)": round_format(ly, decimal),
-                "c (Å)": round_format(lz, decimal),
-            }
+        data = FiniteTlattReport._normalized_data(
+            res_data, relax_abc=kwargs.get("relax_abc")
         )
+        temps = sorted(data.keys())
+        rows = []
+        for temp in temps:
+            a = data[temp]["a"]
+            b = data[temp]["b"]
+            c = data[temp]["c"]
+            c_over_a = (c / a) if a else 0.0
+            rows.append({
+                "Temperature (K)": int(temp) if abs(temp - round(temp)) < 1e-6 else temp,
+                "a (Å)": round(a, decimal),
+                "b (Å)": round(b, decimal),
+                "c (Å)": round(c, decimal),
+                "c/a": round(c_over_a, decimal),
+            })
+        df = pd.DataFrame(rows)
         return build_table(df), df
 
 class ElasticReport(PropertyReport):

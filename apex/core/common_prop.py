@@ -16,6 +16,7 @@ from apex.core.property.Decohesive import Decohesive
 from apex.core.property.FiniteTlatt import FiniteTlatt
 from apex.core.property.GammaSurface import GammaSurface
 from apex.core.property.Gruneisen import Gruneisen
+from apex.core.property.Annealing import Annealing
 from apex.core.lib.utils import create_path
 from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
@@ -50,10 +51,15 @@ def make_property_instance(parameters, inter_param):
         return Phonon(parameters, inter_param)
     elif prop_type == "decohesive":
         return Decohesive(parameters, inter_param)
-    elif prop_type == "finitetlatt":
+    elif prop_type in ["finitetlatt", "Lat_param_T"]:
+        if prop_type == "Lat_param_T":
+            parameters = dict(parameters)
+            parameters["type"] = "finitetlatt"
         return FiniteTlatt(parameters, inter_param)
     elif prop_type == "gruneisen":
         return Gruneisen(parameters, inter_param)
+    elif prop_type in ["annealing", "Annealing"]:
+        return Annealing(parameters, inter_param)
     else:
         raise RuntimeError(f"unknown APEX type {prop_type}")
 
