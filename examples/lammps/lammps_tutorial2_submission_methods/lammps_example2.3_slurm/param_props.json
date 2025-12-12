@@ -3,7 +3,6 @@
     "interaction": {
         "type":          "deepmd",
         "model":         "frozen_model.pb",
-        "deepmd_version":"2.1.1",
         "type_map":      {"Mo": 0}
     },
     "properties": [

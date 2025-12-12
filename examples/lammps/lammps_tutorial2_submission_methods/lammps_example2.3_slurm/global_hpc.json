@@ -1,0 +1,27 @@
+{
+    "run_command":"mpirun -np 4 lmp -in in.lammps",
+    "context_type": "Local",
+    "machine":{
+      "batch_type": "Slurm",
+      "context_type": "Local",
+      "local_root" : "./",
+      "remote_root": "./",
+      "clean_asynchronously": true
+    },
+    "resources":{
+        "number_node": 1,
+        "cpu_per_node": 4,
+        "gpu_per_node": 0,
+        "group_size": 1,
+        "module_list": ["deepmd-kit/3.1.0/cpu_binary_release"],
+        "custom_flags": [
+            "#SBATCH --partition=xlong",
+            "#SBATCH --ntasks=4",
+            "#SBATCH --ntasks-per-core=1",
+            "#SBATCH --cpus-per-task=1",
+            "#SBATCH --mem=10G",
+            "#SBATCH --nodes=1",
+            "#SBATCH --time=1-00:00:00"
+            ]
+       }
+}

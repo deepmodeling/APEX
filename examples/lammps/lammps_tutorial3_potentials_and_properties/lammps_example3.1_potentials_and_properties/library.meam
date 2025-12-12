@@ -1,0 +1,8 @@
+# References:
+# elt        lat     z       ielement     atwt
+# alpha      b0      b1      b2           b3    alat    esub    asub
+# t0         t1              t2           t3            rozero  ibar
+#
+'Al'        'fcc'   12.     13           26.9815
+  4.68604   1.56205   5.39270   5.29601  -1.00047   4.05000   3.35999   1.06859
+1.0  -1.54917  -1.28508  10.01041 1.0 0 
