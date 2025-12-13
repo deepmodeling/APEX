@@ -19,7 +19,7 @@ This guide demonstrates how to use APEX for alloy property calculations using LA
 
 ## Prerequisites
 
-- APEX installed (`pip install apex-flow`)
+- APEX installed (`pip install apex-flow` or `git clone https://github.com/deepmodeling/APEX.git && cd APEX && pip install .`)
 - LAMMPS installed (for local debug mode)
 - Bohrium account (for cloud submission)
 - Basic knowledge of computational materials science
@@ -40,15 +40,15 @@ This section introduces APEX workflows through a practical quick-start example d
 
 #### Purpose
 
-Demonstrates a **joint calculation workflow** on molybdenum (Mo), combining structure relaxation and property calculations in a single submission for rapid property exploration.
+Demonstrates a **joint calculation workflow** for molybdenum (Mo), combining structure relaxation and property calculations in a single submission for rapid property exploration.
 
 #### Directory Structure
 
 ```
 lammps_example1.1_Mo/
 ├── confs/
-│   └── std-fcc/
-│       └── POSCAR              # Mo structure (FCC phase)
+│   └── std-bcc/
+│       └── POSCAR              # Mo structure (BCC phase)
 ├── param_joint.json            # Joint calculation parameters
 ├── global_bohrium.json         # Bohrium cloud configuration
 └── frozen_model.pb             # Deep Potential model
@@ -82,6 +82,12 @@ nohup apex submit param_joint.json -c global_bohrium.json > apex.log 2>&1 &
 
 Results automatically saved to `all_result.json` containing both relaxation and property data.
 
+#### Visualization
+In the directory contanting the `all_result.json` file, run the following command to generate the visualization report:
+```bash
+apex report
+```
+
 ---
 
 ## Tutorial 2: Submission Methods
@@ -96,7 +102,7 @@ APEX supports multiple submission methods for different computational environmen
 
 #### Introduction
 
-Bohrium platform provides pre-configured environments, automated scheduling, and visual monitoring—the most user-friendly option.
+Bohrium platform provides pre-configured environments, automated scheduling, and visual monitoring.
 
 #### Configuration: `global_bohrium.json`
 
@@ -320,7 +326,7 @@ APEX supports:
 }
 ```
 
-**Key Difference**: MEAM requires two files—library file and element-specific file.
+**Key Difference**: MEAM requires two files, library file and element-specific file.
 
 #### Property Calculations Configuration
 
@@ -342,6 +348,19 @@ APEX supports:
             "vol_end": 1.4,
             "vol_step": 0.1
         },
+        {
+            "type": "cohesive",
+            "latt_start": 0.6,
+            "latt_end": 1.4,
+            "latt_step": 0.1
+        },
+        {
+            "type": "decohesive",
+        }
+        {
+            "type": "Lat_param_T",
+            "temperature": [700, 800, 900, 1000]
+        }
         {
             "type": "elastic",
             "skip": false
@@ -375,11 +394,14 @@ APEX supports:
 | Property | Description | Key Parameters |
 |----------|-------------|-----------------|
 | **eos** | Equation of State | vol_start, vol_end, vol_step |
+| **cohesive** | Cohesive energy line | latt_start, latt_end, latt_step |
+| **decohesive** | Decohesive energy line | min_slab_size, miller_index, max_vacuum_size, vacuum_size_step | 
 | **elastic** | Elastic Constants | norm_deform, shear_deform |
 | **surface** | Surface Energy | min_slab_size, max_miller |
 | **vacancy** | Vacancy Formation | supercell |
 | **interstitial** | Interstitial Formation | insert_ele, supercell |
 | **gamma** | Stacking Fault Energy | plane_miller, slip_direction |
+| **lat_param_T** | Lattice parameters at finite temperatures | supercell_size, temperature |
 | **phonon** | Phonon Spectra | supercell_size, MESH |
 
 #### Workflow Execution
@@ -422,6 +444,6 @@ Simply delete unused property blocks to simplify the configuration.
 
 ---
 
-**Last Updated**: November 2025  
-**APEX Version**: 1.2+  
+**Last Updated**: December 2025  
+**APEX Version**: 1.3+  
 **Document Status**: Streamlined Tutorial Series
