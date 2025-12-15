@@ -4,21 +4,20 @@ import shutil
 import sys
 import unittest
 
+import numpy as np
 from monty.serialization import loadfn
 from pymatgen.core import Structure
 from pymatgen.core.surface import SlabGenerator
-from pymatgen.io.vasp import Incar
-from apex.core.property.Decohesive import Decohesive
-import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
+from apex.core.property.Decohesive import Decohesive
 from apex.reporter.property_report import DecohesiveReport
 
 class TestDecohesive(unittest.TestCase):
     def setUp(self):
-        _jdata = {
+        base_param = {
             "structures": ["confs/std-fcc"],
             "interaction": {
                 "type": "vasp",
@@ -32,8 +31,8 @@ class TestDecohesive(unittest.TestCase):
                     "min_slab_size": 15,
                     "max_vacuum_size": 10,
                     "vacuum_size_step": 5,
-                    "miller_index":   [0, 0, 1],
-                    "cal_type":       "static"
+                    "miller_index": [0, 0, 1],
+                    "cal_type": "static",
                 }
             ],
         }
@@ -44,11 +43,10 @@ class TestDecohesive(unittest.TestCase):
         if not os.path.exists(self.equi_path):
             os.makedirs(self.equi_path)
 
-        self.confs = _jdata["structures"]
-        self.inter_param = _jdata["interaction"]
-        self.prop_param = _jdata["properties"]
-
-        self.decohesive = Decohesive(_jdata["properties"][0])
+        self.confs = base_param["structures"]
+        self.inter_param = base_param["interaction"]
+        self.prop_param = base_param["properties"]
+        self.decohesive = Decohesive(self.prop_param[0])
 
     def tearDown(self):
         if os.path.exists(self.equi_path):
@@ -74,10 +72,6 @@ class TestDecohesive(unittest.TestCase):
         self.assertEqual(len(task_list), 3)
 
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
-
-        incar0 = Incar.from_file(os.path.join("vasp_input", "INCAR.rlx"))
-        incar0["ISIF"] = 2
-        incar0["NSW"] = 0
 
         self.assertEqual(
             os.path.realpath(os.path.join(self.equi_path, "CONTCAR")),
@@ -126,22 +120,18 @@ class TestDecohesive(unittest.TestCase):
             sorted_frac_coords.append(frac_coord)
             sorted_species.append(species)
         # add vacuum layer to the slab with height unit of angstrom
-        a, b, c = slab.lattice.matrix
-        slab_height = slab.lattice.matrix[2][2]
-        if slab_height >= 0:
-            self.is_flip = False
-            elong_scale = 1 + (vacuum_size / slab_height)
-        else:
-            self.is_flip = True
-            elong_scale = 1 + (-vacuum_size / slab_height)
-        new_lattice = [a, b, elong_scale * c]
+        a_vec, b_vec, c_vec = slab.lattice.matrix
+        slab_height = abs(c_vec[2])
+        elong_scale = 1 + (abs(vacuum_size) / slab_height)
+        new_lattice = [a_vec, b_vec, elong_scale * c_vec]
         new_frac_coords = []
-        for ii in range(len(sorted_frac_coords)):
-            coord = sorted_frac_coords[ii].copy()
+        for frac in sorted_frac_coords:
+            coord = frac.copy()
             coord[2] = coord[2] / elong_scale
             new_frac_coords.append(coord)
-        slab_new = Structure(lattice=np.array(new_lattice),
-                         coords=new_frac_coords, species=sorted_species)
+        slab_new = Structure(
+            lattice=np.array(new_lattice), coords=new_frac_coords, species=sorted_species
+        )
 
         return slab_new
     
@@ -152,13 +142,12 @@ class TestDecohesiveReport(unittest.TestCase):
             "5_task.000000": [5, 6, 7e9],
             "10_task.000000": [10, 11, 12e9],
         }
-        
-        self.formatted_data_energy = {}
-        self.formatted_data_stress = {}
-        for k, v in self.res_data.items():
-            if isinstance(v, list) and len(v) == 3:
-                self.formatted_data_energy[k] = v[1]
-                self.formatted_data_stress[k] = v[2]
+
+        # Sort once to mirror DecohesiveReport behavior
+        sorted_vals = sorted(self.res_data.values(), key=lambda x: float(x[0]))
+        self.sorted_vacuum = [float(v[0]) for v in sorted_vals]
+        self.sorted_energy = [float(v[1]) for v in sorted_vals]
+        self.sorted_stress_gpa = [float(v[2]) / 1e9 for v in sorted_vals]
     
     def test_plotly_graph(self):
         traces, layout = DecohesiveReport.plotly_graph(self.res_data, "test_material")
@@ -166,12 +155,10 @@ class TestDecohesiveReport(unittest.TestCase):
         self.assertEqual(len(traces), 2)
         self.assertEqual(traces[0].name, "test_material Decohesion Energy")
         self.assertEqual(traces[0].mode, "lines+markers")
-        
-        decohesive_energy = list(self.formatted_data_energy.values())
-        self.assertEqual(list(traces[0].y), decohesive_energy)
 
-        decohesive_stress = list(self.formatted_data_stress.values())
-        self.assertEqual(list(traces[1].y), [s / 1e9 for s in decohesive_stress])
+        self.assertEqual(list(traces[0].x), self.sorted_vacuum)
+        self.assertEqual(list(traces[0].y), self.sorted_energy)
+        self.assertEqual(list(traces[1].y), self.sorted_stress_gpa)
         
         self.assertEqual(layout.title.text, "Decohesion Energy and Stress")
         self.assertIn("Separation Distance (A)", layout.xaxis.title.text)
@@ -181,11 +168,16 @@ class TestDecohesiveReport(unittest.TestCase):
     def test_dash_table(self):
         table, df = DecohesiveReport.dash_table(self.res_data)
         
-        self.assertEqual(len(df), len(self.formatted_data_energy))
+        self.assertEqual(len(df), len(self.res_data))
         self.assertEqual(len(df.columns), 3)
         
         self.assertIn("Separation Distance (A)", df.columns)
         self.assertIn("Decohesion Energy (J/m^2)", df.columns)
         self.assertIn("Decohesion Stress (GPa)", df.columns)
 
+        # Rows should be sorted by vacuum distance
+        self.assertEqual(
+            list(map(float, df["Separation Distance (A)"].tolist())),
+            [float(v) for v in self.sorted_vacuum],
+        )
     
