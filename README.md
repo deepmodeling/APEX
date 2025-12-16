@@ -26,12 +26,15 @@ The comprehensive architecture of APEX is demonstrated below:
 APEX currently offers calculation methods for the following alloy properties:
 
 * Equation of State (EOS)
-* Elastic constants
+* Cohesive energy vs. lattice scaling (cohesive energy line)
 * Surface energy
-* Interstitial formation energy
+* Decohesive energy vs. separation (decohesive energy line)
+* Elastic constants
 * Vacancy formation energy
+* Interstitial formation energy
 * Generalized stacking fault energy (Gamma line)
 * Phonon spectra
+* Finite-temperature lattice parameters (FiniteTlatt)
 
 ## What's Inside
 - [1. Installation](#1installation)
@@ -53,12 +56,15 @@ APEX currently offers calculation methods for the following alloy properties:
   - [4.1 Global Configuration](#41-global-configuration-globaljson)
   - [4.2 Calculation Parameters](#42-calculation-parameters-paramjson)
   - [4.3 EOS](#eos)
-  - [4.4 Elastic](#elastic)
-  - [4.5 Surface](#surface)
-  - [4.6 Vacancy](#vacancy)
-  - [4.7 Interstitial](#interstitial)
-  - [4.8 Gamma Line](#gamma-line-generalised-stacking-fault)
-  - [4.9 Phonon Spectra](#phonon-spectra)
+  - [4.4 Cohesive Energy Line](#cohesive-energy-line)
+  - [4.5 Decohesive Energy Line](#decohesive-energy-line)
+  - [4.6 Elastic](#elastic)
+  - [4.7 Surface](#surface)
+  - [4.8 Vacancy](#vacancy)
+  - [4.9 Interstitial](#interstitial)
+  - [4.10 Gamma Line](#gamma-line-generalised-stacking-fault)
+  - [4.11 Phonon Spectra](#phonon-spectra)
+  - [4.12 Finite-Temperature Lattice Parameters](#finite-temperature-lattice-parameters)
 - [More Resources](#more-resources)
 
 ## 1.Installation
@@ -463,7 +469,7 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
   }
   ```
 
-#### EOS
+### 4.3 EOS
 
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
@@ -472,7 +478,25 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
 | `vol_step` | Float | `0.01` | Increment between volume points. |
 | `vol_abs` | Bool | `false` | Treat `vol_start` and `vol_end` as absolute volumes when `true`. |
 
-#### Elastic
+### 4.4 Cohesive energy line
+
+| Key | Type | Example | Description |
+|-----|------|---------|-------------|
+| `latt_start` | Float | `0.9` | Starting lattice size relative to the relaxed structure. |
+| `latt_end` | Float | `1.1` | Ending lattice size relative to the relaxed structure. |
+| `latt_step` | Float | `0.01` | Increment between lattice points. |
+| `latt_abs` | Bool | `false` | Treat `latt_start` and `latt_end` as absolute lattice sizes when `true`. |
+
+### 4.5 Decohesive energy line
+
+| Key | Type | Example | Description |
+|-----|------|---------|-------------|
+| `min_slab_size` | Integer | `10` | Minimum slab thickness. |
+| `max_vacuum_size` | Integer | `11` | Maximum vacuum width. |
+| `pert_xz` | Float | `0.01` | Perturbation along xz plane for surface energy. |
+| `miller_miller` | List[Int] | `[1, 1, 0]` | Miller indices of the target plane. |
+
+### 4.6 Elastic
 
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
@@ -482,7 +506,7 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
 | `ieee` | Bool | `false` | Rotate relaxed structure into IEEE standard orientation. |
 | `modulus_type` | String | `"voigt"` | Bulk/shear modulus averaging method (`voigt`, `reuss`, `vrh`). |
 
-#### Surface
+### 4.7 Surface
 
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
@@ -491,13 +515,13 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
 | `pert_xz` | Float | `0.01` | Perturbation along xz plane for surface energy. |
 | `max_miller` | Integer | `2` | Maximum Miller index considered. |
 
-#### Vacancy
+### 4.8 Vacancy
 
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
 | `supercell` | List[Int] | `[3, 3, 3]` | Supercell size built around the defect. |
 
-#### Interstitial
+### 4.9 Interstitial
 
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
@@ -509,7 +533,7 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
     <img src="./docs/images/interstitial_table.png" alt="Fig3" style="zoom: 90%;">
 </div>
 
-#### Gamma line (generalised stacking fault)
+### 4.10 Gamma line (generalized stacking fault)
 
 <div style="text-align: center;">
     <img src="./docs/images/gamma_demo.png" alt="Fig2" style="zoom: 35%;">
@@ -584,7 +608,7 @@ Example:
 
 Nested dictionaries (`fcc`, `bcc`, `hcp`, etc.) override the top-level parameters for the corresponding lattice type.
 
-#### Phonon spectra
+### 4.11 Phonon spectra
 
 APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) and wraps [Phonopy](https://github.com/phonopy/phonopy) / [phonoLAMMPS](https://github.com/abelcarreras/phonolammps). [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) automatically generates high-symmetry k-paths.
 
@@ -605,6 +629,26 @@ APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow
 | `seekpath_param` | Dict | `None` | Extra arguments passed to SeeK-path. |
 
 The linear-response method accelerates calculations for metallic systems, while the finite-displacement approach works with any calculator that can provide forces (e.g., ABACUS).
+
+### 4.12 Finite-temperature lattice parameters
+APEX now supports the calculation of lattice parameters at finite temperatures in LAMMPS.
+
+| Key | Type | Example | Description |
+|-----|------|---------|-------------|
+| `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions. |
+
+Other LAMMPS settings can be specified below:
+
+"cal_setting": {
+    "temperature": [200, 400, 600, 800],
+    "equi_step": 80000,
+    "N_every": 100,
+    "N_repeat": 10,
+    "N_freq": 2000,
+    "ave_step": 40000,
+    "timestep": 0.001,
+    "tdamp": 0.1,
+    "pdamp": 1.0}
 
 ## More Resources
 
