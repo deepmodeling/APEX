@@ -281,43 +281,44 @@ class DecohesiveReport(PropertyReport):
         return build_table(df), df
 
 
-class Lat_param_T_Report(PropertyReport):
+class FiniteTlattReport(PropertyReport):
+    """Report lattice parameters as a function of temperature."""
+
+    @staticmethod
+    def _sorted_arrays(res_data):
+        # sort by temperature to ensure monotonic curves
+        sorted_vals = sorted(res_data.values(), key=lambda v: float(v[3]))
+        lx = [float(v[0]) for v in sorted_vals]
+        ly = [float(v[1]) for v in sorted_vals]
+        lz = [float(v[2]) for v in sorted_vals]
+        temps = [float(v[3]) for v in sorted_vals]
+        return temps, lx, ly, lz
+
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):
-        lx = [values[0] for values in res_data.values()]
-        ly = [values[1] for values in res_data.values()]
-        lz = [values[2] for values in res_data.values()]
+        temps, lx, ly, lz = FiniteTlattReport._sorted_arrays(res_data)
 
-        temp = [values[3] for values in res_data.values()]
-        temp = [str(item) for item in temp]
-
-        trace_a = go.Scatter(x=temp, y=lx, mode='lines+markers', name='lx', line=dict(color='blue'))
-        trace_b = go.Scatter(x=temp, y=ly, mode='lines+markers', name='ly', line=dict(color='green'))
-        trace_c = go.Scatter(x=temp, y=lz , mode='lines+markers', name='lz', line=dict(color='red'))
-
-        trace = [trace_a, trace_b, trace_c]
+        trace_a = go.Scatter(x=temps, y=lx, mode='lines+markers', name='a (lx)', line=dict(color='blue'))
+        trace_b = go.Scatter(x=temps, y=ly, mode='lines+markers', name='b (ly)', line=dict(color='green'))
+        trace_c = go.Scatter(x=temps, y=lz, mode='lines+markers', name='c (lz)', line=dict(color='red'))
 
         layout = go.Layout(
-            title='Lat_param_T',
-            xaxis=dict(title='temperature (K)', tickvals=temp),
-            yaxis=dict(title='lattice length (Å)'),
+            title='Finite Temperature Lattice Parameters',
+            xaxis=dict(title='Temperature (K)'),
+            yaxis=dict(title='Lattice parameter (Å)'),
             showlegend=True
         )
-        return trace, layout
+        return [trace_a, trace_b, trace_c], layout
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 6, **kwargs) -> dash_table.DataTable:
-        lx = [values[0] for values in res_data.values()]
-        ly = [values[1] for values in res_data.values()]
-        lz = [values[2] for values in res_data.values()]
-        temp = [values[3] for values in res_data.values()]
-        temp = [str(item) for item in temp]
+        temps, lx, ly, lz = FiniteTlattReport._sorted_arrays(res_data)
         df = pd.DataFrame(
             {
-                "temperature (K)": temp,
-                "lx (A)": round_format(lx, decimal),
-                "ly (A)": round_format(ly, decimal),
-                "lz (A)": round_format(lz, decimal),
+                "Temperature (K)": round_format(temps, decimal),
+                "a (Å)": round_format(lx, decimal),
+                "b (Å)": round_format(ly, decimal),
+                "c (Å)": round_format(lz, decimal),
             }
         )
         return build_table(df), df

@@ -436,14 +436,13 @@ def make_lammps_elastic(
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     return ret
 
-def make_lammps_Lat_param_T(conf, type_map, interaction, param):
+def make_lammps_FiniteTlatt(conf, type_map, interaction, param):
     type_map_list = element_list(type_map)
     deepmd_version = param.get("deepmd_version", None)
     dump_step = 100
     # detour sychronizing problem of dumping in new version of deepmd-kit >=2.1.5
-    tdamp = 100
     ret = ""
-    ret += "include  variable_Lat_param_T.in\n"
+    ret += "include  variable_FiniteTlatt.in\n"
     ret += "clear\n"
     ret += "units 	metal\n"
     ret += "dimension	3\n"
@@ -462,7 +461,7 @@ def make_lammps_Lat_param_T(conf, type_map, interaction, param):
         "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
     )
     ret += "velocity all create ${temperature} 12345 mom yes rot yes dist gaussian\n"
-    ret += f"fix 1 all npt temp ${{temperature}} ${{temperature}} {tdamp} x 1.0 1.0 1000 y 1.0 1.0 1000 xy 1.0 1.0 1000\n"
+    ret += f"fix 1 all npt temp ${{temperature}} ${{temperature}} ${{tdamp}} aniso 0.0 0.0 ${{pdamp}}\n"
     ret += "run ${equi_step}\n"
     ret += "reset_timestep 0 \n"
     ret += f"dump            1 all custom  {dump_step} dump.relax id type xs ys zs fx fy fz\n"
@@ -687,4 +686,3 @@ def check_finished_new(fname, keyword):
 def check_finished(fname):
     with open(fname, "r") as fp:
         return "Total wall time:" in fp.read()
-

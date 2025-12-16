@@ -12,7 +12,7 @@ This guide demonstrates how to use APEX for alloy property calculations using LA
   - [Example 2.2: Local Debug Mode](#example-22-local-debug-mode)
   - [Example 2.3: SLURM HPC Submission](#example-23-slurm-hpc-submission)
 - [Tutorial 3: Potentials & Properties](#tutorial-3-potentials--properties)
-  - [Example 3.1: Different Potentials and Multiple Properties](#example-31-different-potentials-and-multiple-properties)
+  - [Example 3.1: Different Potentials and Various Properties](#example-31-different-potentials-and-various-properties)
 - [Reference Resources](#reference-resources)
 
 ---
@@ -252,7 +252,7 @@ squeue -u your_username
 
 ## Tutorial 3: Potentials & Properties
 
-### Example 3.1: Different Potentials and Multiple Properties
+### Example 3.1: Different Potentials and Various Properties
 
 **Path**: `lammps_tutorial3_potentials_and_properties/lammps_example3.1_potentials_and_properties/`
 
@@ -355,12 +355,22 @@ APEX supports:
             "latt_step": 0.1
         },
         {
-            "type": "decohesive",
-        }
+            "type": "decohesive"
+        },
         {
-            "type": "Lat_param_T",
-            "temperature": [700, 800, 900, 1000]
-        }
+            "type": "finitetlatt",
+            "supercell_size": [2, 2, 2],
+            "cal_setting": {
+            "temperature": [200, 400, 600, 800],
+            "equi_step": 20000,
+            "N_every": 100,
+            "N_repeat": 10,
+            "N_freq": 2000,
+            "ave_step": 20000,
+            "timestep": 0.001,
+            "tdamp": 0.1,
+            "pdamp": 1.0}
+        },
         {
             "type": "elastic",
             "skip": false
@@ -401,7 +411,7 @@ APEX supports:
 | **vacancy** | Vacancy Formation | supercell |
 | **interstitial** | Interstitial Formation | insert_ele, supercell |
 | **gamma** | Stacking Fault Energy | plane_miller, slip_direction |
-| **lat_param_T** | Lattice parameters at finite temperatures | supercell_size, temperature |
+| **finitetlatt** | Lattice parameters at finite temperatures | supercell_size |
 | **phonon** | Phonon Spectra | supercell_size, MESH |
 
 #### Workflow Execution

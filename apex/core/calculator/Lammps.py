@@ -285,6 +285,10 @@ class Lammps(Task):
                 fc = lammps_utils.make_lammps_eval(
                     "conf.lmp", self.type_map, self.inter_func, self.model_param
                 )
+            elif cal_type == "npt+ave/time":
+                fc = lammps_utils.make_lammps_FiniteTlatt(
+                    "conf.lmp", self.type_map, self.inter_func, self.model_param
+                )
 
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
@@ -531,8 +535,8 @@ class Lammps(Task):
     def forward_files(self, property_type="relaxation"):
         if self.inter_type in MULTI_MODELS_INTER_TYPE:
             return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
-        elif property_type == "Lat_param_T":
-            return ["in.lammps", "variable_Lat_param_T.in", os.path.basename(self.model)]
+        elif property_type == "finitetlatt":
+            return ["in.lammps", "variable_FiniteTlatt.in", os.path.basename(self.model)]
         else:
             return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
 
@@ -540,8 +544,8 @@ class Lammps(Task):
         if property_type not in ["eos"]:
             if self.inter_type in MULTI_MODELS_INTER_TYPE:
                 return ["in.lammps"] + list(map(os.path.basename, self.model))
-            elif property_type == "Lat_param_T":
-                return ["in.lammps", "variable_Lat_param_T.in", os.path.basename(self.model)]
+            elif property_type == "finitetlatt":
+                return ["in.lammps", "variable_FiniteTlatt.in", os.path.basename(self.model)]
             else:
                 return ["in.lammps", os.path.basename(self.model)]
         else:
@@ -553,8 +557,7 @@ class Lammps(Task):
     def backward_files(self, property_type="relaxation"):
         if property_type == "phonon":
             return ["outlog", "FORCE_CONSTANTS"]
-        elif property_type == "Lat_param_T":
+        elif property_type == "finitetlatt":
             return ["log.lammps", "outlog", "dump.relax", "average_box.txt"]
         else:
             return ["log.lammps", "outlog", "dump.relax"]
-

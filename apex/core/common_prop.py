@@ -13,7 +13,7 @@ from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
 from apex.core.property.Decohesive import Decohesive
-from apex.core.property.Lat_param_T import Lat_param_T
+from apex.core.property.FiniteTlatt import FiniteTlatt
 from apex.core.lib.utils import create_path
 from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
@@ -46,8 +46,8 @@ def make_property_instance(parameters, inter_param):
         return Phonon(parameters, inter_param)
     elif prop_type == "decohesive":
         return Decohesive(parameters, inter_param)
-    elif prop_type == "Lat_param_T":
-        return Lat_param_T(parameters, inter_param)
+    elif prop_type == "finitetlatt":
+        return FiniteTlatt(parameters, inter_param)
     else:
         raise RuntimeError(f"unknown APEX type {prop_type}")
 

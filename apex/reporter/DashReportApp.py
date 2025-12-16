@@ -37,8 +37,8 @@ def return_prop_class(prop_type: str):
         return PhononReport
     elif prop_type == 'decohesive':
         return DecohesiveReport
-    elif prop_type == 'Lat':# Lat represent Lat_param_T
-        return Lat_param_T_Report
+    elif prop_type == 'finitetlatt':
+        return FiniteTlattReport
 
 
 def return_prop_type(prop: str):
