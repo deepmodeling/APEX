@@ -355,7 +355,11 @@ APEX supports:
             "latt_step": 0.1
         },
         {
-            "type": "decohesive"
+            "type": "decohesive",
+            "min_slab_size": 15,
+            "max_vacuum_size": 10,
+            "vacuum_size_step": 2,
+            "miller_index": [0, 0, 1]
         },
         {
             "type": "finitetlatt",
