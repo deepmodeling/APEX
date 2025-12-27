@@ -3,6 +3,7 @@ import glob
 import time
 import shutil
 import re
+import copy
 import datetime
 from typing import (
     Optional,
@@ -143,6 +144,96 @@ class FlowGenerator:
                       f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
                 break
 
+    def _set_relax_flows(
+            self,
+            input_work_dir: dflow.common.S3Artifact,
+            relax_parameter: dict
+    ) -> [List[Step], List[str]]:
+        """
+        Build per-structure relaxation subflows so finished structures
+        can be posted and retrieved without waiting for others.
+        """
+        confs = relax_parameter["structures"]
+        conf_dirs = []
+        for conf in confs:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
+        conf_dirs.sort()
+
+        relax_list = []
+        relax_key_list = []
+        for ii in conf_dirs:
+            sub_relax_param = copy.deepcopy(relax_parameter)
+            sub_relax_param["structures"] = [ii]
+            clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', ii).lower()
+            subflow_key = f'relaxcal-{clean_subflow_id}'
+            relax_key_list.append(subflow_key)
+            relax_list.append(
+                Step(
+                    name=f'Relaxation-cal-{clean_subflow_id}',
+                    template=RelaxationFlow(
+                        name=f'relaxation-flow-{clean_subflow_id}',
+                        make_op=self.relax_make_op,
+                        run_op=self.run_op,
+                        post_op=self.relax_post_op,
+                        make_image=self.make_image,
+                        run_image=self.run_image,
+                        post_image=self.post_image,
+                        run_command=self.run_command,
+                        calculator=self.calculator,
+                        group_size=self.group_size,
+                        pool_size=self.pool_size,
+                        executor=self.executor,
+                        upload_python_packages=self.upload_python_packages
+                    ),
+                    artifacts={
+                        "input_work_path": input_work_dir
+                    },
+                    parameters={
+                        "flow_id": ii,
+                        "parameter": sub_relax_param
+                    },
+                    key=subflow_key
+                )
+            )
+        return relax_list, relax_key_list
+
+    def _monitor_relax_flows(self, relax_key_list: List[str]):
+        relax_left = relax_key_list.copy()
+        relax_failed_list = []
+        print(f'Waiting for relaxation results ({len(relax_left)} left)...')
+        while True:
+            time.sleep(4)
+            step_info = self.workflow.query()
+            wf_status = self.workflow.query_status()
+            if wf_status == 'Failed' and not relax_left:
+                break
+            for kk in relax_left.copy():
+                try:
+                    step = step_info.get_step(key=kk)[0]
+                except IndexError:
+                    continue
+                if step['phase'] == 'Succeeded':
+                    print(f'Sub relaxation {kk} finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    print('Retrieving completed tasks to local...')
+                    download_artifact(
+                        artifact=step.outputs.artifacts['retrieve_path'],
+                        path=self.download_path
+                    )
+                    relax_left.remove(kk)
+                    if relax_left:
+                        print(f'Waiting for relaxation results ({len(relax_left)} left)...')
+                elif step['phase'] == 'Failed':
+                    print(f'Sub relaxation {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    relax_failed_list.append(kk)
+                    relax_left.remove(kk)
+                    if relax_left:
+                        print(f'Waiting for relaxation results ({len(relax_left)} left)...')
+            if not relax_left:
+                print(f'Workflow finished with {len(relax_failed_list)} sub-relaxation failed '
+                      f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                break
+
     def dump_flow_id(self):
         log_file = os.path.join(self.download_path, '.workflow.log')
         with open(log_file, 'a') as f:
@@ -276,16 +367,16 @@ class FlowGenerator:
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
         flow_name += '-relax'
         self.workflow = Workflow(name=flow_name, labels=labels)
-        relaxation = self._set_relax_flow(
+        relaxation_list, relax_key_list = self._set_relax_flows(
             input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
         )
-        self.workflow.add(relaxation)
+        self.workflow.add(relaxation_list)
         self.workflow.submit()
         self.dump_flow_id()
         if not submit_only:
-            # Wait for and retrieve relaxation
-            self._monitor_relax()
+            # Wait for and retrieve relaxation subflows
+            self._monitor_relax_flows(relax_key_list)
 
         return self.workflow.id
 
@@ -336,21 +427,80 @@ class FlowGenerator:
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
         flow_name += '-joint'
         self.workflow = Workflow(name=flow_name, labels=labels)
-        relaxation = self._set_relax_flow(
+        # per-structure relaxation subflows
+        relaxation_list, relax_key_list = self._set_relax_flows(
             input_work_dir=upload_artifact(upload_path),
             relax_parameter=self.relax_param
         )
-        subprops_list, subprops_key_list = self._set_props_flow(
-            input_work_dir=relaxation.outputs.artifacts["output_all"],
-            props_parameter=self.props_param
+        self.workflow.add(relaxation_list)
+
+        # build per-structure property subflows depending on corresponding relaxation
+        interaction = self.props_param["interaction"]
+        properties = self.props_param["properties"]
+        conf_dirs = []
+        for conf in self.props_param["structures"]:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
+        conf_dirs.sort()
+
+        simplePropertySteps = SimplePropertySteps(
+            name='property-flow',
+            make_op=self.props_make_op,
+            run_op=self.run_op,
+            post_op=self.props_post_op,
+            make_image=self.make_image,
+            run_image=self.run_image,
+            post_image=self.post_image,
+            run_command=self.run_command,
+            calculator=self.calculator,
+            group_size=self.group_size,
+            pool_size=self.pool_size,
+            executor=self.executor,
+            upload_python_packages=self.upload_python_packages
         )
-        self.workflow.add(relaxation)
+
+        subprops_list = []
+        subprops_key_list = []
+        for idx, ii in enumerate(conf_dirs):
+            # use matching relaxation step as dependency
+            relax_step = relaxation_list[idx]
+            for jj in properties:
+                do_refine, suffix = handle_prop_suffix(jj)
+                if not suffix:
+                    continue
+                property_type = jj["type"]
+                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                # clean existing folder if exists
+                if os.path.exists(path_to_prop):
+                    shutil.rmtree(path_to_prop)
+                flow_id = ii + '-' + property_type + '-' + suffix
+                clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', flow_id).lower()
+                subflow_key = f'propertycal-{clean_subflow_id}'
+                subprops_key_list.append(subflow_key)
+                subprops_list.append(
+                    Step(
+                        name=f'Subprop-cal-{clean_subflow_id}',
+                        template=simplePropertySteps,
+                        artifacts={
+                            "input_work_path": relax_step.outputs.artifacts["output_all"]
+                        },
+                        parameters={
+                            "flow_id": flow_id,
+                            "path_to_prop": path_to_prop,
+                            "prop_param": jj,
+                            "inter_param": interaction,
+                            "do_refine": do_refine
+                        },
+                        key=subflow_key
+                    )
+                )
+
         self.workflow.add(subprops_list)
         self.workflow.submit()
         self.dump_flow_id()
         if not submit_only:
-            # Wait for and retrieve relaxation
-            self._monitor_relax()
+            # Wait for and retrieve relaxation subflows
+            self._monitor_relax_flows(relax_key_list)
             # Wait for and retrieve sub-property flows
             self._monitor_props(subprops_key_list)
 
