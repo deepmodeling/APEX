@@ -160,6 +160,23 @@ class FlowGenerator:
         conf_dirs = list(set(conf_dirs))
         conf_dirs.sort()
 
+        # reuse a single RelaxationFlow template to keep manifest size small
+        relaxation_template = RelaxationFlow(
+            name='relaxation-flow',
+            make_op=self.relax_make_op,
+            run_op=self.run_op,
+            post_op=self.relax_post_op,
+            make_image=self.make_image,
+            run_image=self.run_image,
+            post_image=self.post_image,
+            run_command=self.run_command,
+            calculator=self.calculator,
+            group_size=self.group_size,
+            pool_size=self.pool_size,
+            executor=self.executor,
+            upload_python_packages=self.upload_python_packages
+        )
+
         relax_list = []
         relax_key_list = []
         for ii in conf_dirs:
@@ -171,21 +188,7 @@ class FlowGenerator:
             relax_list.append(
                 Step(
                     name=f'Relaxation-cal-{clean_subflow_id}',
-                    template=RelaxationFlow(
-                        name=f'relaxation-flow-{clean_subflow_id}',
-                        make_op=self.relax_make_op,
-                        run_op=self.run_op,
-                        post_op=self.relax_post_op,
-                        make_image=self.make_image,
-                        run_image=self.run_image,
-                        post_image=self.post_image,
-                        run_command=self.run_command,
-                        calculator=self.calculator,
-                        group_size=self.group_size,
-                        pool_size=self.pool_size,
-                        executor=self.executor,
-                        upload_python_packages=self.upload_python_packages
-                    ),
+                    template=relaxation_template,
                     artifacts={
                         "input_work_path": input_work_dir
                     },
