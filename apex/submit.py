@@ -96,7 +96,10 @@ def pack_upload_dir(
         if flow_type == 'props':
             copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
             target_relaxation_path = os.path.join(build_conf_path, "relaxation")
-            shutil.copytree(copy_relaxation_path, target_relaxation_path)
+            if os.path.isdir(copy_relaxation_path):
+                shutil.copytree(copy_relaxation_path, target_relaxation_path)
+            else:
+                logging.warning(f"Skip copying relaxation for {ii}: {copy_relaxation_path} not found.")
             # copy refine from init path to upload dir
             if refine_init_name_list:
                 for jj in refine_init_name_list:
@@ -131,6 +134,27 @@ def submit(
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         logging.debug(msg=f'Temporary upload directory:{tmp_dir}')
+
+        # For property-only workflow, drop structures whose relaxation output is missing
+        if flow_type == 'props' and props_param:
+            filtered_structs = []
+            missing_structs = []
+            for pattern in props_param.get("structures", []):
+                matches = glob.glob(pattern)
+                if not matches:
+                    logging.warning(f'No structure matched pattern "{pattern}", skip.')
+                    continue
+                for m in matches:
+                    relax_dir = os.path.join(m, "relaxation")
+                    if os.path.isdir(relax_dir):
+                        filtered_structs.append(m)
+                    else:
+                        missing_structs.append(m)
+                        logging.warning(f'Relaxation directory missing for {m}, skip property calculation on it.')
+            if not filtered_structs:
+                raise RuntimeError("No available relaxed structures for property workflow.")
+            props_param["structures"] = filtered_structs
+
         pack_upload_dir(
             work_dir=work_dir,
             upload_dir=tmp_dir,
