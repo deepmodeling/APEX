@@ -7,7 +7,7 @@
     "password": "password",
     "program_id": 1234,
     "apex_image_name":"registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
-    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:3.1.1",
+    "lammps_image_name": "registry.dp.tech/dptech/deepmd-kit:3.1.1",
     "lammps_run_command":"lmp -in in.lammps",
     "scass_type":"c8_m31_1 * NVIDIA T4"
 }
