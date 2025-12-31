@@ -237,11 +237,15 @@ class FlowGenerator:
 
         task_list = []
         task_key_list = []
+        skip_finished = set(relax_parameter.get("skip_finished_structures", []))
         for ii in conf_dirs:
             sub_relax_param = copy.deepcopy(relax_parameter)
             sub_relax_param["structures"] = [ii]
             clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', ii).lower()
             subflow_key = f'relaxcal-{clean_subflow_id}'
+            if ii in skip_finished:
+                print(f"Skip relaxation for {ii} (marked finished; rerun_finished=False)")
+                continue
             task_key_list.append(subflow_key)
             task_list.append(
                 Task(
@@ -436,6 +440,10 @@ class FlowGenerator:
         path_to_prop_list = []
         prop_param_list = []
         do_refine_list = []
+        skip_props = set()
+        for item in props_parameter.get("skip_finished_properties", []):
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                skip_props.add((item[0], item[1]))
         for conf in confs:
             conf_dirs.extend(glob.glob(conf))
         conf_dirs = list(set(conf_dirs))
@@ -447,6 +455,10 @@ class FlowGenerator:
                     continue
                 property_type = jj["type"]
                 path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                prop_dir_name = property_type + "_" + suffix
+                if (ii, prop_dir_name) in skip_props:
+                    print(f"Skip property {prop_dir_name} for {ii} (marked finished; rerun_finished=False)")
+                    continue
                 path_to_prop_list.append(path_to_prop)
                 if os.path.exists(path_to_prop):
                     shutil.rmtree(path_to_prop)
@@ -485,7 +497,9 @@ class FlowGenerator:
     def _set_props_tasks(
             self,
             relax_tasks: List[Task],
-            props_parameter: dict
+            props_parameter: dict,
+            base_work_artifact,
+            pre_relaxed: List[str]
     ) -> [List[Task], List[str]]:
         """
         Task-based property subflows keyed to corresponding relax tasks for DAG scheduling.
@@ -548,18 +562,38 @@ class FlowGenerator:
 
         subprops_list = []
         subprops_key_list = []
+        pre_relaxed_set = set(pre_relaxed or [])
+        skip_props = set()
+        for item in props_parameter.get("skip_finished_properties", []):
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                skip_props.add((item[0], item[1]))
+
         for ii, path_to_prop, prop_param, do_refine, flow_id in zip(
                 conf_for_prop, path_to_prop_list, prop_param_list, do_refine_list, flow_id_list):
-            relax_task = relax_map[ii]
             clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', flow_id).lower()
             subflow_key = f'propertycal-{clean_subflow_id}'
+
+            # choose artifact source: from corresponding relax task if exists; otherwise from base upload (pre-relaxed)
+            if ii in relax_map:
+                input_artifact = relax_map[ii].outputs.artifacts["output_all"]
+            else:
+                # pre-relaxed data exists in uploaded workspace
+                input_artifact = base_work_artifact
+
+            # skip property if already finished and rerun_finished=False
+            prop_dir_name = os.path.basename(path_to_prop)
+            if (ii, prop_dir_name) in skip_props:
+                # don't create task; also remove from monitor list by not adding key
+                print(f"Skip property {prop_dir_name} for {ii} (marked finished; rerun_finished=False)")
+                continue
+
             subprops_key_list.append(subflow_key)
             subprops_list.append(
                 Task(
                     name=f'Subprop-cal-{clean_subflow_id}',
                     template=simplePropertySteps,
                     artifacts={
-                        "input_work_path": relax_task.outputs.artifacts["output_all"]
+                        "input_work_path": input_artifact
                     },
                     parameters={
                         "flow_id": flow_id,
@@ -650,9 +684,11 @@ class FlowGenerator:
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
         flow_name += '-joint'
         self.workflow = Workflow(name=flow_name, labels=labels)
+        base_artifact = upload_artifact(upload_path)
+
         # per-structure relaxation subflows as DAG tasks
         relaxation_tasks, relax_key_list = self._set_relax_tasks(
-            input_work_dir=upload_artifact(upload_path),
+            input_work_dir=base_artifact,
             relax_parameter=self.relax_param
         )
         self.workflow.add(relaxation_tasks)
@@ -660,7 +696,9 @@ class FlowGenerator:
         # per-structure property tasks depending on corresponding relaxation task
         subprops_list, subprops_key_list = self._set_props_tasks(
             relax_tasks=relaxation_tasks,
-            props_parameter=self.props_param
+            props_parameter=self.props_param,
+            base_work_artifact=base_artifact,
+            pre_relaxed=self.props_param.get("pre_relaxed_structures", [])
         )
 
         self.workflow.add(subprops_list)

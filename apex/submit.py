@@ -58,6 +58,116 @@ def pack_upload_dir(
         conf_dirs.extend(glob.glob(conf))
     conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
+
+    def relaxation_finished(conf_path: str) -> bool:
+        res = os.path.join(conf_path, "relaxation", "relax_task", "result.json")
+        return os.path.isfile(res) and os.path.getsize(res) > 0
+
+    def property_finished(conf_path: str, properties: list) -> bool:
+        # finished only if every property that sets rerun_finished=False has its results
+        all_done = True
+        for prop in properties:
+            rerun_finished = prop.get("rerun_finished", True)
+            if rerun_finished:
+                all_done = False
+                break
+            do_refine, suffix = handle_prop_suffix(prop)
+            if not suffix:
+                all_done = False
+                break
+            prop_dir = os.path.join(conf_path, prop["type"] + "_" + suffix)
+            rjson = os.path.join(prop_dir, "result.json")
+            rout = os.path.join(prop_dir, "result.out")
+            if not (os.path.isfile(rjson) and os.path.getsize(rjson) > 0
+                    and os.path.isfile(rout) and os.path.getsize(rout) > 0):
+                all_done = False
+                break
+        return all_done
+
+    # Optional pruning to skip already-finished tasks before upload.
+    if flow_type == 'relax' and relax_param:
+        rerun_finished = relax_param.get("interaction", {}).get("rerun_finished", True)
+        if rerun_finished is False:
+            pruned = []
+            skipped = []
+            for c in conf_dirs:
+                if relaxation_finished(c):
+                    logging.info(f"Skip uploading finished relaxation for {c} (rerun_finished=False).")
+                    skipped.append(c)
+                else:
+                    pruned.append(c)
+            conf_dirs = pruned
+            if not conf_dirs:
+                raise RuntimeError("All relaxations are already finished; nothing to submit.")
+
+    if flow_type == 'props' and prop_param:
+        properties = prop_param.get("properties", [])
+        finished_props = {}
+        pruned = []
+        for c in conf_dirs:
+            done_all = property_finished(c, properties)
+            if done_all:
+                logging.info(f"Skip uploading finished properties for {c} (all rerun_finished=False and results present).")
+            else:
+                pruned.append(c)
+                # track per-structure finished properties
+                finished_list = []
+                for prop in properties:
+                    if not prop.get("rerun_finished", True):
+                        do_refine, suffix = handle_prop_suffix(prop)
+                        if not suffix:
+                            continue
+                        prop_dir = os.path.join(c, prop["type"] + "_" + suffix)
+                        rjson = os.path.join(prop_dir, "result.json")
+                        rout = os.path.join(prop_dir, "result.out")
+                        if os.path.isfile(rjson) and os.path.getsize(rjson) > 0 \
+                                and os.path.isfile(rout) and os.path.getsize(rout) > 0:
+                            finished_list.append(prop_dir)
+                if finished_list:
+                    finished_props[c] = finished_list
+        conf_dirs = pruned
+        if finished_props:
+            prop_param["skip_finished_properties"] = [
+                [c, os.path.basename(p)] for c, lst in finished_props.items() for p in lst
+            ]
+        if not conf_dirs and not prop_param.get("skip_finished_properties", []):
+            raise RuntimeError("All properties are already finished; nothing to submit.")
+    
+    if flow_type == 'joint' and relax_param and prop_param:
+        # Split finished vs pending relaxations so we can skip reruns while still running properties
+        rerun_finished = relax_param.get("interaction", {}).get("rerun_finished", True)
+        skip_finished_properties = []
+        if rerun_finished is False:
+            finished_relax = []
+            pending_relax = []
+            for c in conf_dirs:
+                if relaxation_finished(c):
+                    finished_relax.append(c)
+                else:
+                    pending_relax.append(c)
+            if not pending_relax:
+                logging.info("All relaxations finished; joint flow will reuse existing results.")
+            # keep all structures for property stage; mark which relaxations to skip
+            relax_param["skip_finished_structures"] = finished_relax
+            prop_param["pre_relaxed_structures"] = finished_relax
+        # Detect per-structure finished properties when rerun_finished is False for that property
+        properties = prop_param.get("properties", [])
+        for c in conf_dirs:
+            for prop in properties:
+                if prop.get("rerun_finished", True):
+                    continue
+                do_refine, suffix = handle_prop_suffix(prop)
+                if not suffix:
+                    continue
+                prop_dir_name = f"{prop['type']}_{suffix}"
+                prop_dir = os.path.join(c, prop_dir_name)
+                rjson = os.path.join(prop_dir, "result.json")
+                rout = os.path.join(prop_dir, "result.out")
+                if os.path.isfile(rjson) and os.path.getsize(rjson) > 0 \
+                        and os.path.isfile(rout) and os.path.getsize(rout) > 0:
+                    skip_finished_properties.append([c, prop_dir_name])
+        if skip_finished_properties:
+            prop_param["skip_finished_properties"] = skip_finished_properties
     refine_init_name_list = []
     # backup all existing property work directories
     if flow_type in ['props', 'joint']:
@@ -73,6 +183,14 @@ def pack_upload_dir(
                     refine_init_suffix = jj['init_from_suffix']
                     refine_init_name_list.append(property_type + "_" + refine_init_suffix)
                 path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                # If rerun_finished is False and results exist, skip backing up (keep as-is)
+                if (not jj.get("rerun_finished", True)):
+                    rjson = os.path.join(path_to_prop, "result.json")
+                    rout = os.path.join(path_to_prop, "result.out")
+                    if os.path.isfile(rjson) and os.path.getsize(rjson) > 0 \
+                            and os.path.isfile(rout) and os.path.getsize(rout) > 0:
+                        logging.info(f"Skip backing up finished property at {path_to_prop} (rerun_finished=False)")
+                        continue
                 backup_path(path_to_prop)
 
     """copy necessary files and directories into temp upload directory"""
@@ -93,7 +211,7 @@ def pack_upload_dir(
         if os.path.isfile(copy_stru_path):
             target_stru_path = os.path.join(build_conf_path, "STRU")
             shutil.copy(copy_stru_path, target_stru_path)
-        if flow_type == 'props':
+        if flow_type in ['props', 'joint']:
             copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
             target_relaxation_path = os.path.join(build_conf_path, "relaxation")
             if os.path.isdir(copy_relaxation_path):

@@ -61,9 +61,16 @@ def make_equi(confs, inter_param, relax_param):
     task_dirs = []
     # make task directories like mp-xxx/relaxation/relax_task
     # if mp-xxx/exists then print a warning and exit.
+    rerun_finished = inter_param.get("rerun_finished", True)
     for ii in conf_dirs:
         crys_type = ii.split("/")[-1]
         logging.debug(f"crys_type: {crys_type}")
+
+        result_json_path = os.path.join(ii, "relaxation", "relax_task", "result.json")
+        #print(inter_param["rerun_finished"], result_json_path, os.path.isfile(result_json_path))
+        if (not rerun_finished) and os.path.isfile(result_json_path):
+            print(f"Skip generating relaxation tasks for {ii} (results already exist, rerun_finished=False)")
+            continue
 
         if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
             get_structure(crys_type).to("POSCAR", os.path.join(ii, "POSCAR"))
@@ -144,8 +151,14 @@ def run_equi(confs, inter_param, mdata):
     for ii in conf_dirs:
         work_path_list.append(os.path.join(ii, "relaxation"))
     all_task = []
+    rerun_finished = inter_param.get("rerun_finished", True)
     for ii in work_path_list:
-        all_task.append(os.path.join(ii, "relax_task"))
+        task_dir = os.path.join(ii, "relax_task")
+        result_json_path = os.path.join(task_dir, "result.json")
+        if (not rerun_finished) and os.path.isfile(result_json_path):
+            print(f"Skip running relaxation for {task_dir} (results already exist, rerun_finished=False)")
+            continue
+        all_task.append(task_dir)
     run_tasks = all_task
 
     # dispatch the tasks
@@ -195,6 +208,11 @@ def post_equi(confs, inter_param):
     for ii in task_dirs:
         poscar = os.path.join(ii, "POSCAR")
         inter = make_calculator(inter_param, poscar)
+        rerun_finished = inter_param.get("rerun_finished", True)
+        result_json_path = os.path.join(ii, "result.json")
+        if (not rerun_finished) and os.path.isfile(result_json_path):
+            print(f"Skip post-processing {ii} (results already exist, rerun_finished=False)")
+            continue
         res = inter.compute(ii)
         contcar = os.path.join(ii, "CONTCAR")
         try:
@@ -223,6 +241,3 @@ def post_equi(confs, inter_param):
 
         dumpfn(struct_info_dict, os.path.join(ii, "structure.json"), indent=4)
         dumpfn(res, os.path.join(ii, "result.json"), indent=4)
-
-
-
