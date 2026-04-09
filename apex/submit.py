@@ -4,6 +4,7 @@ import glob
 import shutil
 import tempfile
 import logging
+import copy
 from typing import List
 from multiprocessing import Pool
 from monty.serialization import loadfn
@@ -281,7 +282,6 @@ def submit(
             flow_type=flow_type,
             exclude_upload_files=wf_config.exclude_upload_files
         )
-
         cwd = os.getcwd()
         os.chdir(tmp_dir)
         flow_id = None
@@ -377,6 +377,7 @@ def submit_workflow(
     run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config_dict["run_command"]
+    phonolammps_run_command = wf_config.basic_config_dict["phonolammps_run_command"]
     post_image = make_image
     group_size = wf_config.basic_config_dict["group_size"]
     pool_size = wf_config.basic_config_dict["pool_size"]
@@ -401,6 +402,13 @@ def submit_workflow(
         executor=executor,
         upload_python_packages=upload_python_packages
     )
+
+    if props_param and phonolammps_run_command:
+        props_param = copy.deepcopy(props_param)
+        for prop in props_param.get("properties", []):
+            if prop.get("type") == "phonon":
+                prop["phonolammps_run_command"] = phonolammps_run_command
+
     # submit the workflows
     work_dir_list = []
     for ii in work_dirs:
