@@ -9,6 +9,7 @@ from typing import List, Dict, Any
 
 import dpdata
 import seekpath
+from pathlib import Path
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 
