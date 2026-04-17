@@ -12,6 +12,7 @@ import yaml
 from monty.serialization import loadfn
 
 from apex.core.calculator.Lammps import Lammps
+from apex.core.lib.mfp_eosfit import fit_birch_murnaghan
 from apex.core.property.Gruneisen import Gruneisen
 
 
@@ -78,7 +79,14 @@ class TestGruneisen(unittest.TestCase):
             self.gruneisen.make_confs(str(self.target_path), str(self.equi_path))
 
         shutil.copy(self.source_path, self.equi_path / "CONTCAR")
-        task_list = self.gruneisen.make_confs(str(self.target_path), str(self.equi_path))
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            self.assertIn("phonopy -d", command)
+            Path("SPOSCAR").write_text(Path("POSCAR").read_text())
+            Path("phonopy_disp.yaml").write_text("displacements: []\n")
+
+        with patch("apex.core.property.Gruneisen.subprocess.check_call", side_effect=fake_check_call):
+            task_list = self.gruneisen.make_confs(str(self.target_path), str(self.equi_path))
         task_dirs = glob.glob(str(self.target_path / "task.*"))
         self.assertEqual(len(task_dirs), 3)
         self.assertEqual(len(task_list), 3)
@@ -219,7 +227,15 @@ class TestGruneisen(unittest.TestCase):
         )
         self.assertEqual(
             lammps.backward_files("gruneisen"),
-            ["outlog", "FORCE_CONSTANTS", "mesh.yaml", "band.yaml", "phonopy.yaml"],
+            [
+                "log.lammps",
+                "outlog",
+                "dump.relax",
+                "FORCE_CONSTANTS",
+                "mesh.yaml",
+                "band.yaml",
+                "phonopy.yaml",
+            ],
         )
 
     def test_sign_only_compute_lower_from_synthetic_mesh(self):
@@ -291,6 +307,167 @@ class TestGruneisen(unittest.TestCase):
         self.assertTrue("Temperature(K)  SumGammaCv  Sign" in ptr)
         self.assertTrue("# contribution summary" in ptr)
 
+    def test_full_compute_lower_fits_bulk_modulus_and_alpha(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [100, 300],
+                "alpha_mode": "full",
+            }
+        )
+        work_dir = self.work_root / "gruneisen_full"
+        task_dirs, result_paths = self._write_synthetic_gruneisen_tasks(
+            work_dir,
+            [
+                (-0.01, 99.0, [[4.2, 8.4]], -4.0 + 0.01 * (24.75 - 25.0) ** 2),
+                (0.0, 100.0, [[4.1, 8.2]], -4.0),
+                (0.01, 101.0, [[4.0, 8.0]], -4.0 + 0.01 * (25.25 - 25.0) ** 2),
+            ],
+            weight=2,
+        )
+
+        output_file = work_dir / "result.json"
+        result, ptr = gruneisen._compute_lower(str(output_file), task_dirs, result_paths)
+
+        self.assertEqual(result["thermal_expansion"]["alpha_mode"], "full")
+        self.assertGreater(result["bulk_modulus"]["K_T_GPa"], 0.0)
+        self.assertEqual(result["bulk_modulus"]["fit_variant"], "fixed_bp")
+        self.assertEqual(result["thermal_expansion"]["qpoint_weight_sum"], 2)
+        self.assertEqual(len(result["thermal_expansion"]["alpha"]), 2)
+        raw = result["thermal_expansion"]["sum_gamma_cv"][0]
+        per_cell = result["thermal_expansion"]["sum_gamma_cv_per_cell"][0]
+        self.assertAlmostEqual(per_cell, raw / 2.0)
+        expected_alpha = per_cell / (
+            result["thermal_expansion"]["reference_volume_for_alpha"]
+            * result["bulk_modulus"]["K_T_eV_per_A3"]
+        )
+        self.assertAlmostEqual(result["thermal_expansion"]["alpha"][0], expected_alpha)
+        self.assertIn("bulk modulus", ptr)
+        self.assertIn("Alpha(K^-1)", ptr)
+
+    def test_full_compute_lower_rejects_non_positive_bulk_modulus(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "alpha_mode": "full",
+            }
+        )
+        work_dir = self.work_root / "gruneisen_bad_bulk"
+        task_dirs, result_paths = self._write_synthetic_gruneisen_tasks(
+            work_dir,
+            [
+                (-0.01, 99.0, [[4.2, 8.4]], -4.0 - 0.01 * (24.75 - 25.0) ** 2),
+                (0.0, 100.0, [[4.1, 8.2]], -4.0),
+                (0.01, 101.0, [[4.0, 8.0]], -4.0 - 0.01 * (25.25 - 25.0) ** 2),
+            ],
+        )
+
+        with self.assertRaisesRegex(ValueError, "positive fitted bulk modulus"):
+            gruneisen._compute_lower(str(work_dir / "result.json"), task_dirs, result_paths)
+
+    def test_full_compute_lower_requires_task_results(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "alpha_mode": "full",
+            }
+        )
+        work_dir = self.work_root / "gruneisen_missing_result"
+        task_dirs, _ = self._write_synthetic_gruneisen_tasks(
+            work_dir,
+            [
+                (-0.01, 99.0, [[4.2, 8.4]], -4.0),
+                (0.0, 100.0, [[4.1, 8.2]], -4.0),
+                (0.01, 101.0, [[4.0, 8.0]], -4.0),
+            ],
+        )
+
+        with self.assertRaisesRegex(ValueError, "result_task.json"):
+            gruneisen._compute_lower(str(work_dir / "result.json"), task_dirs, [])
+
+    def test_primitive_compute_lower_requires_poscar_unitcell(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "primitive": True,
+            }
+        )
+        work_dir = self.work_root / "gruneisen_missing_unitcell"
+        task_dirs, _ = self._write_synthetic_gruneisen_tasks(
+            work_dir,
+            [
+                (-0.01, 99.0, [[4.2, 8.4]], -4.0),
+                (0.0, 100.0, [[4.1, 8.2]], -4.0),
+                (0.01, 101.0, [[4.0, 8.0]], -4.0),
+            ],
+        )
+
+        with self.assertRaisesRegex(FileNotFoundError, "POSCAR-unitcell is required"):
+            gruneisen._compute_lower(str(work_dir / "result.json"), task_dirs, [])
+
+    def test_fit_birch_murnaghan_helper_is_side_effect_free(self):
+        fit = fit_birch_murnaghan(
+            [24.75, 25.0, 25.25],
+            [
+                -4.0 + 0.01 * (24.75 - 25.0) ** 2,
+                -4.0,
+                -4.0 + 0.01 * (25.25 - 25.0) ** 2,
+            ],
+            fixed_bp=4.0,
+        )
+        self.assertGreater(fit["K_T_GPa"], 0.0)
+        self.assertEqual(fit["fit_variant"], "fixed_bp")
+        self.assertEqual(fit["model"], "birch_murnaghan")
+
     def test_mode_heat_capacity_is_stable_for_large_x(self):
         cv = Gruneisen._mode_heat_capacity(frequency_thz=500.0, temperature=1.0)
         self.assertEqual(cv, 0.0)
+
+    def _write_synthetic_gruneisen_tasks(self, work_dir, synthetic, weight=1):
+        work_dir.mkdir(parents=True, exist_ok=True)
+        task_dirs = []
+        result_paths = []
+        for task_id, (strain, volume, frequencies, energy_per_atom) in enumerate(synthetic):
+            task_dir = work_dir / f"task.{task_id:06d}"
+            task_dir.mkdir(parents=True, exist_ok=True)
+            (task_dir / "volume.json").write_text(
+                json.dumps(
+                    {
+                        "strain": strain,
+                        "scale": 1.0,
+                        "volume": volume,
+                        "volume_per_atom": volume / 4.0,
+                        "reference_volume": 100.0,
+                        "reference_volume_per_atom": 25.0,
+                    }
+                )
+            )
+            mesh = {
+                "phonon": [
+                    {
+                        "q-position": [0.0, 0.0, 0.0],
+                        "weight": weight,
+                        "band": [{"frequency": freq} for freq in frequencies[0]],
+                    }
+                ]
+            }
+            (task_dir / "mesh.yaml").write_text(yaml.safe_dump(mesh, sort_keys=False))
+            result_path = task_dir / "result_task.json"
+            result_path.write_text(
+                json.dumps(
+                    {
+                        "energies": [energy_per_atom * 4.0],
+                        "atom_numbs": [4],
+                    }
+                )
+            )
+            task_dirs.append(str(task_dir))
+            result_paths.append(str(result_path))
+        return task_dirs, result_paths

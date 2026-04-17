@@ -558,7 +558,15 @@ class Lammps(Task):
         if property_type == "phonon":
             return ["outlog", "FORCE_CONSTANTS"]
         elif property_type == "gruneisen":
-            return ["outlog", "FORCE_CONSTANTS", "mesh.yaml", "band.yaml", "phonopy.yaml"]
+            return [
+                "log.lammps",
+                "outlog",
+                "dump.relax",
+                "FORCE_CONSTANTS",
+                "mesh.yaml",
+                "band.yaml",
+                "phonopy.yaml",
+            ]
         elif property_type == "finitetlatt":
             return ["log.lammps", "outlog", "dump.relax", "average_box.txt"]
         else:

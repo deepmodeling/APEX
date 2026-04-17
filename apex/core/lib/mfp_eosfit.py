@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.integrate as INT
 from scipy.interpolate import *
-from scipy.misc import derivative
 from scipy.optimize import curve_fit, fsolve, leastsq, minimize, root
 from dflow.python import upload_packages
 upload_packages.append(__file__)
@@ -1319,6 +1318,14 @@ def read_velp(fin, fstart, fend):
 
 def init_guess(fin):
     v, e = read_ve(fin)
+    return init_guess_from_data(v, e)
+
+
+def init_guess_from_data(volumes, energies):
+    v = np.asarray(volumes, dtype=float)
+    e = np.asarray(energies, dtype=float)
+    if len(v) < 3:
+        raise ValueError("at least 3 volume-energy points are required for EOS fitting")
     a, b, c = np.polyfit(v, e, 2)  # this comes from pylab
     # initial guesses.
     v0 = np.abs(-b / (2 * a))
@@ -1328,6 +1335,75 @@ def init_guess(fin):
     bpp = 1 * eV2GPa
     x0 = [e0, b0, bp, v0, bpp]
     return x0
+
+
+def fit_birch_murnaghan(volumes, energies, fixed_bp=None):
+    """Fit Birch-Murnaghan E(V) data without writing plot or data files."""
+    vol = np.asarray(volumes, dtype=float)
+    en = np.asarray(energies, dtype=float)
+    if vol.shape != en.shape:
+        raise ValueError("volumes and energies must have the same shape")
+    if len(vol) < 3:
+        raise ValueError("at least 3 volume-energy points are required for EOS fitting")
+    if fixed_bp is None and len(vol) < 4:
+        raise ValueError("free-B0-prime Birch-Murnaghan fitting requires at least 4 points")
+    if np.any(vol <= 0.0):
+        raise ValueError("EOS volumes must be positive")
+
+    order = np.argsort(vol)
+    vol = vol[order]
+    en = en[order]
+    p0 = init_guess_from_data(vol, en)
+
+    if fixed_bp is None:
+        fit_func = "birch"
+        initial = p0[:4]
+
+        def residual(pars, y, x):
+            return y - birch(x, pars)
+
+        fit_variant = "free_bp"
+    else:
+        fit_func = "birch_fixed_bp"
+        initial = [p0[0], p0[1], p0[3]]
+        bp = float(fixed_bp)
+
+        def residual(pars, y, x):
+            full_pars = [pars[0], pars[1], bp, pars[2]]
+            return y - birch(x, full_pars)
+
+        fit_variant = "fixed_bp"
+
+    popt, pcov, infodict, mesg, ier = leastsq(
+        residual,
+        initial,
+        args=(en, vol),
+        full_output=1,
+        maxfev=(len(initial) + 1) * 400,
+    )
+    if ier not in [1, 2, 3, 4]:
+        raise RuntimeError("Optimal parameters not found: " + mesg)
+
+    if fixed_bp is None:
+        e0, b0, bp, v0 = [float(value) for value in popt]
+    else:
+        e0, b0, v0 = [float(value) for value in popt]
+        bp = float(fixed_bp)
+
+    residuals = residual(popt, en, vol)
+    return {
+        "model": "birch_murnaghan",
+        "fit_function": fit_func,
+        "fit_variant": fit_variant,
+        "E0_eV": e0,
+        "B0_eV_per_A3": b0,
+        "K_T_eV_per_A3": b0,
+        "K_T_GPa": b0 * eV2GPa,
+        "B0_prime": bp,
+        "V0_A3": v0,
+        "residual_sum_squares": float(np.sum(residuals**2)),
+        "used_point_count": int(len(vol)),
+    }
 
 
 def repro_ve(func, vol_i, p):

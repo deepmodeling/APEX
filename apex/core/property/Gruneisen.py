@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from typing import Dict, List
 
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 import seekpath
 import yaml
@@ -246,9 +246,6 @@ class Gruneisen(Property):
         return self.parameter
 
     def _compute_lower(self, output_file, all_tasks, all_res):
-        if self.alpha_mode != "sign_only":
-            raise NotImplementedError("full alpha(T) mode is not implemented yet")
-
         output_file = os.path.abspath(output_file)
         work_path = os.path.dirname(output_file)
         ptr_lines = [work_path]
@@ -259,8 +256,22 @@ class Gruneisen(Property):
                 self._ensure_mesh_yaml(task_dir)
 
             task_infos = [self._load_task_info(task_dir) for task_dir in all_tasks]
+            if self.alpha_mode == "full":
+                self._attach_task_energies(task_infos, all_res)
             ref_info, minus_info, plus_info = self._select_reference_triplet(task_infos)
             sign_only = self._compute_sign_only(ref_info, minus_info, plus_info)
+            bulk_modulus = None
+            thermal_expansion = {
+                "alpha_mode": self.alpha_mode,
+                "temperatures": self.temperatures,
+                "sum_gamma_cv": sign_only["sum_gamma_cv"],
+                "sign": sign_only["sign"],
+            }
+            if self.alpha_mode == "full":
+                bulk_modulus = self._fit_bulk_modulus(task_infos)
+                thermal_expansion.update(
+                    self._compute_full_thermal_expansion(ref_info, sign_only, bulk_modulus)
+                )
 
             result = {
                 "volume_points": [
@@ -268,6 +279,13 @@ class Gruneisen(Property):
                         "strain": info["strain"],
                         "volume": info["volume"],
                         "volume_per_atom": info["volume_per_atom"],
+                        "phonon_cell_volume": info["phonon_cell_volume"],
+                        "fit_volume_per_atom": info["fit_volume_per_atom"],
+                        **(
+                            {"energy_per_atom": info["energy_per_atom"]}
+                            if "energy_per_atom" in info
+                            else {}
+                        ),
                     }
                     for info in task_infos
                 ],
@@ -283,26 +301,45 @@ class Gruneisen(Property):
                         "plus_strain": plus_info["strain"],
                     },
                 },
-                "thermal_expansion": {
-                    "alpha_mode": "sign_only",
-                    "temperatures": self.temperatures,
-                    "sum_gamma_cv": sign_only["sum_gamma_cv"],
-                    "sign": sign_only["sign"],
-                },
+                "thermal_expansion": thermal_expansion,
                 "mode_gruneisen": sign_only["mode_gruneisen"],
                 "mode_heat_capacity": sign_only["mode_heat_capacity"],
                 "mode_contributions": sign_only["mode_contributions"],
                 "contribution_summary": sign_only["contribution_summary"],
-                "bulk_modulus": None,
+                "bulk_modulus": bulk_modulus,
             }
 
-            ptr_lines.append("Temperature(K)  SumGammaCv  Sign")
-            for temperature, sum_gamma_cv, sign in zip(
+            if bulk_modulus is not None:
+                ptr_lines.append("VolumePoint  Strain  FitVolumePerAtom(A^3)  EnergyPerAtom(eV)")
+                for idx, info in enumerate(task_infos):
+                    ptr_lines.append(
+                        f"{idx:6d}  {info['strain']: .8f}  "
+                        f"{info['fit_volume_per_atom']: .10e}  {info['energy_per_atom']: .10e}"
+                    )
+                ptr_lines.append(
+                    "# bulk modulus: "
+                    f"K_T={bulk_modulus['K_T_GPa']:.10e} GPa, "
+                    f"K_T={bulk_modulus['K_T_eV_per_A3']:.10e} eV/A^3, "
+                    f"fit_variant={bulk_modulus['fit_variant']}"
+                )
+
+            header = "Temperature(K)  SumGammaCv  Sign"
+            if self.alpha_mode == "full":
+                header = "Temperature(K)  SumGammaCvRaw  SumGammaCvPerCell  Alpha(K^-1)  Sign"
+            ptr_lines.append(header)
+            for temp_idx, (temperature, sum_gamma_cv, sign) in enumerate(zip(
                 self.temperatures,
                 sign_only["sum_gamma_cv"],
                 sign_only["sign"],
-            ):
-                ptr_lines.append(f"{float(temperature):10.4f}  {sum_gamma_cv: .10e}  {sign}")
+            )):
+                if self.alpha_mode == "full":
+                    ptr_lines.append(
+                        f"{float(temperature):10.4f}  {sum_gamma_cv: .10e}  "
+                        f"{thermal_expansion['sum_gamma_cv_per_cell'][temp_idx]: .10e}  "
+                        f"{thermal_expansion['alpha'][temp_idx]: .10e}  {sign}"
+                    )
+                else:
+                    ptr_lines.append(f"{float(temperature):10.4f}  {sum_gamma_cv: .10e}  {sign}")
             ptr_lines.append("# contribution summary")
             for summary in sign_only["contribution_summary"]:
                 ptr_lines.append(
@@ -490,13 +527,122 @@ if __name__ == "__main__":
             [float(band["frequency"]) for band in point["band"]]
             for point in phonon
         ]
+        phonon_cell_path = (
+            os.path.join(task_dir, "POSCAR-unitcell")
+            if self.inter_param["type"] == "vasp"
+            else os.path.join(task_dir, "POSCAR")
+        )
+        phonon_cell_volume = float(volume_data["volume"])
+        phonon_cell_natoms = None
+        if os.path.isfile(phonon_cell_path):
+            phonon_cell_volume = float(vasp_utils.poscar_vol(phonon_cell_path))
+            phonon_cell_natoms = int(vasp_utils.poscar_natoms(phonon_cell_path))
+        elif self.primitive:
+            raise FileNotFoundError(
+                "POSCAR-unitcell is required for primitive gruneisen alpha calculation "
+                f"but was not found at {phonon_cell_path}"
+            )
         return {
             "task_dir": task_dir,
             "strain": float(volume_data["strain"]),
             "volume": float(volume_data["volume"]),
             "volume_per_atom": float(volume_data["volume_per_atom"]),
+            "phonon_cell_volume": phonon_cell_volume,
+            "phonon_cell_natoms": phonon_cell_natoms,
+            "fit_volume_per_atom": float(volume_data["volume_per_atom"]),
             "weights": weights,
             "frequencies": frequencies,
+        }
+
+    def _attach_task_energies(self, task_infos: List[dict], all_res: List[str]) -> None:
+        if len(all_res) != len(task_infos):
+            raise ValueError("full gruneisen requires one result_task.json for each volume task")
+        for info, result_path in zip(task_infos, all_res):
+            if not os.path.isfile(result_path):
+                raise FileNotFoundError(f"result_task.json not found for {info['task_dir']}")
+            task_result = loadfn(result_path)
+            energy = self._last_result_value(task_result, "energies")
+            atom_count = self._result_atom_count(task_result)
+            if atom_count <= 0:
+                raise ValueError(f"invalid atom count in {result_path}")
+            info["energy"] = energy
+            info["atom_count"] = atom_count
+            info["energy_per_atom"] = energy / atom_count
+            if info["phonon_cell_natoms"]:
+                info["fit_volume_per_atom"] = info["phonon_cell_volume"] / info["phonon_cell_natoms"]
+
+    @staticmethod
+    def _last_result_value(task_result, key: str) -> float:
+        try:
+            values = task_result[key]
+        except (KeyError, TypeError):
+            values = task_result["data"][key]
+        if isinstance(values, dict) and "data" in values:
+            values = values["data"]
+        if len(values) == 0:
+            raise ValueError(f"result field {key} is empty")
+        return float(values[-1])
+
+    @staticmethod
+    def _result_atom_count(task_result) -> int:
+        try:
+            atom_numbs = task_result["atom_numbs"]
+        except (KeyError, TypeError):
+            atom_numbs = task_result["data"]["atom_numbs"]
+        if isinstance(atom_numbs, dict) and "data" in atom_numbs:
+            atom_numbs = atom_numbs["data"]
+        return int(sum(atom_numbs))
+
+    def _fit_bulk_modulus(self, task_infos: List[dict]) -> dict:
+        from apex.core.lib.mfp_eosfit import fit_birch_murnaghan
+
+        volumes = [info["fit_volume_per_atom"] for info in task_infos]
+        energies = [info["energy_per_atom"] for info in task_infos]
+        fixed_bp = 4.0 if len(task_infos) == 3 else None
+        fit = fit_birch_murnaghan(volumes, energies, fixed_bp=fixed_bp)
+        if not math.isfinite(fit["K_T_eV_per_A3"]) or fit["K_T_eV_per_A3"] <= 0.0:
+            raise ValueError("full gruneisen requires a positive fitted bulk modulus")
+        if not math.isfinite(fit["K_T_GPa"]) or fit["K_T_GPa"] <= 0.0:
+            raise ValueError("full gruneisen requires a positive fitted bulk modulus")
+        return {
+            "source": self.bulk_modulus_source,
+            "model": self.eos_model,
+            "K_T_GPa": fit["K_T_GPa"],
+            "K_T_eV_per_A3": fit["K_T_eV_per_A3"],
+            "B0_prime": fit["B0_prime"],
+            "V0_per_atom_A3": fit["V0_A3"],
+            "E0_per_atom_eV": fit["E0_eV"],
+            "fit_variant": fit["fit_variant"],
+            "used_point_count": fit["used_point_count"],
+            "residual_sum_squares": fit["residual_sum_squares"],
+        }
+
+    def _compute_full_thermal_expansion(
+        self,
+        ref_info: dict,
+        sign_only: dict,
+        bulk_modulus: dict,
+    ) -> dict:
+        qpoint_weight_sum = sum(ref_info["weights"])
+        if qpoint_weight_sum <= 0:
+            raise ValueError("full gruneisen requires a positive q-point weight sum")
+        reference_volume = ref_info["phonon_cell_volume"]
+        if not math.isfinite(reference_volume) or reference_volume <= 0.0:
+            raise ValueError("full gruneisen requires a positive reference volume")
+        k_t = bulk_modulus["K_T_eV_per_A3"]
+        sum_gamma_cv_per_cell = [
+            value / qpoint_weight_sum for value in sign_only["sum_gamma_cv"]
+        ]
+        alpha = [
+            value / (reference_volume * k_t)
+            for value in sum_gamma_cv_per_cell
+        ]
+        return {
+            "sum_gamma_cv_per_cell": sum_gamma_cv_per_cell,
+            "alpha": alpha,
+            "alpha_unit": "K^-1",
+            "qpoint_weight_sum": qpoint_weight_sum,
+            "reference_volume_for_alpha": reference_volume,
         }
 
     def _select_reference_triplet(self, task_infos: List[dict]) -> tuple[dict, dict, dict]:
