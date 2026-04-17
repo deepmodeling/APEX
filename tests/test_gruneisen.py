@@ -1,9 +1,11 @@
 import glob
+import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
 import json
+from unittest.mock import patch
 
 import yaml
 
@@ -43,6 +45,7 @@ class TestGruneisen(unittest.TestCase):
         self.assertEqual(task_param["eos_model"], "birch_murnaghan")
         self.assertEqual(task_param["BAND_POINTS"], 51)
         self.assertEqual(task_param["supercell_size"], [2, 2, 2])
+        self.assertEqual(task_param["approach"], "linear")
 
     def test_validation_rejects_invalid_schema(self):
         with self.assertRaises(ValueError):
@@ -84,6 +87,8 @@ class TestGruneisen(unittest.TestCase):
         for task_dir, strain in zip(sorted(task_dirs), self.prop_param["volume_strains"]):
             self.assertTrue((Path(task_dir) / "POSCAR").is_file())
             self.assertTrue((Path(task_dir) / "POSCAR.orig").exists())
+            self.assertTrue((Path(task_dir) / "POSCAR-unitcell").is_file())
+            self.assertTrue((Path(task_dir) / "SPOSCAR").is_file())
             self.assertTrue((Path(task_dir) / "volume.json").is_file())
             volume_data = loadfn(Path(task_dir) / "volume.json")
             self.assertAlmostEqual(volume_data["strain"], strain)
@@ -92,6 +97,74 @@ class TestGruneisen(unittest.TestCase):
             self.assertTrue((Path(task_dir) / "band.conf").is_file())
 
         self.assertTrue((self.target_path / "band_path.json").is_file())
+
+    def test_vasp_displacement_gruneisen_is_explicitly_unsupported(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "approach": "displacement",
+            },
+            inter_param={"type": "vasp"},
+        )
+        shutil.copy(self.source_path, self.equi_path / "CONTCAR")
+
+        with self.assertRaisesRegex(NotImplementedError, "approach='linear'"):
+            gruneisen.make_confs(str(self.target_path), str(self.equi_path))
+
+    def test_vasp_ensure_mesh_yaml_builds_force_constants_from_vasprun(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "supercell_size": [1, 1, 1],
+            },
+            inter_param={"type": "vasp"},
+        )
+        task_dir = self.work_root / "vasp_mesh" / "task.000000"
+        task_dir.mkdir(parents=True)
+        (task_dir / "vasprun.xml").write_text("<modeling />\n")
+        (task_dir / "band.conf").write_text("MESH = 1 1 1\n")
+        (task_dir / "POSCAR-unitcell").write_text(self.source_path.read_text())
+        calls = []
+
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            calls.append(command)
+            if command == "phonopy --fc vasprun.xml":
+                (task_dir / "FORCE_CONSTANTS").write_text("fake force constants\n")
+            elif "POSCAR-unitcell" in command:
+                (task_dir / "mesh.yaml").write_text(
+                    yaml.safe_dump(
+                        {
+                            "phonon": [
+                                {
+                                    "q-position": [0.0, 0.0, 0.0],
+                                    "weight": 1,
+                                    "band": [{"frequency": 1.0}],
+                                }
+                            ]
+                        },
+                        sort_keys=False,
+                    )
+                )
+            else:
+                raise AssertionError(f"unexpected command: {command}")
+
+        cwd = os.getcwd()
+        try:
+            with patch("apex.core.property.Gruneisen.subprocess.check_call", side_effect=fake_check_call):
+                gruneisen._ensure_mesh_yaml(str(task_dir))
+        finally:
+            os.chdir(cwd)
+
+        self.assertTrue((task_dir / "FORCE_CONSTANTS").is_file())
+        self.assertTrue((task_dir / "mesh.yaml").is_file())
+        self.assertEqual(calls[0], "phonopy --fc vasprun.xml")
+        self.assertIn("-c POSCAR-unitcell", calls[1])
+        self.assertIn("--nomeshsym", calls[1])
 
     def test_post_process_prepares_phonon_run_inputs_for_lammps(self):
         deepmd_gruneisen = Gruneisen(
@@ -217,3 +290,7 @@ class TestGruneisen(unittest.TestCase):
         )
         self.assertTrue("Temperature(K)  SumGammaCv  Sign" in ptr)
         self.assertTrue("# contribution summary" in ptr)
+
+    def test_mode_heat_capacity_is_stable_for_large_x(self):
+        cv = Gruneisen._mode_heat_capacity(frequency_thz=500.0, temperature=1.0)
+        self.assertEqual(cv, 0.0)

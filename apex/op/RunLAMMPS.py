@@ -34,20 +34,22 @@ class RunLAMMPS(OP):
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
         cwd = os.getcwd()
-        os.chdir(op_in["input_lammps"])
-        if os.path.exists("run_command"):
-            with open("run_command", 'r') as f:
-                cmd = f.read()
-        else:
-            cmd = op_in["run_command"]
-        exit_code = subprocess.call(cmd, shell=True)
-        if exit_code == 0:
-            logging.info("Call Lammps command successfully!")
-        else:
-            logging.warning(f"Call Lammps command failed with exit code: {exit_code}")
-
-        os.chdir(cwd)
-        op_out = OPIO({
-            "backward_dir": op_in["input_lammps"]
-        })
-        return op_out
+        try:
+            os.chdir(op_in["input_lammps"])
+            if os.path.exists("run_command"):
+                with open("run_command", 'r') as f:
+                    cmd = f.read()
+            else:
+                cmd = op_in["run_command"]
+            exit_code = subprocess.call(cmd, shell=True)
+            if exit_code == 0:
+                logging.info("Call Lammps command successfully!")
+            else:
+                logging.error(f"Call Lammps command failed with exit code: {exit_code}")
+                raise RuntimeError(f"Call Lammps command failed with exit code: {exit_code}")
+            op_out = OPIO({
+                "backward_dir": op_in["input_lammps"]
+            })
+            return op_out
+        finally:
+            os.chdir(cwd)

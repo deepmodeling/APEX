@@ -3,6 +3,8 @@ import json
 import logging
 import math
 import os
+import shutil
+import subprocess
 from typing import Dict, List
 
 from monty.serialization import dumpfn
@@ -67,6 +69,8 @@ class Gruneisen(Property):
         self.phonolammps_run_command = parameter["phonolammps_run_command"]
         parameter["lammps_run_command"] = parameter.get("lammps_run_command", None)
         self.lammps_run_command = parameter["lammps_run_command"]
+        parameter["approach"] = parameter.get("approach", "linear")
+        self.approach = parameter["approach"]
         parameter["cal_type"] = parameter.get("cal_type", "static")
         self.cal_type = parameter["cal_type"]
         parameter["cal_setting"] = parameter.get("cal_setting", {})
@@ -94,6 +98,8 @@ class Gruneisen(Property):
             raise ValueError("first-version gruneisen only supports bulk_modulus_source='eos_fit'")
         if self.eos_model != "birch_murnaghan":
             raise ValueError("first-version gruneisen only supports eos_model='birch_murnaghan'")
+        if self.approach not in {"linear", "displacement"}:
+            raise ValueError("gruneisen approach must be either 'linear' or 'displacement'")
         if self.cal_setting["relax_pos"] is not True:
             raise ValueError("gruneisen requires cal_setting.relax_pos = true")
         if self.cal_setting["relax_shape"] is not False:
@@ -149,7 +155,15 @@ class Gruneisen(Property):
                 output_task = os.path.join(path_to_work, f"task.{task_id:06d}")
                 os.makedirs(output_task, exist_ok=True)
                 os.chdir(output_task)
-                for file_name in ["POSCAR.orig", "POSCAR", "volume.json", "band.conf"]:
+                for file_name in [
+                    "POSCAR.orig",
+                    "POSCAR",
+                    "POSCAR-unitcell",
+                    "SPOSCAR",
+                    "phonopy_disp.yaml",
+                    "volume.json",
+                    "band.conf",
+                ]:
                     if os.path.exists(file_name):
                         os.remove(file_name)
 
@@ -168,6 +182,8 @@ class Gruneisen(Property):
                 dumpfn(volume_data, "volume.json", indent=4)
                 with open("band.conf", "w") as fp:
                     fp.write(band_payload["band_conf"])
+                if self.inter_param["type"] == "vasp":
+                    self._prepare_vasp_phonon_task()
                 volume_points.append(volume_data)
                 task_list.append(output_task)
 
@@ -199,6 +215,29 @@ class Gruneisen(Property):
                 with open("run_command", "w") as f3:
                     f3.write("bash run_gruneisen_task.sh")
         os.chdir(cwd)
+
+    def _prepare_vasp_phonon_task(self) -> None:
+        if self.approach != "linear":
+            raise NotImplementedError("VASP gruneisen currently supports approach='linear' only")
+
+        if self.primitive:
+            subprocess.check_call("phonopy --symmetry", shell=True)
+            if not os.path.isfile("PPOSCAR"):
+                raise FileNotFoundError("PPOSCAR was not created by phonopy --symmetry")
+            shutil.copyfile("PPOSCAR", "POSCAR-unitcell")
+            shutil.copyfile("PPOSCAR", "POSCAR")
+        else:
+            shutil.copyfile("POSCAR", "POSCAR-unitcell")
+
+        subprocess.check_call(
+            'phonopy -d --dim="%s %s %s" -c POSCAR'
+            % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+            shell=True,
+        )
+        if not os.path.isfile("SPOSCAR"):
+            raise FileNotFoundError("SPOSCAR was not created by phonopy")
+        os.remove("POSCAR")
+        os.symlink("SPOSCAR", "POSCAR")
 
     def task_type(self):
         return self.parameter["type"]
@@ -414,7 +453,16 @@ if __name__ == "__main__":
             return
         force_constants = os.path.join(task_dir, "FORCE_CONSTANTS")
         band_conf = os.path.join(task_dir, "band.conf")
-        poscar = os.path.join(task_dir, "POSCAR")
+        if self.inter_param["type"] == "vasp":
+            vasprun = os.path.join(task_dir, "vasprun.xml")
+            if not os.path.isfile(force_constants):
+                if not os.path.isfile(vasprun):
+                    raise FileNotFoundError(f"vasprun.xml not found in {task_dir}")
+                os.chdir(task_dir)
+                subprocess.check_call("phonopy --fc vasprun.xml", shell=True)
+            poscar = os.path.join(task_dir, "POSCAR-unitcell")
+        else:
+            poscar = os.path.join(task_dir, "POSCAR")
         if not os.path.isfile(force_constants):
             raise FileNotFoundError(f"FORCE_CONSTANTS not found in {task_dir}")
         if not os.path.isfile(band_conf):
@@ -422,10 +470,12 @@ if __name__ == "__main__":
         if not os.path.isfile(poscar):
             raise FileNotFoundError(f"POSCAR not found in {task_dir}")
         os.chdir(task_dir)
-        os.system(
-            'phonopy --dim="%s %s %s" -c POSCAR band.conf'
-            % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+        cell_file = "POSCAR-unitcell" if self.inter_param["type"] == "vasp" else "POSCAR"
+        command = (
+            'phonopy --nomeshsym --dim="%s %s %s" -c %s band.conf'
+            % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2], cell_file)
         )
+        subprocess.check_call(command, shell=True)
         if not os.path.isfile(mesh_path):
             raise FileNotFoundError(f"mesh.yaml was not created in {task_dir}")
 
@@ -582,8 +632,10 @@ if __name__ == "__main__":
         if frequency_thz <= 0.0 or temperature <= 0.0:
             return 0.0
         x = THZ_TO_K * frequency_thz / temperature
-        exp_x = math.exp(x)
-        return KB_EV_PER_K * (x * x * exp_x / ((exp_x - 1.0) ** 2))
+        exp_neg_x = math.exp(-x)
+        if exp_neg_x == 0.0:
+            return 0.0
+        return KB_EV_PER_K * (x * x * exp_neg_x / ((1.0 - exp_neg_x) ** 2))
 
     @staticmethod
     def _classify_sign(value: float, tol: float = 1e-14) -> str:
