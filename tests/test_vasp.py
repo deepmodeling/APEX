@@ -132,6 +132,36 @@ class TestVASP(unittest.TestCase):
         self.assertEqual(incar["ISIF"], 6)
         self.assertEqual(incar["KSPACING"], 0.01)
 
+    def test_make_input_file_gruneisen_linear_uses_dfpt_incar(self):
+        param = {
+            "type": "gruneisen",
+            "cal_type": "static",
+            "approach": "linear",
+            "cal_setting": {
+                "relax_pos": True,
+                "relax_shape": False,
+                "relax_vol": False,
+                "encut": 400,
+                "ediff": 1e-6,
+                "kspacing": 0.25,
+                "kgamma": False,
+            },
+        }
+        shutil.copy(
+            os.path.join(self.conf_path, "POSCAR"),
+            os.path.join(self.equi_path, "POSCAR"),
+        )
+
+        self.VASP.make_input_file(self.equi_path, "gruneisen", param)
+
+        incar = incar_upper(Incar.from_file(os.path.join(self.equi_path, "INCAR")))
+        self.assertEqual(incar["IBRION"], 8)
+        self.assertEqual(incar["NSW"], 1)
+        self.assertEqual(incar["ISIF"], 2)
+        self.assertEqual(incar["ENCUT"], 400)
+        self.assertEqual(incar["KSPACING"], 0.25)
+        self.assertFalse(incar["KGAMMA"])
+
     def test_compute(self):
         ret = self.VASP.compute(os.path.join(self.conf_path, "relaxation"))
         self.assertIsNone(ret)
@@ -160,3 +190,7 @@ class TestVASP(unittest.TestCase):
     def test_backward_files(self):
         backward_files = ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
         self.assertEqual(self.VASP.backward_files(), backward_files)
+        self.assertEqual(
+            self.VASP.backward_files("gruneisen"),
+            ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"],
+        )

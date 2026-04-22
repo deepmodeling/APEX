@@ -34,6 +34,7 @@ APEX currently offers calculation methods for the following alloy properties:
 * Interstitial formation energy
 * Generalized stacking fault energy (Gamma line)
 * Phonon spectra
+* Grüneisen parameters and thermal expansion
 * Finite-temperature lattice parameters (FiniteTlatt)
 
 ## What's Inside
@@ -64,7 +65,8 @@ APEX currently offers calculation methods for the following alloy properties:
   - [4.9 Interstitial](#interstitial)
   - [4.10 Gamma Line](#gamma-line-generalised-stacking-fault)
   - [4.11 Phonon Spectra](#phonon-spectra)
-  - [4.12 Finite-Temperature Lattice Parameters](#finite-temperature-lattice-parameters)
+  - [4.12 Grüneisen Parameters and Thermal Expansion](#grüneisen-parameters-and-thermal-expansion)
+  - [4.13 Finite-Temperature Lattice Parameters](#finite-temperature-lattice-parameters)
 - [More Resources](#more-resources)
 
 ## 1.Installation
@@ -630,7 +632,30 @@ APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow
 
 The linear-response method accelerates calculations for metallic systems, while the finite-displacement approach works with any calculator that can provide forces (e.g., ABACUS).
 
-### 4.12 Finite-temperature lattice parameters
+### 4.12 Grüneisen parameters and thermal expansion
+
+APEX supports Grüneisen workflows based on phonon calculations at multiple strained volumes. The `sign_only` mode evaluates the heat-capacity-weighted Grüneisen sum and its sign, while the `full` mode additionally fits the bulk modulus from the volume-energy points and reports the volumetric thermal expansion coefficient.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `volume_strains` | Sequence[Float] | Required | Symmetric volume strains around `0.0`, e.g. `[-0.01, 0.0, 0.01]`. |
+| `temperatures` | Sequence[Float] | Required | Temperatures for heat-capacity weighting and thermal expansion output. |
+| `alpha_mode` | String | `"sign_only"` | Output mode: `"sign_only"` or `"full"`. |
+| `bulk_modulus_source` | String | `"eos_fit"` | Bulk modulus source for `full` mode. |
+| `eos_model` | String | `"birch_murnaghan"` | EOS model used for the bulk-modulus fit. |
+| `primitive` | Bool | `false` | Reduce to primitive cell before phonon calculation. |
+| `approach` | String | `"linear"` | Phonon workflow approach; VASP Grüneisen currently uses linear response. |
+| `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Phonon supercell dimensions. |
+| `MESH` | Sequence[Int] | `None` | Reciprocal-space mesh for mode summation. |
+| `PRIMITIVE_AXES` | String | `None` | Custom primitive axes definition. |
+| `BAND` | String | `None` | Band path definition (falls back to SeeK-path when omitted). |
+| `BAND_LABELS` | String | `None` | Labels for band segments. |
+| `BAND_POINTS` | Integer | `51` | Number of sampling points per segment. |
+| `BAND_CONNECTION` | Bool | `true` | Enable band connection estimation. |
+
+For `full` mode, use fixed-volume internal relaxation in `cal_setting` (`relax_pos = true`, `relax_shape = false`, `relax_vol = false`) so the phonon and energy points share the intended volume grid.
+
+### 4.13 Finite-temperature lattice parameters
 APEX now supports the calculation of lattice parameters at finite temperatures in LAMMPS.
 
 | Key | Type | Example | Description |
