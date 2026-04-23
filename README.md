@@ -628,7 +628,7 @@ Similarly, to investigate Gamma Surface, change the type to `gamma_surface`, and
             "supercell_size": [1, 1, 20],
             "vacuum_size": 15,
             "add_fix": ["true", "true", "false"],
-            "n_steps": 20,
+            "n_steps_x": 20,
             "n_steps_y": 20
         }
     ]

@@ -36,7 +36,7 @@ class TestGammaSurfaceLammps(unittest.TestCase):
                 "supercell_size": [1, 1, 5],
                 "vacuum_size": 10,
                 "add_fix": ["true", "true", "false"],
-                "n_steps": 2,
+                "n_steps_x": 2,
                 "n_steps_y": 2,
             },
             self.inter_param,

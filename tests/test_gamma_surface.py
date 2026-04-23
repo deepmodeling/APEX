@@ -33,7 +33,7 @@ class TestGammaSurface(unittest.TestCase):
             "supercell_size": [1, 1, 8],
             "vacuum_size": 10,
             "add_fix": ["true", "true", "false"],
-            "n_steps": 2,
+            "n_steps_x": 2,
             "n_steps_y": 1,
         }
         self.gamma_surface = GammaSurface(self.prop_param)
@@ -62,7 +62,7 @@ class TestGammaSurface(unittest.TestCase):
         )
         task_list = self.gamma_surface.make_confs(self.target_path, self.equi_path)
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
-        self.assertEqual(len(dfm_dirs), (self.gamma_surface.n_steps + 1) * (self.gamma_surface.n_steps_y + 1))
+        self.assertEqual(len(dfm_dirs), (self.gamma_surface.n_steps_x + 1) * (self.gamma_surface.n_steps_y + 1))
         self.assertEqual(len(task_list), len(dfm_dirs))
 
         pairs = set()
@@ -75,6 +75,20 @@ class TestGammaSurface(unittest.TestCase):
 
         self.assertIn((0.0, 0.0), pairs)
         self.assertIn((1.0, 1.0), pairs)
+
+    def test_legacy_n_steps_aliases_to_n_steps_x(self):
+        prop = GammaSurface(
+            {
+                "type": "gamma_surface",
+                "plane_miller": [0, 0, 1],
+                "slip_direction": [1, 0, 0],
+                "n_steps": 3,
+            }
+        )
+
+        self.assertEqual(prop.n_steps_x, 3)
+        self.assertEqual(prop.n_steps, 3)
+        self.assertEqual(prop.task_param()["n_steps_x"], 3)
 
 
 if __name__ == "__main__":

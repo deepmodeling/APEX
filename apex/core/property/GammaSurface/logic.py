@@ -53,9 +53,13 @@ class GammaSurface(Property):
                     "add_fix", ["true", "true", "false"]
                 )
                 self.add_fix = parameter["add_fix"]
-                parameter["n_steps"] = parameter.get("n_steps", 10)
-                self.n_steps = parameter["n_steps"]
-                parameter["n_steps_y"] = parameter.get("n_steps_y", parameter["n_steps"])
+                parameter["n_steps_x"] = parameter.get(
+                    "n_steps_x", parameter.get("n_steps", 10)
+                )
+                parameter["n_steps"] = parameter["n_steps_x"]
+                self.n_steps_x = parameter["n_steps_x"]
+                self.n_steps = self.n_steps_x
+                parameter["n_steps_y"] = parameter.get("n_steps_y", self.n_steps_x)
                 self.n_steps_y = parameter["n_steps_y"]
                 self.atom_num = None
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
@@ -192,7 +196,10 @@ class GammaSurface(Property):
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
                     self.vacuum_size = type_param.get("vacuum_size", self.vacuum_size)
                     self.add_fix = type_param.get("add_fix", self.add_fix)
-                    self.n_steps = type_param.get("n_steps", self.n_steps)
+                    self.n_steps_x = type_param.get(
+                        "n_steps_x", type_param.get("n_steps", self.n_steps_x)
+                    )
+                    self.n_steps = self.n_steps_x
                     self.n_steps_y = type_param.get("n_steps_y", self.n_steps_y)
 
                 if not (self.plane_miller and self.slip_direction):
@@ -232,7 +239,7 @@ class GammaSurface(Property):
                 self.slip_length_y = slip_length_y
 
                 top_atoms = np.where(slab.frac_coords[:, 2] > 0.5)[0]
-                n_steps_x = int(self.n_steps)
+                n_steps_x = int(self.n_steps_x)
                 n_steps_y = int(self.n_steps_y)
                 n_steps_x_denom = max(n_steps_x, 1)
                 n_steps_y_denom = max(n_steps_y, 1)
