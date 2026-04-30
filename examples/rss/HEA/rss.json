@@ -6,7 +6,7 @@
     },
     "composition_tolerance": 0.001,
     "supercell_shape": "near_cubic",
-    "maxmium_nums_atoms": 20,
+    "maxmium_nums_atoms": 1000,
     "compositions": {
         "corner": {
             "Co": 0.2,
