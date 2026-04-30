@@ -13,6 +13,7 @@ from dflow.python import upload_packages
 from fpop.vasp import RunVasp
 from fpop.abacus import RunAbacus
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.account import merge_bohrium_defaults
 from apex.core.calculator import LAMMPS_INTER_TYPE
 
 upload_packages.append(__file__)
@@ -113,6 +114,7 @@ def load_config_file(config_file: os.PathLike) -> dict:
                 'or use optional argument: -c to indicate a specific json file.'
         )
         config_dict = {}
+    config_dict = merge_bohrium_defaults(config_dict, config_file)
     return config_dict
 
 
@@ -137,7 +139,11 @@ def recursive_search(directories, path='.'):
 
 
 def handle_prop_suffix(parameter: dict):
-    if parameter.get('skip', False):
+    # Prefer req_calc as the explicit switch for running a property.
+    if "req_calc" in parameter:
+        if not parameter.get("req_calc"):
+            return None, None
+    elif parameter.get("skip", False):
         return None, None
     if 'init_from_suffix' and 'output_suffix' in parameter:
         do_refine = True

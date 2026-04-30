@@ -1,0 +1,69 @@
+{
+    "description": "Example payload for tracking one GUI submit group or manually filling multiple workflow ids into apex gui.",
+    "usage": {
+        "gui_field": "Workflow ID(s)",
+        "format": "Paste workflow_ids as a comma-separated string, or copy the listed ids manually.",
+        "example_text": "wf-aaaa1111, wf-bbbb2222, wf-cccc3333"
+    },
+    "group_id": "apex-gui-YYYYMMDDHHMMSS-xxxxxxxx",
+    "created_at": "2026-04-27T00:00:00",
+    "workdir": "/absolute/path/to/workdir",
+    "global_file": "global.json",
+    "param_file": "param.json",
+    "batch_size": 100,
+    "total_confs": 300,
+    "expected_batches": 3,
+    "workflow_log_line_start": 0,
+    "workflow_ids": [
+        "wf-aaaa1111",
+        "wf-bbbb2222",
+        "wf-cccc3333"
+    ],
+    "submit_jobs": [
+        {
+            "batch_index": 1,
+            "batch_total": 3,
+            "param_file": "param.batch-001-of-003.json",
+            "global_file": "global.json",
+            "workflow_name": "apex-gui-example-xxxxxxxx-batch-001",
+            "labels": [
+                "apex_gui_group=apex-gui-YYYYMMDDHHMMSS-xxxxxxxx",
+                "apex_gui_workdir=example-workdir",
+                "apex_gui_batch=001-of-003",
+                "apex_gui_source=gui"
+            ],
+            "workdir": "/absolute/path/to/workdir",
+            "conf_count": 100
+        },
+        {
+            "batch_index": 2,
+            "batch_total": 3,
+            "param_file": "param.batch-002-of-003.json",
+            "global_file": "global.json",
+            "workflow_name": "apex-gui-example-xxxxxxxx-batch-002",
+            "labels": [
+                "apex_gui_group=apex-gui-YYYYMMDDHHMMSS-xxxxxxxx",
+                "apex_gui_workdir=example-workdir",
+                "apex_gui_batch=002-of-003",
+                "apex_gui_source=gui"
+            ],
+            "workdir": "/absolute/path/to/workdir",
+            "conf_count": 100
+        },
+        {
+            "batch_index": 3,
+            "batch_total": 3,
+            "param_file": "param.batch-003-of-003.json",
+            "global_file": "global.json",
+            "workflow_name": "apex-gui-example-xxxxxxxx-batch-003",
+            "labels": [
+                "apex_gui_group=apex-gui-YYYYMMDDHHMMSS-xxxxxxxx",
+                "apex_gui_workdir=example-workdir",
+                "apex_gui_batch=003-of-003",
+                "apex_gui_source=gui"
+            ],
+            "workdir": "/absolute/path/to/workdir",
+            "conf_count": 100
+        }
+    ]
+}

@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import logging
 import copy
+import json
 from typing import List
 from multiprocessing import Pool
 from monty.serialization import loadfn
@@ -26,6 +27,7 @@ from apex.utils import (
     handle_prop_suffix,
     backup_path
 )
+
 
 def validate_submit_paths(parameter_dicts: List[dict]) -> None:
     """
@@ -50,6 +52,87 @@ def validate_submit_paths(parameter_dicts: List[dict]) -> None:
         )
 
 
+def _infer_type_map_from_structure_file(structure_file: str) -> dict:
+    structure_name = os.path.basename(structure_file)
+    symbols = []
+    if structure_name in {"POSCAR", "CONTCAR"}:
+        from pymatgen.io.vasp import Poscar
+
+        poscar = Poscar.from_file(structure_file)
+        symbols = [str(item) for item in poscar.site_symbols]
+    else:
+        from pymatgen.core import Structure
+
+        structure = Structure.from_file(structure_file)
+        seen = set()
+        for site in structure.sites:
+            symbol = str(site.specie)
+            if symbol not in seen:
+                seen.add(symbol)
+                symbols.append(symbol)
+
+    if not symbols:
+        raise RuntimeError(f"Cannot infer type_map from structure file: {structure_file}")
+    return {symbol: idx for idx, symbol in enumerate(symbols)}
+
+
+def _resolve_first_structure_file(param_path: str, structures: List[str]) -> str:
+    base_dir = os.path.dirname(os.path.abspath(param_path))
+    for pattern in structures:
+        if os.path.isabs(pattern):
+            search_patterns = [pattern]
+        else:
+            search_patterns = [os.path.join(base_dir, pattern), pattern]
+
+        matches = []
+        for search_pattern in search_patterns:
+            matches.extend(glob.glob(search_pattern))
+        matches = sorted(set(matches))
+        for match in matches:
+            if os.path.isdir(match):
+                for candidate in ("POSCAR", "CONTCAR", "STRU"):
+                    candidate_path = os.path.join(match, candidate)
+                    if os.path.isfile(candidate_path):
+                        return candidate_path
+                nested_poscars = sorted(glob.glob(os.path.join(match, "conf_*", "POSCAR")))
+                if nested_poscars:
+                    return nested_poscars[0]
+            elif os.path.isfile(match):
+                return match
+    raise RuntimeError(
+        "Cannot infer interaction.type_map automatically: no structure file found "
+        f"for patterns {structures} from {param_path}"
+    )
+
+
+def auto_fill_type_map_from_poscar(parameter_dict: dict, param_path: str) -> bool:
+    interaction = parameter_dict.get("interaction")
+    if not isinstance(interaction, dict):
+        return False
+    if interaction.get("type") in {"vasp", "abacus"}:
+        return False
+
+    current_type_map = interaction.get("type_map")
+    if isinstance(current_type_map, dict) and current_type_map:
+        return False
+    if current_type_map not in (None, "", "auto"):
+        return False
+
+    structures = parameter_dict.get("structures", [])
+    if not isinstance(structures, list) or not structures:
+        raise RuntimeError(
+            "Cannot infer interaction.type_map automatically because `structures` is empty"
+        )
+
+    structure_file = _resolve_first_structure_file(param_path, structures)
+    interaction["type_map"] = _infer_type_map_from_structure_file(structure_file)
+
+    with open(param_path, "w", encoding="utf-8") as fp:
+        json.dump(parameter_dict, fp, indent=4)
+        fp.write("\n")
+    return True
+
+
 def _glob_structures_in_work_dir(work_dir: os.PathLike, pattern: str) -> List[str]:
     """Resolve a structure glob the same way pack_upload_dir will use it.
 
@@ -71,6 +154,8 @@ def _glob_structures_in_work_dir(work_dir: os.PathLike, pattern: str) -> List[st
         else:
             matches.append(abs_match)
     return sorted(set(matches))
+
+
 def pack_upload_dir(
         work_dir: os.PathLike,
         upload_dir: os.PathLike,
@@ -102,6 +187,12 @@ def pack_upload_dir(
         conf_dirs.extend(glob.glob(conf))
     conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
+    if not conf_dirs:
+        os.chdir(cwd)
+        raise RuntimeError(
+            "No structures matched the submitted patterns under "
+            f"{os.path.abspath(work_dir)}: {confs}"
+        )
 
     def relaxation_finished(conf_path: str) -> bool:
         res = os.path.join(conf_path, "relaxation", "relax_task", "result.json")
@@ -181,8 +272,9 @@ def pack_upload_dir(
         # Split finished vs pending relaxations so we can skip reruns while still running properties
         rerun_finished = relax_param.get("interaction", {}).get("rerun_finished", True)
         skip_finished_properties = []
+        finished_relax = []
+        pending_relax = conf_dirs
         if rerun_finished is False:
-            finished_relax = []
             pending_relax = []
             for c in conf_dirs:
                 if relaxation_finished(c):
@@ -196,14 +288,16 @@ def pack_upload_dir(
             prop_param["pre_relaxed_structures"] = finished_relax
         # Detect per-structure finished properties when rerun_finished is False for that property
         properties = prop_param.get("properties", [])
+        requested_property_tasks = []
         for c in conf_dirs:
             for prop in properties:
-                if prop.get("rerun_finished", True):
-                    continue
                 do_refine, suffix = handle_prop_suffix(prop)
                 if not suffix:
                     continue
                 prop_dir_name = f"{prop['type']}_{suffix}"
+                requested_property_tasks.append((c, prop_dir_name))
+                if prop.get("rerun_finished", True):
+                    continue
                 prop_dir = os.path.join(c, prop_dir_name)
                 rjson = os.path.join(prop_dir, "result.json")
                 rout = os.path.join(prop_dir, "result.out")
@@ -212,6 +306,18 @@ def pack_upload_dir(
                     skip_finished_properties.append([c, prop_dir_name])
         if skip_finished_properties:
             prop_param["skip_finished_properties"] = skip_finished_properties
+        skipped_property_tasks = {
+            (item[0], item[1])
+            for item in skip_finished_properties
+        }
+        if not pending_relax and requested_property_tasks \
+                and all(item in skipped_property_tasks for item in requested_property_tasks):
+            os.chdir(cwd)
+            raise RuntimeError(
+                "All requested joint relaxation and property tasks are already finished; "
+                "nothing to submit. Set rerun_finished=true for relaxation or at least "
+                "one property if you want to resubmit."
+            )
     refine_init_name_list = []
     # backup all existing property work directories
     if flow_type in ['props', 'joint']:
@@ -378,6 +484,8 @@ def submit_workflow(
     is_debug=False,
     labels=None
 ):
+    validate_submit_paths(parameter_dicts)
+
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
     Config.config_dflow(wf_config.dflow_config_dict)
@@ -446,7 +554,8 @@ def submit_workflow(
         group_size=group_size,
         pool_size=pool_size,
         executor=executor,
-        upload_python_packages=upload_python_packages
+        upload_python_packages=upload_python_packages,
+        debug_mode=is_debug,
     )
 
     if props_param and (phonolammps_run_command or lammps_run_command):
@@ -506,15 +615,39 @@ def submit_from_args(
         flow_name: str = None,
         submit_only=False,
         is_debug=False,
+        labels=None,
 ):
     print('-------Submit Workflow Mode-------')
+    parameter_dicts = []
+    for param_path in parameters:
+        param_dict = loadfn(param_path)
+        if auto_fill_type_map_from_poscar(param_dict, param_path):
+            print(
+                f"Auto-filled interaction.type_map from structure file and updated: {param_path}"
+            )
+        parameter_dicts.append(param_dict)
+
+    label_mapping = None
+    if labels:
+        label_mapping = {}
+        for item in labels:
+            if "=" not in item:
+                raise RuntimeError(f"Invalid submit label {item!r}; expected key=value")
+            key, value = item.split("=", 1)
+            clean_key = key.strip()
+            clean_value = value.strip()
+            if not clean_key or not clean_value:
+                raise RuntimeError(f"Invalid submit label {item!r}; empty key/value is not allowed")
+            label_mapping[clean_key] = clean_value
+
     submit_workflow(
-        parameter_dicts=[loadfn(jj) for jj in parameters],
+        parameter_dicts=parameter_dicts,
         config_dict=load_config_file(config_file),
         work_dirs=work_dirs,
         indicated_flow_type=indicated_flow_type,
         flow_name=flow_name,
         submit_only=submit_only,
         is_debug=is_debug,
+        labels=label_mapping,
     )
     print('Completed!')

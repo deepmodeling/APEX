@@ -1,10 +1,7 @@
 import dash
 from dash import dcc, html, State
 from dash.dependencies import Input, Output
-try:
-    import dash_bootstrap_components as dbc
-except Exception:
-    dbc = None
+import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import webbrowser
 from threading import Timer
@@ -48,6 +45,8 @@ def return_prop_class(prop_type: str):
 
 def return_prop_type(prop: str):
     try:
+        if prop.startswith('gamma_surface'):
+            return 'gamma_surface'
         prop_type = prop.split('_')[0]
     except AttributeError:
         return None
@@ -75,24 +74,20 @@ def generate_test_datasets():
 
 
 class DashReportApp:
-    def __init__(self, datasets):
-        # Avoid relying on external CDN styles to work in offline environments
-        # dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
+    def __init__(self, datasets, open_browser: bool = False, host: str = "127.0.0.1", port: int = 8070):
+        dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
         self.datasets = datasets
+        self.open_browser = open_browser
+        self.host = host
+        self.port = port
         self.all_confs = set()
         self.all_props = set()
-        if dbc is not None:
-            # Avoid external CDN links in restricted environments
-            self.app = dash.Dash(
-                __name__,
-                suppress_callback_exceptions=True,
-                external_stylesheets=[]
-            )
-        else:
-            self.app = dash.Dash(
-                __name__,
-                suppress_callback_exceptions=True,
-            )
+        self._registered_clipboard_callbacks = set()
+        self.app = dash.Dash(
+            __name__,
+            suppress_callback_exceptions=True,
+            external_stylesheets=[dbc.themes.MATERIA, dbc_css]
+        )
         #load_figure_template("materia")
         self.app.layout = self.generate_layout()
 
@@ -225,24 +220,18 @@ class DashReportApp:
                     pass
                 else:
                     propCls = return_prop_class(prop_type)
+                    # trace_name = f"{w_conf} - {selected_confs} - {selected_prop}"
                     trace_name = w_conf
-                    extra = {}
-                    if prop_type == 'Lat':
-                        try:
-                            cell = dataset[selected_confs]['relaxation']['result']['data']['cells'][-1]
-                            a0 = (cell[0][0]**2 + cell[0][1]**2 + cell[0][2]**2)**0.5
-                            b0 = (cell[1][0]**2 + cell[1][1]**2 + cell[1][2]**2)**0.5
-                            c0 = (cell[2][0]**2 + cell[2][1]**2 + cell[2][2]**2)**0.5
-                            extra['relax_abc'] = (a0, b0, c0)
-                        except Exception:
-                            pass
                     traces, layout = propCls.plotly_graph(
                         data, trace_name,
-                        color=next(color_generator), **extra
+                        color=next(color_generator)
                     )
                     # set color and width of reference lines
                     if prop_type != 'vacancy':
                         for trace in iter(traces):
+                            trace_type = getattr(trace, 'type', '')
+                            if trace_type == 'heatmap':
+                                continue
                             if trace_name.split('/')[-1] in ['DFT', 'REF']:
                                 trace.update({'line': {'color': 'black', 'width': REF_LINE_SIZE},
                                               'marker': {'color': 'black', 'size': REF_MARKER_SIZE}})
@@ -335,17 +324,7 @@ class DashReportApp:
                         f"{w_conf} - {selected_confs} - {selected_prop}",
                         style={"fontSize": UI_FRONTSIZE}
                     )
-                    extra = {}
-                    if prop_type == 'Lat':
-                        try:
-                            cell = dataset[selected_confs]['relaxation']['result']['data']['cells'][-1]
-                            a0 = (cell[0][0]**2 + cell[0][1]**2 + cell[0][2]**2)**0.5
-                            b0 = (cell[1][0]**2 + cell[1][1]**2 + cell[1][2]**2)**0.5
-                            c0 = (cell[2][0]**2 + cell[2][1]**2 + cell[2][2]**2)**0.5
-                            extra['relax_abc'] = (a0, b0, c0)
-                        except Exception:
-                            pass
-                    table, df = propCls.dash_table(data, **extra)
+                    table, df = propCls.dash_table(data)
                     table.id = f"table-{table_index}"
                     # add strips to table
                     table.style_data_conditional = [
@@ -374,39 +353,24 @@ class DashReportApp:
 
     def _generate_dynamic_callbacks(self, count):
         for index in range(count):
+            if index in self._registered_clipboard_callbacks:
+                continue
             self.app.callback(Output(f'clip-{index}', 'content'),
-            [Input(f'clip-{index}', 'n_clicks'),
-             State(f'table-{index}', 'data')])(self.csv_copy)
+                              [Input(f'clip-{index}', 'n_clicks'),
+                               State(f'table-{index}', 'data')])(self.csv_copy)
+            self._registered_clipboard_callbacks.add(index)
 
     def run(self, **kwargs):
-        # Normalize run_server args
-        host = kwargs.pop('host', '127.0.0.1')
-        port = kwargs.pop('port', 8050)
-        debug = kwargs.pop('debug', False)
-        use_reloader = kwargs.pop('use_reloader', False)
-
-        # Only try to open a browser when explicitly allowed by env
-        import os
-        if os.getenv('APEX_OPEN_BROWSER', '0') in ('1', 'true', 'True'):
-            try:
-                Timer(1.2, self.open_webpage).start()
-            except Exception as e:
-                print(f"Skip auto-open browser due to: {e}")
-        print('Dash server running... (See the report at http://127.0.0.1:8050/)')
-        print('NOTE: If two Dash pages are automatically opened in your browser, you can close the first one.')
+        if self.open_browser:
+            Timer(1.2, self.open_webpage).start()
+        print(f'Dash server running... (See the report at http://{self.host}:{self.port}/)')
         print('NOTE: If the clipboard buttons do not function well, try to reload the page one time.')
         print('NOTE: Do not over-refresh the page as duplicate errors may occur. '
               'If did, stop the server and re-execute the apex report command.')
-        # Bind explicitly to localhost; avoid relying on hostname
-        self.app.run_server(host=host, port=port, debug=debug, use_reloader=use_reloader)
+        self.app.run(host=self.host, port=self.port, **kwargs)
 
-    @staticmethod
-    def open_webpage():
-        try:
-            webbrowser.open('http://127.0.0.1:8050/')
-        except Exception as e:
-            # Avoid crashing on headless / restricted systems
-            print(f"Skip auto-open browser due to: {e}")
+    def open_webpage(self):
+        webbrowser.open(f'http://{self.host}:{self.port}/')
 
 
 if __name__ == "__main__":
