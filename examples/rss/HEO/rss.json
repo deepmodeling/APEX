@@ -1,0 +1,49 @@
+{
+    "parent_structure": "parent/POSCAR",
+    "compositions": {
+        "cation": {
+            "Mg": 0.2,
+            "Co": 0.2,
+            "Cr": 0.2,
+            "Fe": 0.2,
+            "Mn": 0.2
+        },
+        "anion": {
+            "O": 1.0
+        }
+    },
+    "sro_targets": {
+        "shell0": {
+            "Mg-Mg": 0.0,
+            "Mg-Co": 0.0,
+            "Mg-Cr": 0.0,
+            "Mg-Fe": 0.0,
+            "Mg-Mn": 0.0,
+            "Co-Co": 0.0,
+            "Co-Cr": 0.0,
+            "Co-Fe": 0.0,
+            "Co-Mn": 0.0,
+            "Cr-Cr": 0.0,
+            "Cr-Fe": 0.0,
+            "Cr-Mn": 0.0,
+            "Fe-Fe": 0.0,
+            "Fe-Mn": 0.0,
+            "Mn-Mn": 0.0,
+            "O-O": 0.0
+        }
+    },
+    "supercell": [5, 5, 5],
+    "shell_cutoffs": [3.5],
+    "shell_weights": [1.0],
+    "max_steps": 400000,
+    "temperature": 0.10,
+    "num_configs": 3,
+    "interval": 50,
+    "show_progress": true,
+    "patience": null,
+    "metadata": true,
+    "seed": 21,
+    "tol": 0.001,
+    "allow_vacancies": false,
+    "output_structure": "./RSS_HEO"
+}
