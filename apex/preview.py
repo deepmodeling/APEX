@@ -15,7 +15,7 @@ from typing import Iterable, List
 import numpy as np
 from monty.serialization import loadfn
 
-from apex.core.property.factory import make_property_instance
+from apex.core.common_prop import make_property_instance
 from apex.utils import handle_prop_suffix
 
 

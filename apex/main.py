@@ -19,8 +19,6 @@ from apex.step import do_step_from_args
 from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
-from apex.preview import preview_from_args
-from apex.rss import rss_from_args
 from apex.utils import load_config_file
 
 
@@ -809,8 +807,12 @@ def main():
             path_list=args.work,
         )
     elif args.cmd == 'rss':
+        from apex.rss import rss_from_args
+
         rss_from_args(args.rss_json)
     elif args.cmd == 'preview':
+        from apex.preview import preview_from_args
+
         preview_from_args(args)
     else:
         raise RuntimeError(
