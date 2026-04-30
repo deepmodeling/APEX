@@ -37,19 +37,11 @@ examples/rss/
 ├── HEA/
 │   ├── rss.json
 │   ├── parent/
-│   └── RSS_HEA/
-│       ├── conf_001/
-│       ├── conf_002/
-│       ├── conf_003/
-│       └── rss_metadata.json
-└── HEO/
-    ├── rss.json
-    ├── parent/
-    └── RSS_HEO/
-        ├── conf_001/
-        ├── conf_002/
-        ├── conf_003/
-        └── rss_metadata.json
+│   └── RSS_HEA/(Target folder)
+├── HEO/
+│   ├── rss.json
+│   ├── parent/
+│   └── RSS_HEO/(Target folder)
 ```
 
 ## Full `rss.json` Key Reference
