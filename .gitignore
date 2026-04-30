@@ -2,3 +2,12 @@ __pycache__
 dpdispatcher.log
 .workflow.log
 .DS_Store
+*.egg-info
+# User-Generated Files
+reference
+relaxation
+eos_*
+elastic_*
+template
+potential
+all_result.json

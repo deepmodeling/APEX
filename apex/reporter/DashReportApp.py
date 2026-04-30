@@ -33,6 +33,8 @@ def return_prop_class(prop_type: str):
         return VacancyReport
     elif prop_type == 'gamma':
         return GammaReport
+    elif prop_type == 'gamma_surface':
+        return GammaSurfaceReport
     elif prop_type == 'phonon':
         return PhononReport
     elif prop_type == 'decohesive':

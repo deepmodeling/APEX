@@ -25,6 +25,81 @@ upload_packages.append(__file__)
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 MULTI_MODELS_INTER_TYPE = ["meam", "snap", "gap"]
 
+def _render_finitetlatt_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.FiniteTlatt.lammps.input import (
+        render_finitetlatt_lammps_input,
+    )
+
+    return render_finitetlatt_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _render_gamma_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.Gamma.lammps.input import render_gamma_lammps_input
+
+    return render_gamma_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _render_elastic_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.Elastic.lammps.input import render_elastic_lammps_input
+
+    return render_elastic_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _render_phonon_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.Phonon.lammps.input import render_phonon_lammps_input
+
+    return render_phonon_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _finitetlatt_file_manifest(model_files, default_manifest):
+    from apex.core.property.FiniteTlatt.lammps import get_lammps_file_manifest
+
+    return get_lammps_file_manifest(model_files, default_manifest)
+
+
+def _eos_file_manifest(model_files, default_manifest):
+    from apex.core.property.EOS.lammps import get_lammps_file_manifest
+
+    return get_lammps_file_manifest(model_files, default_manifest)
+
+
+def _phonon_file_manifest(model_files, default_manifest):
+    from apex.core.property.Phonon.lammps import get_lammps_file_manifest
+
+    return get_lammps_file_manifest(model_files, default_manifest)
+
+
+def _eos_runtime_policy(default_policy):
+    from apex.core.property.EOS.lammps import get_lammps_runtime_policy
+
+    return get_lammps_runtime_policy(default_policy)
+
+
+PROPERTY_LAMMPS_INPUT_RENDERERS = {
+    "elastic": _render_elastic_input,
+    "finitetlatt": _render_finitetlatt_input,
+    "gamma": _render_gamma_input,
+    "gamma_surface": _render_gamma_input,
+    "phonon": _render_phonon_input,
+}
+
+PROPERTY_LAMMPS_FILE_MANIFESTS = {
+    "eos": _eos_file_manifest,
+    "finitetlatt": _finitetlatt_file_manifest,
+    "phonon": _phonon_file_manifest,
+}
+
+PROPERTY_LAMMPS_RUNTIME_POLICIES = {
+    "eos": _eos_runtime_policy,
+}
 class Lammps(Task):
     def __init__(self, inter_parameter, path_to_poscar):
         self.inter = inter_parameter

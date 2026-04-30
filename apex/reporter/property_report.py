@@ -618,6 +618,76 @@ class GammaReport(PropertyReport):
         return build_table(df), df
 
 
+class GammaSurfaceReport(PropertyReport):
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        rows = []
+        for k, v in res_data.items():
+            frac_x_str, frac_y_str = str(k).split(",")
+            rows.append(
+                {
+                    "frac_x": float(frac_x_str),
+                    "frac_y": float(frac_y_str),
+                    "fault_en": float(v[2]),
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        pivot = df.pivot_table(index="frac_y", columns="frac_x", values="fault_en")
+        heatmap = go.Heatmap(
+            name=name,
+            x=list(pivot.columns),
+            y=list(pivot.index),
+            z=pivot.values,
+            colorbar={"title": "Fault Energy (J/m^2)"},
+        )
+        layout = go.Layout(
+            title="Stacking Fault Energy (Gamma Surface)",
+            xaxis=dict(
+                title_text="Slip Fraction X",
+                title_font=dict(size=18, color="#7f7f7f"),
+            ),
+            yaxis=dict(
+                title_text="Slip Fraction Y",
+                title_font=dict(size=18, color="#7f7f7f"),
+            ),
+        )
+
+        return [heatmap], layout
+
+    @staticmethod
+    def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
+        frac_x = []
+        frac_y = []
+        disp_x = []
+        disp_y = []
+        fault_en = []
+        struct_en = []
+        equi_en = []
+        for k, v in res_data.items():
+            frac_x_str, frac_y_str = str(k).split(",")
+            frac_x.append(float(frac_x_str))
+            frac_y.append(float(frac_y_str))
+            disp_x.append(v[0])
+            disp_y.append(v[1])
+            fault_en.append(v[2])
+            struct_en.append(v[3])
+            equi_en.append(v[4])
+        df = pd.DataFrame(
+            {
+                "Slip_frac_x": round_format(frac_x, decimal),
+                "Slip_frac_y": round_format(frac_y, decimal),
+                "Slip_x (A)": round_format(disp_x, decimal),
+                "Slip_y (A)": round_format(disp_y, decimal),
+                "E_Fault (J/m^2)": round_format(fault_en, decimal),
+                "E_Slab (eV)": round_format(struct_en, decimal),
+                "E_Equilib (eV)": round_format(equi_en, decimal),
+            }
+        )
+
+        return build_table(df), df
+
+
 class PhononReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):
