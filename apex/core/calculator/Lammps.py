@@ -100,6 +100,36 @@ PROPERTY_LAMMPS_FILE_MANIFESTS = {
 PROPERTY_LAMMPS_RUNTIME_POLICIES = {
     "eos": _eos_runtime_policy,
 }
+
+
+def _apply_gamma_fix_to_lammps_input(contents, add_fix):
+    fix_dict = {"true": "0", "false": "NULL"}
+    add_fix_str = (
+        "fix             1 all setforce"
+        + " "
+        + fix_dict[add_fix[0]]
+        + " "
+        + fix_dict[add_fix[1]]
+        + " "
+        + fix_dict[add_fix[2]]
+        + "\n"
+    )
+    lines = contents.splitlines(keepends=True)
+    lower_id = None
+    upper_id = None
+    for idx, line in enumerate(lines):
+        if "min_style       cg" in line:
+            lower_id = idx
+        elif "variable        N equal count(all)" in line:
+            upper_id = idx
+            break
+    if lower_id is None or upper_id is None:
+        return contents
+    del lines[lower_id + 1 : upper_id - 1]
+    lines.insert(lower_id + 1, add_fix_str)
+    return "".join(lines)
+
+
 class Lammps(Task):
     def __init__(self, inter_parameter, path_to_poscar):
         self.inter = inter_parameter
@@ -367,6 +397,13 @@ class Lammps(Task):
 
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
+
+        if (
+            prop_type in {"gamma", "gamma_surface"}
+            and cal_type == "relaxation"
+            and "add_fix" in task_param
+        ):
+            fc = _apply_gamma_fix_to_lammps_input(fc, task_param["add_fix"])
 
         dumpfn(task_param, os.path.join(output_dir, "task.json"), indent=4)
 

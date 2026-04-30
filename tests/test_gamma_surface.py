@@ -6,7 +6,7 @@ import unittest
 
 from monty.serialization import loadfn
 
-from apex.core.property.GammaSurface.vasp import GammaSurface
+from apex.core.property.GammaSurface import GammaSurface
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"

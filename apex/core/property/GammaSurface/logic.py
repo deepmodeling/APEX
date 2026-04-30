@@ -17,7 +17,7 @@ from apex.core.lib.slab_orientation import SlabSlipSystem
 from apex.core.lib.trans_tools import direction_miller_bravais_to_miller
 from apex.core.lib.trans_tools import plane_miller_bravais_to_miller
 from apex.core.lib.trans_tools import trans_mat_basis
-from apex.core.property.base import Property
+from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro
 from apex.core.reproduce import post_repro
@@ -87,17 +87,32 @@ class GammaSurface(Property):
         self.inter_param = inter_param if inter_param is not None else {"type": "vasp"}
 
     def _resolve_equilibrium_structure(self, path_to_equi):
+        if self.inter_param["type"] == "abacus":
+            return os.path.join(path_to_equi, abacus_utils.final_stru(path_to_equi)), "STRU"
         return os.path.join(path_to_equi, "CONTCAR"), "POSCAR"
 
     def _load_equilibrium_structure(self, equi_contcar):
+        if self.inter_param["type"] == "abacus":
+            stru = dpdata.System(equi_contcar, fmt="stru")
+            stru.to("contcar", "CONTCAR.tmp")
+            try:
+                ptypes = vasp_utils.get_poscar_types("CONTCAR.tmp")
+                ss = Structure.from_file("CONTCAR.tmp")
+            finally:
+                os.remove("CONTCAR.tmp")
+            return ptypes, ss
         ptypes = vasp_utils.get_poscar_types(equi_contcar)
         ss = Structure.from_file(equi_contcar)
         return ptypes, ss
 
     def _finalize_task_structure(self):
-        pass
+        if self.inter_param["type"] == "abacus":
+            abacus_utils.poscar2stru("POSCAR", self.inter_param, "STRU")
 
     def _fix_task_output(self, task_dir, first_task):
+        if self.inter_param["type"] == "abacus":
+            self.__stru_fix(os.path.join(task_dir, "STRU"))
+            return
         self.__poscar_fix(os.path.join(task_dir, "POSCAR"))
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
@@ -447,6 +462,33 @@ class GammaSurface(Property):
         fix_xyz = [fix_dict[i] for i in self.add_fix]
         abacus_utils.stru_fix_atom(stru, fix_atom=fix_xyz)
 
+    def __inLammpes_fix(self, inLammps) -> None:
+        fix_dict = {"true": "0", "false": "NULL"}
+        add_fix_str = (
+            "fix             1 all setforce"
+            + " "
+            + fix_dict[self.add_fix[0]]
+            + " "
+            + fix_dict[self.add_fix[1]]
+            + " "
+            + fix_dict[self.add_fix[2]]
+            + "\n"
+        )
+        with open(inLammps, "r") as fin1:
+            contents = fin1.readlines()
+            for ii in range(len(contents)):
+                upper = re.search("variable        N equal count\\(all\\)", contents[ii])
+                lower = re.search("min_style       cg", contents[ii])
+                if lower:
+                    lower_id = ii
+                elif upper:
+                    upper_id = ii
+            del contents[lower_id + 1 : upper_id - 1]
+            contents.insert(lower_id + 1, add_fix_str)
+        with open(inLammps, "w") as fin2:
+            for ii in range(len(contents)):
+                fin2.write(contents[ii])
+
     def post_process(self, task_list):
         try:
             add_fix = self.add_fix
@@ -457,7 +499,10 @@ class GammaSurface(Property):
             count = 0
             for ii in task_list:
                 count += 1
-                self._fix_task_output(ii, count == 1)
+                if self.inter_param["type"] in {"vasp", "abacus"}:
+                    self._fix_task_output(ii, count == 1)
+                elif count == 1:
+                    self.__inLammpes_fix(os.path.join(ii, "in.lammps"))
 
     def task_type(self):
         return self.parameter["type"]

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 from apex.core.calculator.Lammps import Lammps
-from apex.core.property.GammaSurface.lammps import GammaSurface
+from apex.core.property.GammaSurface import GammaSurface
 
 
 class TestGammaSurfaceLammps(unittest.TestCase):

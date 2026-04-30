@@ -11,13 +11,13 @@ from apex.core.calculator.ABACUS import ABACUS
 from apex.core.calculator.lib import abacus_scf
 
 from apex.core.common_prop import make_property
-from apex.core.property.Elastic.abacus import Elastic
-from apex.core.property.EOS.abacus import EOS
-from apex.core.property.Gamma.abacus import Gamma
-from apex.core.property.GammaSurface.abacus import GammaSurface
-from apex.core.property.Interstitial.abacus import Interstitial
-from apex.core.property.Surface.abacus import Surface
-from apex.core.property.Vacancy.abacus import Vacancy
+from apex.core.property.Elastic import Elastic
+from apex.core.property.EOS import EOS
+from apex.core.property.Gamma import Gamma
+from apex.core.property.GammaSurface import GammaSurface
+from apex.core.property.Interstitial import Interstitial
+from apex.core.property.Surface import Surface
+from apex.core.property.Vacancy import Vacancy
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
@@ -25,6 +25,8 @@ __package__ = "tests"
 
 class TestABACUS(unittest.TestCase):
     def setUp(self):
+        self._cwd = os.getcwd()
+        os.chdir(os.path.abspath(os.path.dirname(__file__)))
         self.jdata = {
             "structures": ["confs/fcc-Al"],
             "interaction": {
@@ -79,6 +81,7 @@ class TestABACUS(unittest.TestCase):
             shutil.rmtree("confs/fcc-Al/interstitial_00")
         if os.path.exists("confs/fcc-Al/surface_00"):
             shutil.rmtree("confs/fcc-Al/surface_00")
+        os.chdir(self._cwd)
         if os.path.exists("confs/fcc-Al/gamma_00"):
             shutil.rmtree("confs/fcc-Al/gamma_00")
         if os.path.exists("confs/fcc-Al/gamma_surface_00"):
