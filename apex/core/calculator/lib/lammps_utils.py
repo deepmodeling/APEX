@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import re
 
@@ -528,6 +529,80 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None
     ret += 'print "Final Base area = ${AA}"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     ret += 'print "Final Length (box_x box_y box_z) = ${lx} ${ly} ${lz}"\n'
+    return ret
+
+def make_lammps_FiniteTElastic(conf, type_map, interaction, param, task_dir="."):
+    type_map_list = element_list(type_map)
+    metadata_path = os.path.join(task_dir, "FiniteTElastic.json")
+    with open(metadata_path, "r") as fp:
+        metadata = json.load(fp)
+
+    role = metadata["role"]
+    ret = ""
+    ret += "clear\n"
+    ret += "include  variable_FiniteTElastic.in\n"
+    ret += "units 	metal\n"
+    ret += "dimension	3\n"
+    ret += "boundary	p p p\n"
+    ret += "atom_style	atomic\n"
+    if param["type"] == "mace":
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
+    ret += "box         tilt large\n"
+
+    if role == "equi":
+        ret += "read_data   %s\n" % conf
+        ret += "replicate   ${nx} ${ny} ${nz}\n"
+    elif role in ["reference", "strained"]:
+        ret += "read_restart ${restart_source}\n"
+    else:
+        raise RuntimeError(f"unsupported FiniteTElastic role {role}")
+
+    for ii in range(len(type_map)):
+        ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
+    ret += "neigh_modify    every 1 delay 0 check no\n"
+    ret += interaction(param)
+    ret += "compute         mype all pe\n"
+    ret += "thermo          ${stress_output_every}\n"
+    ret += (
+        "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
+    )
+    ret += "timestep        ${timestep}\n"
+
+    if role == "equi":
+        ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
+        ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
+        ret += "include  output_FiniteTElastic.in\n"
+        ret += "fix             1 all npt temp ${temperature} ${temperature} ${tdamp} aniso 0.0 0.0 ${pdamp}\n"
+        ret += "run             ${equi_step}\n"
+        ret += "write_restart   ${equi_restart}\n"
+    else:
+        ret += "change_box all triclinic\n"
+        ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
+        ret += "include  deform_FiniteTElastic.in\n"
+        ret += "reset_timestep  0\n"
+        ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
+        ret += "include  output_FiniteTElastic.in\n"
+        ret += "fix             1 all nve\n"
+        ret += "fix             2 all langevin ${temperature} ${temperature} ${tdamp} ${seed} zero yes\n"
+        ret += "run             ${response_step}\n"
+
+    ret += "variable        N equal count(all)\n"
+    ret += "variable        V equal vol\n"
+    ret += "variable        E equal \"c_mype\"\n"
+    ret += "variable        Pxx equal pxx\n"
+    ret += "variable        Pyy equal pyy\n"
+    ret += "variable        Pzz equal pzz\n"
+    ret += "variable        Pxy equal pxy\n"
+    ret += "variable        Pxz equal pxz\n"
+    ret += "variable        Pyz equal pyz\n"
+    ret += "variable        Epa equal ${E}/${N}\n"
+    ret += "variable        Vpa equal ${V}/${N}\n"
+    ret += "print \"All done\"\n"
+    ret += "print \"Total number of atoms = ${N}\"\n"
+    ret += "print \"Final energy per atoms = ${Epa}\"\n"
+    ret += "print \"Final volume per atoms = ${Vpa}\"\n"
+    ret += "print \"Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}\"\n"
     return ret
 
 def make_lammps_press_relax(

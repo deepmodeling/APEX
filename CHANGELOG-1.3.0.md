@@ -9,6 +9,7 @@ This release consolidates the 1.2.1 and 1.2.2 changes into a single changelog.
 - Supports B2, L12, L10 sublattice-aware systems
 - Added RSS workflow support and example documentation
 - Added GammaSurface workflow support and example documentation
+- Added Finite Elasticity workflow support and example documentation
 - Shape control:
   - near_cubic
   - xy_equal_z_free (for gamma surface / slab)

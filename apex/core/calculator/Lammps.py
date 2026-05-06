@@ -408,6 +408,14 @@ class Lammps(Task):
                     self.model_param,
                     cal_setting,
                 )
+            elif cal_type == "finite_t_elastic":
+                fc = lammps_utils.make_lammps_FiniteTElastic(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    output_dir,
+                )
 
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
@@ -421,7 +429,7 @@ class Lammps(Task):
 
         dumpfn(task_param, os.path.join(output_dir, "task.json"), indent=4)
 
-        in_lammps_not_link_list = ["eos"]
+        in_lammps_not_link_list = ["eos", "finite_t_elastic"]
         if task_type not in in_lammps_not_link_list:
             with open(os.path.join(output_dir, "../in.lammps"), "w") as fp:
                 fp.write(fc)
@@ -659,30 +667,40 @@ class Lammps(Task):
         return result_dict
 
     def forward_files(self, property_type="relaxation"):
-        if self.inter_type in MULTI_MODELS_INTER_TYPE:
-            return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
-        elif property_type == "finitetlatt":
-            return ["in.lammps", "variable_FiniteTlatt.in", os.path.basename(self.model)]
+        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
+        if property_type == "finitetlatt":
+            return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
         elif property_type in ["annealing", "Annealing"]:
-            return ["in.lammps", "variable_Annealing.in", os.path.basename(self.model)]
+            return ["in.lammps", "variable_Annealing.in"] + model_files
+        elif property_type == "finite_t_elastic":
+            return [
+                "conf.lmp",
+                "in.lammps",
+                "variable_FiniteTElastic.in",
+                "deform_FiniteTElastic.in",
+                "output_FiniteTElastic.in",
+                "FiniteTElastic.json",
+            ] + model_files
+        elif self.inter_type in MULTI_MODELS_INTER_TYPE:
+            return ["conf.lmp", "in.lammps"] + model_files
         else:
-            return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
+            return ["conf.lmp", "in.lammps"] + model_files
 
     def forward_common_files(self, property_type="relaxation"):
+        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
         if property_type not in ["eos"]:
-            if self.inter_type in MULTI_MODELS_INTER_TYPE:
-                return ["in.lammps"] + list(map(os.path.basename, self.model))
-            elif property_type == "finitetlatt":
-                return ["in.lammps", "variable_FiniteTlatt.in", os.path.basename(self.model)]
+            if property_type == "finitetlatt":
+                return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
             elif property_type in ["annealing", "Annealing"]:
-                return ["in.lammps", "variable_Annealing.in", os.path.basename(self.model)]
+                return ["in.lammps", "variable_Annealing.in"] + model_files
+            elif property_type == "finite_t_elastic":
+                return model_files
+            elif self.inter_type in MULTI_MODELS_INTER_TYPE:
+                return ["in.lammps"] + model_files
             else:
-                return ["in.lammps", os.path.basename(self.model)]
+                return ["in.lammps"] + model_files
         else:
-            if self.inter_type in MULTI_MODELS_INTER_TYPE:
-                return list(map(os.path.basename, self.model))
-            else:
-                return [os.path.basename(self.model)]
+            return model_files
 
     def backward_files(self, property_type="relaxation"):
         if property_type == "phonon":
@@ -701,5 +719,12 @@ class Lammps(Task):
             return ["log.lammps", "outlog", "dump.relax", "average_box.txt"]
         elif property_type in ["annealing", "Annealing"]:
             return ["log.lammps", "outlog", "dump.anneal_ramp", "dump.anneal_cool", "restart.*"]
+        elif property_type == "finite_t_elastic":
+            return [
+                "log.lammps",
+                "outlog",
+                "dump.relax",
+                "stress_timeseries.txt",
+            ]
         else:
             return ["log.lammps", "outlog", "dump.relax"]
