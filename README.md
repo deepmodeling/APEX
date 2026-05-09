@@ -886,7 +886,7 @@ LAMMPS-specific calculation settings in `cal_setting`:
 | `pdamp` | Float | `1.0` | Barostat damping parameter. |
 | `seed` | Integer | Required | Random seed for reproducibility. |
 | `n_blocks` | Integer | `10` | Number of blocks for statistical analysis. |
-| `method` | String | `"paired_langevin"` | Thermostat method (e.g., `"paired_langevin"`). |
+| `method` | String | `"paired_langevin"` | Thermostat method (now only support `"paired_langevin"`). |
 
 Example:
 
