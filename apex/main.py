@@ -19,6 +19,7 @@ from apex.step import do_step_from_args
 from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
+from apex.rss import rss_from_args
 from apex.utils import load_config_file
 
 
@@ -458,6 +459,19 @@ def parse_args():
         help="(Optional) Working directory or json file path to be reported",
     )
 
+    ##########################################
+    # RSS
+    parser_rss = subparsers.add_parser(
+        "rss",
+        help="Generate RSS structures from an rss.json config",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser_rss.add_argument(
+        "rss_json",
+        type=str,
+        help="Path to rss json config file",
+    )
+
     parsed_args = parser.parse_args()
     # print help if no parser
     if not parsed_args.cmd:
@@ -750,6 +764,8 @@ def main():
             config_file=args.config,
             path_list=args.work,
         )
+    elif args.cmd == 'rss':
+        rss_from_args(args.rss_json)
     else:
         raise RuntimeError(
             f"unknown command {args.cmd}\n{parser.print_help()}"
