@@ -27,7 +27,50 @@ from apex.utils import (
     backup_path
 )
 
+def validate_submit_paths(parameter_dicts: List[dict]) -> None:
+    """
+    dflow rejects structure path patterns containing '.'.
+    Validate before submit and fail fast with actionable hints.
+    """
+    violations = []
+    for idx, param in enumerate(parameter_dicts):
+        structures = param.get("structures", [])
+        for s_idx, structure in enumerate(structures):
+            if isinstance(structure, str) and "." in structure:
+                violations.append(
+                    f"parameter[{idx}].structures[{s_idx}] = {structure}"
+                )
 
+    if violations:
+        raise RuntimeError(
+            "Invalid `apex submit` paths: dflow does not allow '.' in "
+            "`structures`. "
+            "Please rename the path/file and update param.json.\n"
+            "Offending entries:\n- " + "\n- ".join(violations)
+        )
+
+
+def _glob_structures_in_work_dir(work_dir: os.PathLike, pattern: str) -> List[str]:
+    """Resolve a structure glob the same way pack_upload_dir will use it.
+
+    Submit can be launched from a parent directory while each workflow work_dir
+    contains its own confs/. Keep returned paths relative to work_dir whenever
+    possible because pack_upload_dir changes into work_dir before copying.
+    """
+    abs_work_dir = os.path.abspath(work_dir)
+    search_pattern = pattern if os.path.isabs(pattern) else os.path.join(abs_work_dir, pattern)
+    matches = []
+    for match in glob.glob(search_pattern):
+        abs_match = os.path.abspath(match)
+        try:
+            inside_work_dir = os.path.commonpath([abs_work_dir, abs_match]) == abs_work_dir
+        except ValueError:
+            inside_work_dir = False
+        if inside_work_dir:
+            matches.append(os.path.relpath(abs_match, abs_work_dir))
+        else:
+            matches.append(abs_match)
+    return sorted(set(matches))
 def pack_upload_dir(
         work_dir: os.PathLike,
         upload_dir: os.PathLike,
@@ -259,12 +302,14 @@ def submit(
             filtered_structs = []
             missing_structs = []
             for pattern in props_param.get("structures", []):
-                matches = glob.glob(pattern)
+                matches = _glob_structures_in_work_dir(work_dir, pattern)
                 if not matches:
-                    logging.warning(f'No structure matched pattern "{pattern}", skip.')
+                    logging.warning(
+                        f'No structure matched pattern "{pattern}" under "{work_dir}", skip.'
+                    )
                     continue
                 for m in matches:
-                    relax_dir = os.path.join(m, "relaxation")
+                    relax_dir = os.path.join(work_dir, m, "relaxation")
                     if os.path.isdir(relax_dir):
                         filtered_structs.append(m)
                     else:

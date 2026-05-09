@@ -14,6 +14,7 @@ from apex.core.common_prop import make_property
 from apex.core.property.Elastic import Elastic
 from apex.core.property.EOS import EOS
 from apex.core.property.Gamma import Gamma
+from apex.core.property.GammaSurface import GammaSurface
 from apex.core.property.Interstitial import Interstitial
 from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
@@ -24,6 +25,8 @@ __package__ = "tests"
 
 class TestABACUS(unittest.TestCase):
     def setUp(self):
+        self._cwd = os.getcwd()
+        os.chdir(os.path.abspath(os.path.dirname(__file__)))
         self.jdata = {
             "structures": ["confs/fcc-Al"],
             "interaction": {
@@ -78,8 +81,11 @@ class TestABACUS(unittest.TestCase):
             shutil.rmtree("confs/fcc-Al/interstitial_00")
         if os.path.exists("confs/fcc-Al/surface_00"):
             shutil.rmtree("confs/fcc-Al/surface_00")
+        os.chdir(self._cwd)
         if os.path.exists("confs/fcc-Al/gamma_00"):
             shutil.rmtree("confs/fcc-Al/gamma_00")
+        if os.path.exists("confs/fcc-Al/gamma_surface_00"):
+            shutil.rmtree("confs/fcc-Al/gamma_surface_00")
 
     def test_make_property(self):
         property = {"type": "eos", "vol_start": 0.85, "vol_end": 1.15, "vol_step": 0.01}
@@ -269,6 +275,35 @@ class TestABACUS(unittest.TestCase):
         for ii in glob.glob(os.path.join(work_path, "task.*")):
             self.assertTrue(os.path.isfile(os.path.join(ii, "STRU")))
             self.assertTrue(os.path.isfile(os.path.join(ii, "miller.json")))
+
+    def test_make_property_gamma_surface(self):
+        property = {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "supercell_size": [1, 1, 8],
+            "vacuum_size": 10,
+            "add_fix": ["true", "true", "false"],
+            "n_steps_x": 2,
+            "n_steps_y": 1,
+        }
+        work_path = os.path.join(self.conf_path, "gamma_surface_00")
+        gamma_surface = GammaSurface(property, self.inter_param)
+        gamma_surface.make_confs(work_path, self.equi_path, refine=False)
+
+        dfm_dirs = glob.glob(os.path.join(work_path, "task.*"))
+        self.assertEqual(
+            len(dfm_dirs),
+            (gamma_surface.n_steps_x + 1) * (gamma_surface.n_steps_y + 1),
+        )
+        self.assertEqual(
+            os.path.realpath(os.path.join(work_path, "STRU")),
+            os.path.realpath(os.path.join(self.equi_path, "OUT.ABACUS", "STRU_ION_D")),
+        )
+        for ii in dfm_dirs:
+            self.assertTrue(os.path.isfile(os.path.join(ii, "STRU")))
+            self.assertTrue(os.path.isfile(os.path.join(ii, "miller.json")))
+            self.assertTrue(os.path.isfile(os.path.join(ii, "displacement.json")))
 
     def test_make_property_refine(self):
         property = {"type": "eos", "vol_start": 0.85, "vol_end": 1.15, "vol_step": 0.01}

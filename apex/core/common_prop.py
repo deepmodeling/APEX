@@ -14,6 +14,7 @@ from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
 from apex.core.property.Decohesive import Decohesive
 from apex.core.property.FiniteTlatt import FiniteTlatt
+from apex.core.property.GammaSurface import GammaSurface
 from apex.core.property.Gruneisen import Gruneisen
 from apex.core.lib.utils import create_path
 from apex.core.lib.util import collect_task
@@ -43,6 +44,8 @@ def make_property_instance(parameters, inter_param):
         return Surface(parameters, inter_param)
     elif prop_type == "gamma":
         return Gamma(parameters, inter_param)
+    elif prop_type == "gamma_surface":
+        return GammaSurface(parameters, inter_param)
     elif prop_type == "phonon":
         return Phonon(parameters, inter_param)
     elif prop_type == "decohesive":
