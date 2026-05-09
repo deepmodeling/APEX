@@ -4,12 +4,11 @@ import json
 import logging
 import os
 import re
+from shutil import copyfile
 from typing import Dict, List, Tuple
 
 from monty.serialization import dumpfn
-from pymatgen.core.structure import Structure
 
-from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
@@ -157,14 +156,11 @@ class FiniteTlatt(Property):
         if not os.path.exists(equi_contcar):
             raise RuntimeError("please do relaxation first")
 
-        ptypes = vasp_utils.get_poscar_types(equi_contcar)
-        structure = Structure.from_file(equi_contcar)
-
         task_list: List[str] = []
         for idx, temp in enumerate(self.cal_setting["temperature"]):
             task_dir = os.path.join(path_to_work, f"task.{idx:06d}")
             os.makedirs(task_dir, exist_ok=True)
-            self._write_task(task_dir, structure, ptypes, temp)
+            self._write_task(task_dir, equi_contcar, temp)
             task_list.append(task_dir)
         return task_list
 
@@ -178,14 +174,12 @@ class FiniteTlatt(Property):
             dst,
         )
 
-    def _write_task(self, task_dir: str, structure: Structure, ptypes, temp: float):
+    def _write_task(self, task_dir: str, equi_contcar: str, temp: float):
         os.chdir(task_dir)
         for fname in ["INCAR", "POTCAR", "POSCAR", "conf.lmp", "in.lammps", "STRU"]:
             if os.path.exists(fname):
                 os.remove(fname)
-        structure.to("POSCAR.tmp", "POSCAR")
-        vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
-        vasp_utils.sort_poscar("POSCAR", "POSCAR", ptypes)
+        copyfile(equi_contcar, "POSCAR")
 
         FiniteTlatt_task = {"temperature": temp, "supercell_size": self.supercell_size}
         dumpfn(FiniteTlatt_task, "FiniteTlatt.json", indent=4)

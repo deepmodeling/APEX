@@ -14,6 +14,7 @@ from apex.core.property.FiniteTElastic import (
     FiniteTElastic,
     _block_average,
     _compute_pair_delta,
+    _derive_moduli_from_voigt_gpa,
     _fit_elastic_tensor_bar,
     _read_stress_timeseries,
     _voigt_strain,
@@ -94,6 +95,24 @@ class TestFiniteTElasticHelpers(unittest.TestCase):
         voigt = _voigt_strain(5, 0.002)
         self.assertEqual(voigt[5], 0.002)
 
+    def test_derive_moduli_accepts_voigt_matrix(self):
+        c_voigt = np.array(
+            [
+                [100, 50, 50, 0, 0, 0],
+                [50, 100, 50, 0, 0, 0],
+                [50, 50, 100, 0, 0, 0],
+                [0, 0, 0, 25, 0, 0],
+                [0, 0, 0, 0, 25, 0],
+                [0, 0, 0, 0, 0, 25],
+            ],
+            dtype=float,
+        )
+        bulk, shear, young, poisson = _derive_moduli_from_voigt_gpa(c_voigt)
+        self.assertAlmostEqual(bulk, 200.0 / 3.0)
+        self.assertAlmostEqual(shear, 25.0)
+        self.assertGreater(young, 0.0)
+        self.assertGreater(poisson, 0.0)
+
 
 class TestFiniteTElasticProperty(unittest.TestCase):
     def setUp(self):
@@ -130,8 +149,9 @@ class TestFiniteTElasticProperty(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(task_list[0], "FiniteTElastic.json")))
         self.assertTrue(os.path.isfile(os.path.join(task_list[0], "variable_FiniteTElastic.in")))
         self.assertTrue(os.path.isfile(os.path.join(task_list[1], "deform_FiniteTElastic.in")))
+        self.assertFalse(os.path.exists(os.path.join(task_list[0], "POSCAR.tmp")))
         response_meta = loadfn(os.path.join(task_list[1], "FiniteTElastic.json"))
-        self.assertEqual(response_meta["restart_source"], "../task.000000/finite_t_elastic.equi.restart")
+        self.assertEqual(response_meta["restart_source"], "finite_t_elastic.equi.restart")
 
     def test_rejects_vasp(self):
         with self.assertRaises(TypeError):

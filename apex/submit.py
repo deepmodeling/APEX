@@ -25,7 +25,9 @@ from apex.utils import (
     copy_all_other_files,
     sepline,
     handle_prop_suffix,
-    backup_path
+    backup_path,
+    apex_task_succeeded,
+    all_apex_task_status_succeeded,
 )
 
 
@@ -195,11 +197,12 @@ def pack_upload_dir(
         )
 
     def relaxation_finished(conf_path: str) -> bool:
-        res = os.path.join(conf_path, "relaxation", "relax_task", "result.json")
-        return os.path.isfile(res) and os.path.getsize(res) > 0
+        task_dir = os.path.join(conf_path, "relaxation", "relax_task")
+        return apex_task_succeeded(task_dir)
 
     def property_finished(conf_path: str, properties: list) -> bool:
-        # finished only if every property that sets rerun_finished=False has its results
+        # Finished only if every property that sets rerun_finished=False has
+        # calculator task statuses with state=succeeded.
         all_done = True
         for prop in properties:
             rerun_finished = prop.get("rerun_finished", True)
@@ -211,10 +214,7 @@ def pack_upload_dir(
                 all_done = False
                 break
             prop_dir = os.path.join(conf_path, prop["type"] + "_" + suffix)
-            rjson = os.path.join(prop_dir, "result.json")
-            rout = os.path.join(prop_dir, "result.out")
-            if not (os.path.isfile(rjson) and os.path.getsize(rjson) > 0
-                    and os.path.isfile(rout) and os.path.getsize(rout) > 0):
+            if not all_apex_task_status_succeeded(prop_dir):
                 all_done = False
                 break
         return all_done
@@ -242,7 +242,7 @@ def pack_upload_dir(
         for c in conf_dirs:
             done_all = property_finished(c, properties)
             if done_all:
-                logging.info(f"Skip uploading finished properties for {c} (all rerun_finished=False and results present).")
+                logging.info(f"Skip uploading finished properties for {c} (all rerun_finished=False task states succeeded).")
             else:
                 pruned.append(c)
                 # track per-structure finished properties
@@ -253,10 +253,7 @@ def pack_upload_dir(
                         if not suffix:
                             continue
                         prop_dir = os.path.join(c, prop["type"] + "_" + suffix)
-                        rjson = os.path.join(prop_dir, "result.json")
-                        rout = os.path.join(prop_dir, "result.out")
-                        if os.path.isfile(rjson) and os.path.getsize(rjson) > 0 \
-                                and os.path.isfile(rout) and os.path.getsize(rout) > 0:
+                        if all_apex_task_status_succeeded(prop_dir):
                             finished_list.append(prop_dir)
                 if finished_list:
                     finished_props[c] = finished_list
@@ -299,10 +296,7 @@ def pack_upload_dir(
                 if prop.get("rerun_finished", True):
                     continue
                 prop_dir = os.path.join(c, prop_dir_name)
-                rjson = os.path.join(prop_dir, "result.json")
-                rout = os.path.join(prop_dir, "result.out")
-                if os.path.isfile(rjson) and os.path.getsize(rjson) > 0 \
-                        and os.path.isfile(rout) and os.path.getsize(rout) > 0:
+                if all_apex_task_status_succeeded(prop_dir):
                     skip_finished_properties.append([c, prop_dir_name])
         if skip_finished_properties:
             prop_param["skip_finished_properties"] = skip_finished_properties
@@ -333,13 +327,10 @@ def pack_upload_dir(
                     refine_init_suffix = jj['init_from_suffix']
                     refine_init_name_list.append(property_type + "_" + refine_init_suffix)
                 path_to_prop = os.path.join(ii, property_type + "_" + suffix)
-                # If rerun_finished is False and results exist, skip backing up (keep as-is)
+                # If rerun_finished is False and task states succeeded, skip backing up (keep as-is)
                 if (not jj.get("rerun_finished", True)):
-                    rjson = os.path.join(path_to_prop, "result.json")
-                    rout = os.path.join(path_to_prop, "result.out")
-                    if os.path.isfile(rjson) and os.path.getsize(rjson) > 0 \
-                            and os.path.isfile(rout) and os.path.getsize(rout) > 0:
-                        logging.info(f"Skip backing up finished property at {path_to_prop} (rerun_finished=False)")
+                    if all_apex_task_status_succeeded(path_to_prop):
+                        logging.info(f"Skip backing up finished property at {path_to_prop} (rerun_finished=False, task states succeeded)")
                         continue
                 backup_path(path_to_prop)
 

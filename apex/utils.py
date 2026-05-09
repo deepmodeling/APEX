@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import json
+import glob
 import string
 import random
 from typing import Type, List
@@ -19,10 +20,42 @@ from apex.core.calculator import LAMMPS_INTER_TYPE
 upload_packages.append(__file__)
 
 MaxLength = 70
+APEX_TASK_STATUS = "apex_task_status.json"
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 
 # write a function to replace all '/' in the input string with '-'
+
+def load_apex_task_status(task_dir_or_file):
+    status_path = task_dir_or_file
+    if os.path.isdir(status_path):
+        status_path = os.path.join(status_path, APEX_TASK_STATUS)
+    if not os.path.isfile(status_path):
+        return None
+    try:
+        return loadfn(status_path)
+    except Exception as exc:
+        logging.warning(f"Could not parse {status_path}: {exc}")
+        return None
+
+
+def apex_task_state(task_dir_or_file):
+    status = load_apex_task_status(task_dir_or_file)
+    if not isinstance(status, dict):
+        return None
+    return status.get("state")
+
+
+def apex_task_succeeded(task_dir_or_file) -> bool:
+    return apex_task_state(task_dir_or_file) == "succeeded"
+
+
+def all_apex_task_status_succeeded(work_dir, task_glob="task.[0-9]*[0-9]") -> bool:
+    task_dirs = glob.glob(os.path.join(work_dir, task_glob))
+    task_dirs.sort()
+    if not task_dirs:
+        return False
+    return all(apex_task_succeeded(task_dir) for task_dir in task_dirs)
 
 def backup_path(path) -> None:
     path += "/"

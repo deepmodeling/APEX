@@ -8,14 +8,13 @@ import logging
 import math
 import os
 import re
+from shutil import copyfile
 from typing import Dict, List, Tuple
 
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 from pymatgen.analysis.elasticity.elastic import ElasticTensor
-from pymatgen.core.structure import Structure
 
-from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from dflow.python import upload_packages
@@ -137,9 +136,6 @@ class FiniteTElastic(Property):
         if not os.path.exists(equi_contcar):
             raise RuntimeError(f"missing CONTCAR in equilibrium path: {path_to_equi}")
 
-        ptypes = vasp_utils.get_poscar_types(equi_contcar)
-        structure = Structure.from_file(equi_contcar)
-
         task_list: List[str] = []
         task_index = 0
         for temperature in self._temperatures():
@@ -147,8 +143,7 @@ class FiniteTElastic(Property):
             os.makedirs(equi_task, exist_ok=True)
             self._write_task(
                 equi_task,
-                structure,
-                ptypes,
+                equi_contcar,
                 temperature=temperature,
                 role="equi",
                 pair_id=None,
@@ -159,7 +154,6 @@ class FiniteTElastic(Property):
             task_list.append(equi_task)
             task_index += 1
 
-            equi_restart = os.path.join(equi_task, EQUI_RESTART)
             for component in self.cal_setting["strain_components"]:
                 for sign in [-1, 1]:
                     signed_strain = sign * float(self.cal_setting["strain"])
@@ -168,17 +162,15 @@ class FiniteTElastic(Property):
                     for role, value in [("reference", 0.0), ("strained", signed_strain)]:
                         task_dir = os.path.join(path_to_work, f"task.{task_index:06d}")
                         os.makedirs(task_dir, exist_ok=True)
-                        restart_source = os.path.relpath(equi_restart, task_dir)
                         self._write_task(
                             task_dir,
-                            structure,
-                            ptypes,
+                            equi_contcar,
                             temperature=temperature,
                             role=role,
                             pair_id=pair_id,
                             strain_component=component,
                             strain_value=value,
-                            restart_source=restart_source,
+                            restart_source=EQUI_RESTART,
                         )
                         task_list.append(task_dir)
                         task_index += 1
@@ -254,11 +246,7 @@ class FiniteTElastic(Property):
                 np.asarray(stress_rows, dtype=float),
             )
             c_gpa = _bar_to_gpa(c_sym_bar)
-            et = ElasticTensor(c_gpa)
-            bulk = float(et.k_voigt)
-            shear = float(et.g_voigt)
-            young = float(9.0 * bulk * shear / (3.0 * bulk + shear))
-            poisson = float(0.5 * (3.0 * bulk - 2.0 * shear) / (3.0 * bulk + shear))
+            bulk, shear, young, poisson = _derive_moduli_from_voigt_gpa(c_gpa)
 
             temp_key = _format_temperature(temperature)
             res_data["temperatures"][temp_key] = {
@@ -343,8 +331,7 @@ class FiniteTElastic(Property):
     def _write_task(
         self,
         task_dir: str,
-        structure: Structure,
-        ptypes,
+        equi_contcar: str,
         temperature: float,
         role: str,
         pair_id: str | None,
@@ -369,9 +356,7 @@ class FiniteTElastic(Property):
             if os.path.exists(path) or os.path.islink(path):
                 os.remove(path)
 
-        structure.to(os.path.join(task_dir, "POSCAR.tmp"), "POSCAR")
-        vasp_utils.regulate_poscar(os.path.join(task_dir, "POSCAR.tmp"), os.path.join(task_dir, "POSCAR"))
-        vasp_utils.sort_poscar(os.path.join(task_dir, "POSCAR"), os.path.join(task_dir, "POSCAR"), ptypes)
+        copyfile(equi_contcar, os.path.join(task_dir, "POSCAR"))
 
         metadata = self._metadata(
             temperature=temperature,
@@ -618,6 +603,18 @@ def _fit_elastic_tensor_bar(strain_rows, stress_rows):
     c_raw = solution.T
     c_sym = 0.5 * (c_raw + c_raw.T)
     return c_raw, c_sym, rank
+
+
+def _derive_moduli_from_voigt_gpa(c_voigt_gpa):
+    c_voigt_gpa = np.asarray(c_voigt_gpa, dtype=float)
+    if c_voigt_gpa.shape != (6, 6):
+        raise RuntimeError("elastic Voigt matrix must have shape (6, 6)")
+    et = ElasticTensor.from_voigt(c_voigt_gpa)
+    bulk = float(et.k_voigt)
+    shear = float(et.g_voigt)
+    young = float(9.0 * bulk * shear / (3.0 * bulk + shear))
+    poisson = float(0.5 * (3.0 * bulk - 2.0 * shear) / (3.0 * bulk + shear))
+    return bulk, shear, young, poisson
 
 
 def _deform_include(strain_component: int | None, strain_value: float) -> str:

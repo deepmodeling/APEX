@@ -150,15 +150,13 @@ class TestSubmitPathValidation(unittest.TestCase):
 
             relax_result = os.path.join(conf_dir, "relaxation", "relax_task")
             os.makedirs(relax_result, exist_ok=True)
-            with open(os.path.join(relax_result, "result.json"), "w", encoding="utf-8") as fp:
-                fp.write("{}")
+            with open(os.path.join(relax_result, "apex_task_status.json"), "w", encoding="utf-8") as fp:
+                json.dump({"state": "succeeded", "exit_code": 0}, fp)
 
-            prop_result = os.path.join(conf_dir, "eos_00")
-            os.makedirs(prop_result, exist_ok=True)
-            with open(os.path.join(prop_result, "result.json"), "w", encoding="utf-8") as fp:
-                fp.write("{}")
-            with open(os.path.join(prop_result, "result.out"), "w", encoding="utf-8") as fp:
-                fp.write("done\n")
+            prop_task = os.path.join(conf_dir, "eos_00", "task.000000")
+            os.makedirs(prop_task, exist_ok=True)
+            with open(os.path.join(prop_task, "apex_task_status.json"), "w", encoding="utf-8") as fp:
+                json.dump({"state": "succeeded", "exit_code": 0}, fp)
 
             relax_param = {
                 "structures": ["confs/std-*"],

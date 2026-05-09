@@ -102,5 +102,13 @@ class TestLammps(unittest.TestCase):
         self.assertEqual(self.Lammps.forward_common_files(), fc_files)
 
     def test_backward_files(self):
-        backward_files = ["log.lammps", "outlog", "dump.relax"]
+        backward_files = [
+            "log.lammps",
+            "outlog",
+            "apex_task_status.json",
+            ".debug.log",
+            ".debug.stdout",
+            ".debug.stderr",
+            "dump.relax",
+        ]
         self.assertEqual(self.Lammps.backward_files(), backward_files)

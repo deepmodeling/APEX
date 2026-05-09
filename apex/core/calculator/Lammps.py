@@ -703,12 +703,14 @@ class Lammps(Task):
             return model_files
 
     def backward_files(self, property_type="relaxation"):
+        debug_files = ["apex_task_status.json", ".debug.log", ".debug.stdout", ".debug.stderr"]
         if property_type == "phonon":
-            return ["outlog", "FORCE_CONSTANTS"]
+            return ["outlog"] + debug_files + ["FORCE_CONSTANTS"]
         elif property_type == "gruneisen":
             return [
                 "log.lammps",
                 "outlog",
+                *debug_files,
                 "dump.relax",
                 "FORCE_CONSTANTS",
                 "mesh.yaml",
@@ -716,15 +718,16 @@ class Lammps(Task):
                 "phonopy.yaml",
             ]
         elif property_type == "finitetlatt":
-            return ["log.lammps", "outlog", "dump.relax", "average_box.txt"]
+            return ["log.lammps", "outlog"] + debug_files + ["dump.relax", "average_box.txt"]
         elif property_type in ["annealing", "Annealing"]:
-            return ["log.lammps", "outlog", "dump.anneal_ramp", "dump.anneal_cool", "restart.*"]
+            return ["log.lammps", "outlog"] + debug_files + ["dump.anneal_ramp", "dump.anneal_cool", "restart.*"]
         elif property_type == "finite_t_elastic":
             return [
                 "log.lammps",
                 "outlog",
+                *debug_files,
                 "dump.relax",
                 "stress_timeseries.txt",
             ]
         else:
-            return ["log.lammps", "outlog", "dump.relax"]
+            return ["log.lammps", "outlog"] + debug_files + ["dump.relax"]

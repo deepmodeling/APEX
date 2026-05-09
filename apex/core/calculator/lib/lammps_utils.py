@@ -538,45 +538,67 @@ def make_lammps_FiniteTElastic(conf, type_map, interaction, param, task_dir=".")
         metadata = json.load(fp)
 
     role = metadata["role"]
-    ret = ""
-    ret += "clear\n"
-    ret += "include  variable_FiniteTElastic.in\n"
-    ret += "units 	metal\n"
-    ret += "dimension	3\n"
-    ret += "boundary	p p p\n"
-    ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
-        ret += "atom_modify map yes\n"
-        ret += "newton on\n"
-    ret += "box         tilt large\n"
-
-    if role == "equi":
-        ret += "read_data   %s\n" % conf
-        ret += "replicate   ${nx} ${ny} ${nz}\n"
-    elif role in ["reference", "strained"]:
-        ret += "read_restart ${restart_source}\n"
-    else:
+    if role not in ["equi", "reference", "strained"]:
         raise RuntimeError(f"unsupported FiniteTElastic role {role}")
 
-    for ii in range(len(type_map)):
-        ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
-    ret += "neigh_modify    every 1 delay 0 check no\n"
-    ret += interaction(param)
-    ret += "compute         mype all pe\n"
-    ret += "thermo          ${stress_output_every}\n"
-    ret += (
-        "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
-    )
-    ret += "timestep        ${timestep}\n"
+    def setup_from_data():
+        text = ""
+        text += "clear\n"
+        text += "include  variable_FiniteTElastic.in\n"
+        text += "units 	metal\n"
+        text += "dimension	3\n"
+        text += "boundary	p p p\n"
+        text += "atom_style	atomic\n"
+        if param["type"] == "mace":
+            text += "atom_modify map yes\n"
+            text += "newton on\n"
+        text += "box         tilt large\n"
+        text += "read_data   %s\n" % conf
+        text += "replicate   ${nx} ${ny} ${nz}\n"
+        return text
 
+    def setup_from_restart():
+        text = ""
+        text += "clear\n"
+        text += "include  variable_FiniteTElastic.in\n"
+        text += "units 	metal\n"
+        text += "dimension	3\n"
+        text += "boundary	p p p\n"
+        text += "atom_style	atomic\n"
+        if param["type"] == "mace":
+            text += "atom_modify map yes\n"
+            text += "newton on\n"
+        text += "box         tilt large\n"
+        text += "read_restart ${restart_source}\n"
+        return text
+
+    def force_field_setup():
+        text = ""
+        for ii in range(len(type_map)):
+            text += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
+        text += "neigh_modify    every 1 delay 0 check no\n"
+        text += interaction(param)
+        text += "compute         mype all pe\n"
+        text += "thermo          ${stress_output_every}\n"
+        text += (
+            "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
+        )
+        text += "timestep        ${timestep}\n"
+        return text
+
+    ret = setup_from_data()
+    ret += force_field_setup()
+    ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
+    ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
     if role == "equi":
-        ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
-        ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
         ret += "include  output_FiniteTElastic.in\n"
-        ret += "fix             1 all npt temp ${temperature} ${temperature} ${tdamp} aniso 0.0 0.0 ${pdamp}\n"
-        ret += "run             ${equi_step}\n"
-        ret += "write_restart   ${equi_restart}\n"
-    else:
+    ret += "fix             1 all npt temp ${temperature} ${temperature} ${tdamp} aniso 0.0 0.0 ${pdamp}\n"
+    ret += "run             ${equi_step}\n"
+    ret += "write_restart   ${equi_restart}\n"
+
+    if role in ["reference", "strained"]:
+        ret += setup_from_restart()
+        ret += force_field_setup()
         ret += "change_box all triclinic\n"
         ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
         ret += "include  deform_FiniteTElastic.in\n"
