@@ -819,24 +819,98 @@ APEX supports Grüneisen workflows based on phonon calculations at multiple stra
 For `full` mode, use fixed-volume internal relaxation in `cal_setting` (`relax_pos = true`, `relax_shape = false`, `relax_vol = false`) so the phonon and energy points share the intended volume grid.
 
 ### 4.13 Finite-temperature lattice parameters
-APEX now supports the calculation of lattice parameters at finite temperatures in LAMMPS.
 
-| Key | Type | Example | Description |
+APEX supports lattice parameter calculations at finite temperatures using molecular dynamics in LAMMPS.
+This workflow performs NVT equilibration at target temperatures and averages lattice parameters over the equilibrated trajectory.
+
+| Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions. |
+| `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
 
-Other LAMMPS settings can be specified below:
+LAMMPS-specific calculation settings in `cal_setting`:
 
-"cal_setting": {
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `temperature` | Sequence[Float] | Required | Target temperatures (K) for lattice parameter calculation, e.g., `[200, 400, 600, 800]`. |
+| `equi_step` | Integer | `80000` | Number of equilibration steps before averaging. |
+| `ave_step` | Integer | `40000` | Number of steps for averaging lattice parameters. |
+| `timestep` | Float | `0.001` | MD timestep (ps). |
+| `tdamp` | Float | `0.1` | Thermostat damping parameter. |
+| `pdamp` | Float | `1.0` | Barostat damping parameter. |
+| `N_every` | Integer | `100` | Interval for computing averages. |
+| `N_repeat` | Integer | `10` | Number of average samples. |
+| `N_freq` | Integer | `2000` | Sample output frequency. |
+
+Example:
+
+```json
+{
+  "type": "finite_t_latt",
+  "supercell_size": [2, 2, 2],
+  "cal_setting": {
     "temperature": [200, 400, 600, 800],
     "equi_step": 80000,
-    "N_every": 100,
-    "N_repeat": 10,
-    "N_freq": 2000,
     "ave_step": 40000,
     "timestep": 0.001,
     "tdamp": 0.1,
-    "pdamp": 1.0}
+    "pdamp": 1.0,
+    "N_every": 100,
+    "N_repeat": 10,
+    "N_freq": 2000
+  }
+}
+```
+
+### 4.14 Finite-temperature elastic constant
+
+APEX supports elastic constant calculations at finite temperatures using molecular dynamics in LAMMPS.
+This implementation uses the noise-cancellation method (see [DOI: 10.1103/sd49-wqd6](https://doi.org/10.1103/sd49-wqd6)) to compute temperature-dependent elastic constants from stress fluctuations.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
+| `rerun_finished` | Bool | `false` | Re-run calculation if already finished. |
+
+LAMMPS-specific calculation settings in `cal_setting`:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `temperature` | Sequence[Float] | Required | Target temperatures (K) for elastic calculation, e.g., `[300]`. |
+| `strain` | Float | Required | Small strain magnitude for fluctuation analysis. |
+| `strain_components` | Sequence[String] | Required | Strain components to compute: `"xx"`, `"yy"`, `"zz"`, `"yz"`, `"xz"`, `"xy"`. |
+| `equi_step` | Integer | `16000` | Number of equilibration steps before measurement. |
+| `response_step` | Integer | `16000` | Number of steps for collecting stress-strain data. |
+| `stress_output_every` | Integer | `100` | Stress output frequency (steps). |
+| `timestep` | Float | `0.001` | MD timestep (ps). |
+| `tdamp` | Float | `0.1` | Thermostat damping parameter. |
+| `pdamp` | Float | `1.0` | Barostat damping parameter. |
+| `seed` | Integer | Required | Random seed for reproducibility. |
+| `n_blocks` | Integer | `10` | Number of blocks for statistical analysis. |
+| `method` | String | `"paired_langevin"` | Thermostat method (e.g., `"paired_langevin"`). |
+
+Example:
+
+```json
+{
+  "type": "finite_t_elastic",
+  "supercell_size": [2, 2, 2],
+  "rerun_finished": false,
+  "cal_setting": {
+    "temperature": [300],
+    "strain": 0.001,
+    "strain_components": ["xx", "yy", "zz", "yz", "xz", "xy"],
+    "equi_step": 16000,
+    "response_step": 16000,
+    "stress_output_every": 100,
+    "timestep": 0.001,
+    "tdamp": 0.1,
+    "pdamp": 1.0,
+    "seed": 12345,
+    "n_blocks": 10,
+    "method": "paired_langevin"
+  }
+}
+```
 
 ## More Resources
 
