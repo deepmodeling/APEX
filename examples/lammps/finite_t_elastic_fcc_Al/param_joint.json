@@ -18,8 +18,8 @@
   "properties": [
     {
       "type": "finite_t_elastic",
-      "req_calc": true,
       "supercell_size": [2, 2, 2],
+      "rerun_finished": false,
       "cal_setting": {
         "temperature": [300],
         "strain": 0.001,
