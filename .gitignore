@@ -25,6 +25,7 @@ dpdispatcher.log
 .vscode/
 .idea/
 .DS_Store
+AGENTS.md
 
 # User-generated workflow files
 reference
