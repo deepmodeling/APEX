@@ -5,7 +5,7 @@
 # APEX: Alloy Property EXplorer
 [![](https://img.shields.io/badge/release-1.2.1-blue.svg)](https://github.com/deepmodeling/APEX)
 
-[1.2.1 Changelog](./CHANGELOG-1.2.1.md)
+[1.3.0 Changelog](./CHANGELOG-1.3.0.md)
 
 [APEX](https://github.com/deepmodeling/APEX) helps materials scientists build reliable alloy property workflows that run on local machines, on-premises clusters, or the Bohrium cloud. It refactors the [DP-GEN](https://github.com/deepmodeling/dpgen) `auto_test` module into a flexible, dflow-powered Python package that prepares tasks, dispatches calculations, monitors progress, and collects results for calculators such as **LAMMPS**, **VASP**, and **ABACUS**.
 
@@ -871,7 +871,6 @@ This implementation uses the noise-cancellation method (see [DOI: 10.1103/sd49-w
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
-| `rerun_finished` | Bool | `false` | Re-run calculation if already finished. |
 
 LAMMPS-specific calculation settings in `cal_setting`:
 
@@ -896,7 +895,6 @@ Example:
 {
   "type": "finite_t_elastic",
   "supercell_size": [2, 2, 2],
-  "rerun_finished": false,
   "cal_setting": {
     "temperature": [300],
     "strain": 0.001,
