@@ -67,7 +67,7 @@ def report_local(input_path_list, open_browser: bool = False, host: str = "127.0
         open_browser=open_browser,
         host=host,
         port=port,
-    ).run(debug=True, use_reloader=True)
+    ).run(debug=False, use_reloader=False)
 
 
 def report_result(

@@ -356,6 +356,83 @@ class FiniteTlattReport(PropertyReport):
         df = pd.DataFrame(rows)
         return build_table(df), df
 
+
+class FiniteTElasticReport(PropertyReport):
+    """Report finite-temperature elastic constants as a function of temperature."""
+
+    @staticmethod
+    def _temperature_rows(res_data: dict):
+        temperatures = res_data.get("temperatures", {})
+        rows = []
+        for temp_key, temp_data in sorted(
+            temperatures.items(), key=lambda item: float(item[0])
+        ):
+            temp = float(temp_key)
+            row = {
+                "Temperature (K)": int(temp) if abs(temp - round(temp)) < 1e-6 else temp,
+                "B (GPa)": temp_data.get("B"),
+                "G (GPa)": temp_data.get("G"),
+                "E (GPa)": temp_data.get("E"),
+                "u": temp_data.get("u", temp_data.get("poisson_ratio")),
+                "rank": temp_data.get("rank"),
+                "paired responses": temp_data.get("number_of_paired_responses"),
+            }
+            tensor = temp_data.get("elastic_tensor_GPa", temp_data.get("elastic_tensor"))
+            if tensor is not None:
+                for ii in range(6):
+                    for jj in range(6):
+                        row[f"C{ii + 1}{jj + 1} (GPa)"] = tensor[ii][jj]
+            rows.append(row)
+        return rows
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        rows = FiniteTElasticReport._temperature_rows(res_data)
+        temps = [row["Temperature (K)"] for row in rows]
+        traces = []
+        for label in ["B (GPa)", "G (GPa)", "E (GPa)", "u"]:
+            values = [row.get(label) for row in rows]
+            if not any(value is not None for value in values):
+                continue
+            traces.append(
+                go.Scatter(
+                    name=f"{name} {label}",
+                    x=temps,
+                    y=values,
+                    mode="lines+markers",
+                )
+            )
+
+        layout = go.Layout(
+            title="Finite-Temperature Elastic Constants",
+            xaxis=dict(title="Temperature (K)"),
+            yaxis=dict(title="Modulus (GPa) / Poisson ratio"),
+            showlegend=True,
+        )
+        return traces, layout
+
+    @staticmethod
+    def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
+        rows = FiniteTElasticReport._temperature_rows(res_data)
+        numeric_columns = {
+            key
+            for row in rows
+            for key, value in row.items()
+            if isinstance(value, (int, float)) and key != "Temperature (K)"
+        }
+        rounded_rows = []
+        for row in rows:
+            rounded = {}
+            for key, value in row.items():
+                if key in numeric_columns and value is not None:
+                    rounded[key] = round(float(value), decimal)
+                else:
+                    rounded[key] = value
+            rounded_rows.append(rounded)
+        df = pd.DataFrame(rounded_rows)
+        return build_table(df, cell_style={"width": "120px"}), df
+
+
 class ElasticReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):

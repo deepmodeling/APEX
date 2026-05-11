@@ -125,18 +125,24 @@ class RunLAMMPS(OP):
         started_at: str,
         finished_at: str,
         debug_log: str = ".debug.log",
+        attempts: int = 1,
+        retry_reason: str | None = None,
     ):
         status = cls._classify_exit_code(exit_code)
+        payload = {
+            **status,
+            "exit_code": int(exit_code),
+            "run_command": cmd,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "elapsed_seconds": elapsed,
+            "debug_log": debug_log,
+            "attempts": int(attempts),
+        }
+        if retry_reason:
+            payload["retry_reason"] = retry_reason
         dumpfn(
-            {
-                **status,
-                "exit_code": int(exit_code),
-                "run_command": cmd,
-                "started_at": started_at,
-                "finished_at": finished_at,
-                "elapsed_seconds": elapsed,
-                "debug_log": debug_log,
-            },
+            payload,
             status_file,
             indent=4,
         )
@@ -161,16 +167,6 @@ class RunLAMMPS(OP):
             return out.rstrip()
         except Exception as exc:
             return f"<unavailable: {exc}>"
-
-    @classmethod
-    def _file_status(cls, path: Path) -> str:
-        if path.is_symlink():
-            target = os.readlink(path)
-            exists = path.exists()
-            return f"{path.name}: symlink -> {target} exists={exists}"
-        if path.exists():
-            return f"{path.name}: file size={path.stat().st_size}"
-        return f"{path.name}: missing"
 
     @classmethod
     def _tail_file(cls, path: Path, n_lines: int = 80) -> str:
@@ -255,26 +251,49 @@ class RunLAMMPS(OP):
         return deduped
 
     @classmethod
-    def _collect_child_pids(cls, pid: int) -> list[int]:
-        pids = [pid]
-        queue = [pid]
-        while queue:
-            parent = queue.pop(0)
-            raw = cls._safe_cmd(f"pgrep -P {parent}", timeout=2)
-            if raw.startswith("<unavailable") or not raw.strip():
-                continue
-            for item in raw.split():
-                try:
-                    child = int(item)
-                except ValueError:
-                    continue
-                if child not in pids:
-                    pids.append(child)
-                    queue.append(child)
-        return pids
+    def _is_lammps_header_only_log(cls, path: Path) -> bool:
+        if not path.is_file():
+            return False
+        try:
+            lines = [
+                line.strip()
+                for line in path.read_text(errors="replace").splitlines()
+                if line.strip()
+            ]
+        except Exception:
+            return False
+        return len(lines) == 1 and lines[0].startswith("LAMMPS (")
 
     @classmethod
-    def _resource_snapshot(cls, pid: int | None = None) -> str:
+    def _is_header_only_lammps_failure(cls, task_dir: Path, exit_code: int) -> bool:
+        if exit_code == 0:
+            return False
+        if any((task_dir / name).exists() for name in ["CONTCAR", "dump.relax", "stress_timeseries.txt"]):
+            return False
+        return (
+            cls._is_lammps_header_only_log(task_dir / "log.lammps")
+            or cls._is_lammps_header_only_log(task_dir / "outlog")
+        )
+
+    @classmethod
+    def _archive_retry_file(cls, path: Path, attempt: int):
+        if not path.exists():
+            return
+        target = path.with_name(f"{path.name}.attempt{attempt}")
+        try:
+            if target.exists():
+                target.unlink()
+            path.rename(target)
+        except Exception as exc:
+            logging.warning(f"Could not archive retry file {path}: {exc}")
+
+    @classmethod
+    def _prepare_retry(cls, task_dir: Path, attempt: int):
+        for name in ["log.lammps", "outlog", "errlog", "run.log", "dump.relax", "stress_timeseries.txt"]:
+            cls._archive_retry_file(task_dir / name, attempt)
+
+    @classmethod
+    def _resource_snapshot(cls) -> str:
         lines = []
         lines.append("$ date")
         lines.append(cls._safe_cmd("date -Is"))
@@ -286,11 +305,6 @@ class RunLAMMPS(OP):
         lines.append(cls._safe_cmd("free -h || vm_stat"))
         lines.append("$ nvidia-smi")
         lines.append(cls._safe_cmd("nvidia-smi --query-gpu=index,name,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits || nvidia-smi", timeout=5))
-        if pid is not None:
-            pids = cls._collect_child_pids(pid)
-            pid_csv = ",".join(str(ii) for ii in pids)
-            lines.append(f"$ ps for pid tree {pid_csv}")
-            lines.append(cls._safe_cmd(f"ps -o pid,ppid,stat,%cpu,%mem,rss,vsz,etime,command -p {pid_csv}", timeout=5))
         return "\n".join(lines)
 
     @classmethod
@@ -326,58 +340,18 @@ class RunLAMMPS(OP):
         cls._append_debug(debug_file, cls._resource_snapshot())
         cls._append_debug(debug_file, "\n## Final file inventory\n")
         cls._append_debug(debug_file, cls._directory_inventory(task_dir))
-        cls._append_debug(debug_file, "\n## LAMMPS input snapshot\n")
-        for name in [
-            "in.lammps",
-            "variable_FiniteTElastic.in",
-            "deform_FiniteTElastic.in",
-            "output_FiniteTElastic.in",
-        ]:
-            path = task_dir / name
-            if path.exists():
-                cls._append_debug(debug_file, f"\n### {name}\n")
-                cls._append_debug(debug_file, cls._tail_file(path, n_lines=300))
         cls._append_debug(debug_file, "\n## Log tails\n")
         for path in cls._log_candidates(task_dir):
             cls._append_debug(debug_file, f"\n### {path.name}\n")
             cls._append_debug(debug_file, cls._tail_file(path))
 
     @classmethod
-    def _run_with_debug(cls, cmd: str, debug_file: Path, task_dir: Path) -> int:
+    def _run_command(cls, cmd: str, task_dir: Path) -> int:
         stdout_path = task_dir / ".debug.stdout"
         stderr_path = task_dir / ".debug.stderr"
-        sample_interval = float(os.environ.get("APEX_LAMMPS_DEBUG_INTERVAL", "30"))
-        start = time.time()
-        proc = None
-        with open(stdout_path, "w") as stdout_fp, open(stderr_path, "w") as stderr_fp:
-            try:
-                proc = subprocess.Popen(
-                    cmd,
-                    shell=True,
-                    stdout=stdout_fp,
-                    stderr=stderr_fp,
-                    text=True,
-                )
-                cls._append_debug(debug_file, "\n## Runtime samples\n")
-                cls._append_debug(debug_file, f"shell_pid={proc.pid}")
-                next_sample = 0.0
-                while True:
-                    exit_code = proc.poll()
-                    now = time.time()
-                    if now >= next_sample:
-                        cls._append_debug(debug_file, f"\n### sample elapsed_seconds={now - start:.3f}")
-                        cls._append_debug(debug_file, cls._resource_snapshot(proc.pid))
-                        next_sample = now + sample_interval
-                    if exit_code is not None:
-                        return int(exit_code)
-                    time.sleep(min(1.0, max(0.1, sample_interval)))
-            finally:
-                if proc is not None and proc.poll() is None:
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        proc.kill()
+        stdout_path.touch()
+        stderr_path.touch()
+        return int(subprocess.call(cmd, shell=True))
 
     @OP.exec_sign_check
     def execute(self, op_in: OPIO) -> OPIO:
@@ -413,7 +387,26 @@ class RunLAMMPS(OP):
             self._write_initial_debug(debug_file, task_dir, cmd)
             started_at = self._utc_now()
             start = time.time()
-            exit_code = self._run_with_debug(cmd, debug_file, task_dir)
+            retry_reason = None
+            attempts = 1
+            max_attempts = int(os.environ.get("APEX_LAMMPS_HEADER_RETRY", "2"))
+            max_attempts = max(1, max_attempts)
+            exit_code = self._run_command(cmd, task_dir)
+            while (
+                attempts < max_attempts
+                and self._is_header_only_lammps_failure(task_dir, exit_code)
+            ):
+                retry_reason = "header_only_lammps_log_after_nonzero_exit"
+                self._append_debug(
+                    debug_file,
+                    f"\n## Retry {attempts + 1}\n"
+                    f"Retrying LAMMPS because exit_code={exit_code} and log.lammps/outlog "
+                    "contains only the LAMMPS header.",
+                )
+                self._prepare_retry(task_dir, attempts)
+                time.sleep(float(os.environ.get("APEX_LAMMPS_HEADER_RETRY_DELAY", "5")))
+                attempts += 1
+                exit_code = self._run_command(cmd, task_dir)
             elapsed = time.time() - start
             finished_at = self._utc_now()
             self._write_task_status(
@@ -423,6 +416,8 @@ class RunLAMMPS(OP):
                 elapsed=elapsed,
                 started_at=started_at,
                 finished_at=finished_at,
+                attempts=attempts,
+                retry_reason=retry_reason,
             )
             self._write_final_debug(debug_file, task_dir, exit_code, elapsed)
             if exit_code == 0:

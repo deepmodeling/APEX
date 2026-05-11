@@ -21,6 +21,8 @@ from apex.core.property.FiniteTElastic import (
     _voigt_strain_tensor,
     normalize_strain_components,
 )
+from apex.reporter.DashReportApp import DashReportApp, return_prop_class, return_prop_type
+from apex.reporter.property_report import FiniteTElasticReport
 
 TEST_DIR = os.path.dirname(__file__)
 
@@ -156,6 +158,71 @@ class TestFiniteTElasticProperty(unittest.TestCase):
     def test_rejects_vasp(self):
         with self.assertRaises(TypeError):
             FiniteTElastic({"type": "finite_t_elastic"}, {"type": "vasp"})
+
+
+class TestFiniteTElasticReport(unittest.TestCase):
+    def test_reporter_registered_for_numbered_property_name(self):
+        self.assertEqual(return_prop_type("finite_t_elastic_00"), "finite_t_elastic")
+        self.assertIs(return_prop_class("finite_t_elastic"), FiniteTElasticReport)
+
+    def test_reporter_builds_graph_and_table(self):
+        res_data = {
+            "temperatures": {
+                "300": {
+                    "B": 70.0,
+                    "G": 30.0,
+                    "E": 80.0,
+                    "u": 0.3,
+                    "rank": 6,
+                    "number_of_paired_responses": 12,
+                    "elastic_tensor": [
+                        [1.0 if ii == jj else 0.0 for jj in range(6)]
+                        for ii in range(6)
+                    ],
+                }
+            }
+        }
+
+        traces, layout = FiniteTElasticReport.plotly_graph(res_data, "test")
+        table, df = FiniteTElasticReport.dash_table(res_data)
+
+        self.assertGreaterEqual(len(traces), 3)
+        self.assertEqual(layout.title.text, "Finite-Temperature Elastic Constants")
+        self.assertIn("C11 (GPa)", df.columns)
+        self.assertEqual(table.data[0]["Temperature (K)"], 300)
+
+    def test_dash_report_uses_pattern_matching_clipboard_ids(self):
+        datasets = {
+            "work": {
+                "conf": {
+                    "finite_t_elastic_00": {
+                        "result": {
+                            "temperatures": {
+                                "300": {
+                                    "B": 70.0,
+                                    "G": 30.0,
+                                    "E": 80.0,
+                                    "u": 0.3,
+                                    "elastic_tensor": [
+                                        [1.0 if ii == jj else 0.0 for jj in range(6)]
+                                        for ii in range(6)
+                                    ],
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        app = DashReportApp(datasets)
+        table_container = app.update_table("finite_t_elastic_00", "conf")
+        table_div = table_container.children[0]
+        clipboard = table_div.children[1]
+        table = table_div.children[2]
+
+        self.assertEqual(clipboard.id, {"type": "clip", "index": 0})
+        self.assertEqual(table.id, {"type": "table", "index": 0})
+        self.assertIn("Temperature (K)", app.csv_copy(1, table.data))
 
 
 if __name__ == "__main__":

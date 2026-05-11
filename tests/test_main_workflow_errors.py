@@ -150,6 +150,22 @@ class WorkflowQueryErrorTest(unittest.TestCase):
         self.assertEqual(workflow_id, "")
         self.assertEqual(workflow_uid, "cd8239f4-100f-4048-8284-bf53b7e39450")
 
+    def test_resolve_cli_workflow_reference_prefers_explicit_uuid_with_log(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, ".workflow.log"), "w", encoding="utf-8") as fp:
+                fp.write(
+                    "wf-name\tsubmit\t2026-01-01T00:00:01\t/tmp/work\t"
+                    "cd8239f4-100f-4048-8284-bf53b7e39450\n"
+                )
+
+            workflow_id, workflow_uid = apex_main._resolve_cli_workflow_reference(
+                tmpdir,
+                workflow_id="cd8239f4-100f-4048-8284-bf53b7e39450",
+            )
+
+        self.assertEqual(workflow_id, "")
+        self.assertEqual(workflow_uid, "cd8239f4-100f-4048-8284-bf53b7e39450")
+
     def test_run_with_workflow_fallback_supports_uid_only_lookup(self):
         workflow_calls = []
 

@@ -718,6 +718,20 @@ def _resolve_workflow_reference(
             if _looks_like_workflow_uid(clean_workflow_id):
                 return "", clean_workflow_id
             return clean_workflow_id, ""
+        if (
+            _looks_like_workflow_uid(clean_workflow_id)
+            and clean_workflow_id == selected_record.get("workflow_uid", "").strip()
+        ):
+            resolved_uid = selected_record.get("workflow_uid", "").strip()
+            logging.info(msg=f'Operating on workflow UID: {resolved_uid}')
+            if operation_name:
+                updated_record = dict(selected_record)
+                updated_record["operation"] = operation_name
+                updated_record["timestamp"] = datetime.datetime.now().isoformat()
+                workflow_log = os.path.join(work_dir, '.workflow.log')
+                with open(workflow_log, 'a', encoding='utf-8') as f:
+                    f.write(_format_workflow_log_record(updated_record))
+            return "", resolved_uid
     else:
         logging.info(msg='No workflow_id is provided, will employ the latest workflow')
         selected_record = records[-1]
@@ -833,9 +847,17 @@ def _run_with_workflow_fallback(
         raise
 
 
+def _query_keys_of_steps(wf: Workflow) -> List[str]:
+    return wf.query_keys_of_steps()
+
+
+def _query_workflow(wf: Workflow):
+    return wf.query()
+
+
 def _query_keys_of_steps_or_exit(wf: Workflow, wf_id: str) -> List[str]:
     try:
-        return wf.query_keys_of_steps()
+        return _query_keys_of_steps(wf)
     except Exception as exc:
         message = _format_workflow_query_error(wf_id, exc)
         if message:
@@ -845,7 +867,7 @@ def _query_keys_of_steps_or_exit(wf: Workflow, wf_id: str) -> List[str]:
 
 def _query_workflow_or_exit(wf: Workflow, wf_id: str):
     try:
-        return wf.query()
+        return _query_workflow(wf)
     except Exception as exc:
         message = _format_workflow_query_error(wf_id, exc)
         if message:
@@ -1106,7 +1128,7 @@ def main():
         info = _run_with_workflow_fallback(
             wf_id,
             wf_uid,
-            lambda wf, _wf_ref, _used_uid: _query_workflow_or_exit(wf, _wf_ref),
+            lambda wf, _wf_ref, _used_uid: _query_workflow(wf),
         )
         t = []
         t.append(["Name:", info.id])
@@ -1198,7 +1220,7 @@ def main():
         keys = _run_with_workflow_fallback(
             wf_id,
             wf_uid,
-            lambda wf, _wf_ref, _used_uid: _query_keys_of_steps_or_exit(wf, _wf_ref),
+            lambda wf, _wf_ref, _used_uid: _query_keys_of_steps(wf),
         )
         print("\n".join(keys))
     elif args.cmd == "delete":
@@ -1253,8 +1275,8 @@ def main():
             wf_id,
             wf_uid,
             lambda wf, _wf_ref, _used_uid: (
-                _query_keys_of_steps_or_exit(wf, _wf_ref),
-                _query_workflow_or_exit(wf, _wf_ref),
+                _query_keys_of_steps(wf),
+                _query_workflow(wf),
                 _wf_ref,
             ),
         )

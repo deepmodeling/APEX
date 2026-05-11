@@ -1,7 +1,0 @@
-{
-    "lammps_image_name": "registry.dp.tech/dptech/deepmd-kit:3.1.1",
-    "lammps_run_command": "lmp -in in.lammps -log log.lammps -screen outlog",
-    "group_size": 1,
-    "pool_size": 1,
-    "scass_type": "c8_m31_1 * NVIDIA T4"
-}

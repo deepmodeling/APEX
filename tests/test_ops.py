@@ -108,6 +108,34 @@ class TestRunLAMMPSDebug(unittest.TestCase):
         self.assertEqual(RunLAMMPS._classify_exit_code(137)["reason"], "killed_or_oom")
         self.assertEqual(RunLAMMPS._classify_exit_code(143)["reason"], "terminated")
 
+    def test_run_lammps_retries_header_only_failure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            script = task_dir / "retry_once.py"
+            script.write_text(
+                "from pathlib import Path\n"
+                "count_file = Path('count.txt')\n"
+                "count = int(count_file.read_text()) if count_file.exists() else 0\n"
+                "count_file.write_text(str(count + 1))\n"
+                "Path('log.lammps').write_text('LAMMPS (29 Aug 2024)\\n')\n"
+                "Path('outlog').write_text('LAMMPS (29 Aug 2024)\\n')\n"
+                "if count == 0:\n"
+                "    raise SystemExit(1)\n"
+                "Path('stress_timeseries.txt').write_text('0 0 0 0 0 0 0\\n')\n"
+            )
+            op = RunLAMMPS()
+            op.execute(OPIO({
+                "input_lammps": task_dir,
+                "run_command": f"{sys.executable} {script.name}",
+            }))
+
+            self.assertEqual((task_dir / "count.txt").read_text(), "2")
+            self.assertTrue((task_dir / "log.lammps.attempt1").is_file())
+            status = loadfn(task_dir / "apex_task_status.json")
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(status["attempts"], 2)
+            self.assertEqual(status["retry_reason"], "header_only_lammps_log_after_nonzero_exit")
+
 
 class TestMakeRelaxOPs(unittest.TestCase):
     def setUp(self) -> None:

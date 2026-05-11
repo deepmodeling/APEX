@@ -243,23 +243,12 @@ class PropsPost(OP):
                 abs_path_to_prop / "failed_lammps_tasks.json",
                 indent=4,
             )
-            failure_lines = []
-            for item in lammps_failures:
-                detail = (
-                    f"{item['task']} "
-                    f"(state={item.get('state')}, "
-                    f"reason={item.get('reason')}, "
-                    f"exit_code={item.get('exit_code')}"
-                )
-                if item.get("message"):
-                    detail += f", message={item.get('message')}"
-                detail += ")"
-                failure_lines.append(detail)
             raise RuntimeError(
                 "LAMMPS failed for property task(s): "
-                + "; ".join(failure_lines)
-                + ". Retrieved task directories contain apex_task_status.json, "
-                ".debug.log, log.lammps, outlog, and any partial output files."
+                + ", ".join(item["task"] for item in lammps_failures)
+                + ". Retrieved task directories contain apex_task_status.json "
+                "with failed status records, .debug.log, log.lammps, outlog, "
+                "and any partial output files."
             )
 
         prop = make_property_instance(prop_param, inter_param)

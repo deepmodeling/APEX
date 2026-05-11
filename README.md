@@ -32,10 +32,11 @@ APEX currently offers calculation methods for the following alloy properties:
 * Elastic constants
 * Vacancy formation energy
 * Interstitial formation energy
-* Generalized stacking fault energy (Gamma line)
+* Generalized stacking fault energy (Gamma line/Gamma Surface)
 * Phonon spectra
 * Grüneisen parameters and thermal expansion
 * Finite-temperature lattice parameters (FiniteTlatt)
+* Finite-temperature Elastic Constant (FiniteTElastic)
 
 ## What's Inside
 - [1. Installation](#1installation)
@@ -69,6 +70,7 @@ APEX currently offers calculation methods for the following alloy properties:
   - [4.11 Phonon Spectra](#411-phonon-spectra)
   - [4.12 Grüneisen Parameters and Thermal Expansion](#412-grüneisen-parameters-and-thermal-expansion)
   - [4.13 Finite-Temperature Lattice Parameters](#413-finite-temperature-lattice-parameters)
+  - [4.14 Finite-Temperature Elastic constant](#413-finite-temperature-elastic-constant)
 - [More Resources](#more-resources)
 
 ## 1.Installation
