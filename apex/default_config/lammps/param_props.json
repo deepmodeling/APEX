@@ -26,7 +26,7 @@
 
         },
         {
-            "type": "finitetlatt",
+            "type": "finite_t_latt",
 	     "req_calc":        false,
             "supercell_size": [2, 2, 2],
             "cal_setting": {
@@ -47,6 +47,25 @@
          "shear_deform": 1e-2,
 	    "cal_setting":  {"etol": 0,
                          "ftol": 1e-10}
+        },
+        {
+         "type":         "finite_t_elastic",
+         "req_calc":     false,
+         "supercell_size": [2, 2, 2],
+         "cal_setting":  {
+             "temperature": [300],
+             "strain": 0.001,
+             "strain_components": [0, 1, 2, 3, 4, 5],
+             "equi_step": 16000,
+             "response_step": 16000,
+             "stress_output_every": 100,
+             "timestep": 0.001,
+             "tdamp": 0.1,
+             "pdamp": 1.0,
+             "seed": 12345,
+             "n_blocks": 10,
+             "method": "paired_langevin"
+         }
         },
 	{
          "type":           "surface",

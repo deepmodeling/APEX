@@ -11,6 +11,7 @@ Major additions include:
 - Sublattice-aware RSS generation for B2, L1_2, and L1_0 systems
 - RSS workflow support and example documentation
 - GammaSurface workflow support and example documentation
+- Grüneisen parameters and thermal expansion workflow support and example documentation
 - Finite-temperature elasticity workflow support and example documentation
 - Shape-controlled automatic supercell generation
 - GUI-side batched submission for large configuration sets
@@ -46,6 +47,12 @@ Major additions include:
 - Added GammaSurface example documentation.
 - Added shape-control support for slab-like gamma-surface supercells.
 - Added apex preview for preview the movement of GammaSurface
+
+### Grüneisen Parameters and Thermal Expansion Workflow
+
+- Added `gruneisen` workflow support based on phonon calculations at multiple symmetric volume strains.
+- Added both `sign_only` and `full` output modes; `full` can fit Birch-Murnaghan EOS data to estimate thermal expansion.
+- Extended LAMMPS/phonoLAMMPS and VASP paths for Grüneisen post-processing, and added dedicated tests and examples.
 
 ### Finite-Temperature Elasticity Workflow
 

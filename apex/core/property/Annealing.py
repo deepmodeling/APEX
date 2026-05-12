@@ -10,24 +10,6 @@ from apex.core.calculator.lib import vasp_utils
 
 
 class Annealing(Property):
-    """
-    LAMMPS annealing workflow: equilibrate at start_temp, heat to target_temp,
-    optional hold, then cool to end_temp. Generates `variable_Annealing.in` and
-    `Annealing.json` per task. Intended as a minimal port of TiAl annealing.
-
-    Parameters (property-level):
-    - supercell_size: [nx, ny, nz] (default [2,2,2])
-    - supercell_length: [lx, ly, lz] in Angstroms (optional; overrides size)
-
-    cal_setting required keys:
-    - start_temp, target_temp, end_temp (floats, K)
-    - equi_step, ramp_step, hold_step, cool_step (ints, steps)
-    Optional:
-    - thermostat: 'nose_hoover' | 'langevin' (default 'nose_hoover')
-    - ensemble: 'npt' | 'nvt' (default 'npt' for nose-hoover; 'nph' when langevin)
-    - tdamp (default 100), pdamp (default 1000), velocity_seed (int, default 12345)
-    - dump_step (default 1000)
-    """
 
     def __init__(self, parameter: Dict[str, Any], inter_param=None):
         parameter["cal_type"] = "annealing"

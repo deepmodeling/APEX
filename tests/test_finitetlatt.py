@@ -24,7 +24,7 @@ class TestFiniteTlatt(unittest.TestCase):
             },
             "properties": [
                 {
-                    "type": "finitetlatt",
+                    "type": "finite_t_latt",
                     "supercell_size":  [2, 2, 2],
                     "cal_setting":{
                         "temperature": [400, 600],
@@ -63,7 +63,7 @@ class TestFiniteTlatt(unittest.TestCase):
             shutil.rmtree(self.target_path)
 
     def test_task_type(self):
-        self.assertEqual("finitetlatt", self.finite.task_type())
+        self.assertEqual("finite_t_latt", self.finite.task_type())
 
     def test_task_param(self):
         self.assertEqual(self.prop_param[0], self.finite.task_param())

@@ -357,7 +357,7 @@ class FiniteTlattReport(PropertyReport):
         return build_table(df), df
 
 
-class FiniteTElasticReport(PropertyReport):
+class FiniteTelasticReport(PropertyReport):
     """Report finite-temperature elastic constants as a function of temperature."""
 
     @staticmethod
@@ -387,7 +387,7 @@ class FiniteTElasticReport(PropertyReport):
 
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):
-        rows = FiniteTElasticReport._temperature_rows(res_data)
+        rows = FiniteTelasticReport._temperature_rows(res_data)
         temps = [row["Temperature (K)"] for row in rows]
         traces = []
         for label in ["B (GPa)", "G (GPa)", "E (GPa)", "u"]:
@@ -413,7 +413,7 @@ class FiniteTElasticReport(PropertyReport):
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
-        rows = FiniteTElasticReport._temperature_rows(res_data)
+        rows = FiniteTelasticReport._temperature_rows(res_data)
         numeric_columns = {
             key
             for row in rows

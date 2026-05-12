@@ -30,7 +30,7 @@
         
         },
         {
-            "type": "finitetlatt",
+            "type": "finite_t_latt",
             "supercell_size": [2, 2, 2],
             "cal_setting": {
             "temperature": [200, 400, 600, 800],

@@ -1,173 +1,203 @@
-# APEX GUI 开发说明
+# APEX GUI Dev Log
 
-本文件面向后续维护 `apex gui` 前端（Dash）功能，记录当前实现位置、数据流和扩展约定。
+This document serves as a development log for anyone maintaining the `apex gui` frontend (Dash). It records implementation locations, data flows, and conventions for future extensions.
 
-## 1. 代码位置
+## 1. Code Locations
 
-- 主入口与前端实现：`apex/gui.py`
-- Account 配置读写：`apex/account.py`
-- Submit 模板目录：`apex/default_config/{lammps,vasp,abacus}/`
+- Main entry & frontend implementation: `apex/gui.py`
+- Account config read/write: `apex/account.py`
+- Submit template directories: `apex/default_config/{lammps,vasp,abacus}/`
 
-当前 GUI 使用 Dash，前端布局和后端回调都在同一个 Python 文件中（`ApexGuiApp` 类）。
+The current GUI is built with Dash. Both the frontend layout and backend callbacks live in a single Python file (the `ApexGuiApp` class).
 
-## 2. Tab 结构
+## 2. Tab Structure
 
-在 `ApexGuiApp._build_layout()` 中定义了 4 个页签：
+Four tabs are defined in `ApexGuiApp._build_layout()`:
 
 1. `Submit`
 2. `Log`
 3. `Advanced`
 4. `Account`
 
-对应构建函数：
+Corresponding builder functions:
 
 - `_build_submit_tab`
 - `_build_manage_tab`
 - `_build_advanced_tab`
 - `_build_account_tab`
 
-## 3. Submit 页面（核心）
+## 3. Submit Page (Core)
 
-### 3.1 模板与数据来源
+### 3.1 Templates & Data Sources
 
-`Submit` 页面不是手写 JSON，而是按 profile 模板拼接得到：
+The `Submit` page does not rely on hand-written JSON. Instead, it assembles parameters from profile templates:
 
 - `param_structure.json`
 - `param_interaction/param_interaction.json`
 - `param_relax.json`
 - `param_props.json`
 
-拼接函数：`_load_profile_param_template(profile)`。
+Assembly function: `_load_profile_param_template(profile)`.
 
-`global.json` 来源：`_load_profile_global(profile)`。
+`global.json` source: `_load_profile_global(profile)`.
 
-### 3.2 用户操作与按钮语义
+### 3.2 User Actions & Button Semantics
 
-Submit 页底部按钮：
+Buttons at the bottom of the Submit page:
 
-- `Reset`：重新按当前表单状态生成 `param.json` 编辑区内容。
-- `Apply`：把用户当前编辑内容写入 `global.json`/`param.json`，并写入 interaction 相关文件（如 `vasp_input/INCAR`）。
-- `Submit`：在后台执行：
+- `Reset`: Regenerate the `param.json` editor content based on the current form state, and clear all generated logs.
+- `Submit`: Writes the user's current edits to `global.json`/`param.json`, writes interaction-related files (e.g., `vasp_input/INCAR`), and executes in the background:
   `nohup apex submit param.json -c global.json > apex.log 2>&1 &`
 
-Submit 页现在区分两类上传：
+The Submit page now distinguishes two types of uploads:
 
-- `上传结构`：结构文件默认保存到当前 `Workdir/confs/`。若 `confs/` 不存在会自动创建。
-- `上传文件`：普通文件直接保存到当前 `Working Directory`。
+- `Upload Structure`: Structure files are saved to the current `Workdir/confs/` by default. The `confs/` directory is created automatically if it does not exist.
+- `Upload File`: Regular files are saved directly to the current `Working Directory`.
 
-上传结果显示在 `Command Output`。
+Upload results are displayed in `Command Output`.
 
-`structures` 不再只靠手改 `param.json`，而是通过下拉框从当前 `Workdir` 中选择结构目录/结构路径，避免误写成 `.`。
+The `structures` field is no longer edited manually in `param.json`. Instead, a dropdown lets users select structure directories/paths from the current `Workdir`, preventing accidental entries like `.`.
 
-### 3.3 提交前日志冲突确认
+### 3.3 Pre-Submit Log Conflict Check
 
-`Submit` 时会检查当前目录是否已有 `apex.log`。
+When `Submit` is clicked, the GUI checks whether `apex.log` already exists in the current directory.
 
-- 若存在：弹 `ConfirmDialog` 二次确认。
-- 用户确认后才会真正重新提交。
+- If it exists: a `ConfirmDialog` pops up for secondary confirmation.
+- The actual resubmission only proceeds after the user confirms.
 
-### 3.4 interaction 编辑规则
+### 3.4 Interaction Editing Rules
 
-- `lammps`：显示 `interaction.type` 和 `interaction.model` 文件选择框。
-- `vasp`：不再手选 `interaction.type`。GUI 会从所选结构目录中的 `POSCAR` 自动读取元素顺序，并在 `Workdir` 中优先检索 `vasp_input/` 下后缀匹配的 POTCAR 文件；缺失元素会用灰字提示“请提交对应元素的POTCAR”。
-- `abacus`：不再手选 `interaction.type`。GUI 会从所选结构目录中的 `POSCAR` 自动读取元素顺序，并在 `Workdir` 中优先检索 `abacus_input/` 下前缀匹配的赝势/轨道文件；缺失项会用灰字提示。
+- `lammps`: Displays `interaction.type` and a file selector for `interaction.model`.
+- `vasp`: `interaction.type` is no longer selected manually. The GUI automatically reads element order from `POSCAR` in the selected structure directory, then prioritizes searching for suffix-matching POTCAR files under `vasp_input/` in the `Workdir`. Missing elements are indicated with gray text: "Please submit the POTCAR for the corresponding element".
+- `abacus`: `interaction.type` is no longer selected manually. The GUI automatically reads element order from `POSCAR` in the selected structure directory, then prioritizes searching for prefix-matching pseudopotential/orbital files under `abacus_input/` in the `Workdir`. Missing items are indicated with gray text.
 
-右侧 Advanced Setting 中：
+In the right-side Advanced Settings:
 
-- `vasp` 使用 `interaction.incar`
-- `abacus` 使用 `interaction.input`
+- `vasp` uses `interaction.incar`
+- `abacus` uses `interaction.input`
 
-若对应文件不存在，`Apply/Submit` 时会按 profile 默认模板自动创建：
+If the corresponding files do not exist, they are automatically created from the profile default template during `Submit`:
 
 - `vasp_input/INCAR`
 - `abacus_input/INPUT`
 
-### 3.5 Properties 勾选行为
+### 3.5 Properties Checkbox Behavior
 
-`param.json` 中 `properties` 只保留勾选项；未勾选项不写入输出 JSON。
+In `param.json`, only checked properties are retained; unchecked items are not written to the output JSON.
 
-## 4. Log 页面
+## 4. Log Page
 
-`Log` 页面用于查看 `apex.log`：
+The `Log` page is used to view `apex.log`:
 
-- 手动刷新按钮
-- 3 秒自动刷新
-- 显示日志尾部内容（tail）
+- Manual refresh button
+- Auto-refresh every 3 seconds
+- Displays the tail of the log
 
-日志读取函数：`_read_log_tail()`。
+Log read function: `_read_log_tail()`.
 
-## 5. Advanced 页面
+## 5. Advanced Page
 
-支持执行命令尾参数（会调用 `python -m apex ...`）。
+Supports executing command tail arguments (calls `python -m apex ...`).
 
-- 例如输入：`submit param_joint.json -c global.json`
-- `gui` 和 `report` 被禁止，避免嵌套启动 Dash。
+- Example input: `submit param_joint.json -c global.json`
+- `gui` is blocked to prevent nested Dash launches.
+- `report` is allowed but will open on a separate port (`8070`) to avoid conflict with the GUI.
 
-## 6. Account 页面
+## 6. Account Page
 
-### 6.1 目标
+### 6.1 Goal
 
-GUI 中提供对 `apex account` 存储的可视化覆盖编辑。
+Provides a visual overlay editor for `apex account` stored credentials within the GUI.
 
-### 6.2 当前字段
+### 6.2 Current Fields
 
 - `email`
 - `program_id`
-- `password`（仅覆盖，不回显）
+- `password` (overwrite only, no echo)
 
-### 6.3 安全策略
+### 6.3 Security Policy
 
-- 页面不会展示明文密码，只显示“已设置/未设置”。
-- 密码输入框保存后会清空。
-- 底层文件仍由 `save_account_config()` 写入。
+- The page never displays plaintext passwords; only shows "Set / Not Set".
+- The password input field is cleared after saving.
+- The underlying file is still written by `save_account_config()`.
 
-### 6.4 相关函数
+### 6.4 Related Functions
 
-在 `apex/gui.py`：
+In `apex/gui.py`:
 
 - `_load_account_state`
 - `_render_account_summary`
 - `_save_account_overwrite`
-- 回调：`_handle_account`
+- Callback: `_handle_account`
 
-在 `apex/account.py`：
+In `apex/account.py`:
 
 - `load_account_config`
 - `save_account_config`
 - `mask_sensitive_config`
 
-## 7. 关键回调清单（apex/gui.py）
+## 7. Key Callback Inventory (apex/gui.py)
 
-- `_sync_profile_defaults`：profile 切换时同步默认值与控件状态。
-- `_update_interaction_table`：动态增删行与 profile 切换重置。
-- `_generate_param_editor`：根据 UI 状态生成 `param.json` 文本。
-- `_handle_command`：处理 `Apply/Submit/Confirm/Advanced` 动作。
-- `_handle_structure_upload`：把结构文件上传到当前 `Workdir/confs/`。
-- `_handle_file_upload`：把普通文件上传到当前 `Workdir`。
-- `_handle_account`：处理 Account 刷新与覆盖保存。
-- `_update_manage_log`：更新 `apex.log` 展示。
+- `_sync_profile_defaults`: Syncs default values and control states when the profile is switched.
+- `_update_interaction_table`: Dynamic row add/remove and reset on profile switch.
+- `_generate_param_editor`: Generates `param.json` text from the current UI state.
+- `_handle_command`: Handles `Apply/Submit/Confirm/Advanced` actions.
+- `_handle_structure_upload`: Uploads structure files to the current `Workdir/confs/`.
+- `_handle_file_upload`: Uploads regular files to the current `Workdir`.
+- `_handle_account`: Handles Account refresh and overwrite save.
+- `_update_manage_log`: Updates the `apex.log` display.
 
-## 8. 扩展建议
+## 8. APEX GUI Major Fix
 
-1. 若 Submit 继续变复杂，建议把 `apex/gui.py` 拆分为：
+### 8.1 Critical Bug Fixes
+
+- **Fixed**: Submit no longer overwrites input parameters with templates.
+- **Fixed**: Selecting properties no longer overwrites already-entered parameters with templates
+
+### 8.2 New Features
+
+- **Workdir, file upload, and structure upload** added.
+- **Retrieve + Report**: Replaced blocking report with a new-port approach to open the report page (!).
+  - `apex report` now opens on port `8070` instead of blocking the GUI.
+- **Auto-retry on network disconnect** during retrieve to prevent workflow interruption.
+- **Workflow progress stats**: Shows how many confs completed and how many failed.
+- **Workflow "Last updated: xx time"** to confirm whether the query has stalled.
+- **Retrieve progress bar** added .
+- **Auto-query workflow progress** after entering a Workflow ID .
+- **Reset function improved**: Now resets all generated logs .
+- **Renamed `maximal` to `maxeval`** to align with LAMMPS parameters (!!).
+
+### 8.3 UX Updates
+
+- Updated web page text; removed suspected prompt leakage.
+- **Removed Apply button**: Its functionality was redundant with Submit (!).
+
+### 8.4 Unresolved Issues
+
+- When using `apex submit -s`, files cannot be passed from relaxation to properties calculation.
+- Calculation failure reasons are not properly output or debugged.
+
+## 9. Extension Notes
+
+1. If the Submit page continues to grow, consider splitting `apex/gui.py` into:
    - `apex/gui/layout.py`
    - `apex/gui/callbacks_submit.py`
    - `apex/gui/callbacks_account.py`
-2. 为每个回调增加最小单元测试，特别是：
-   - `properties` 过滤逻辑
-   - `apex.log` 重提确认逻辑
-   - Account 密码不回显逻辑
-3. 新增 profile 时，必须同步补齐 `default_config/<profile>/` 四个 param 子模板。
+2. Add minimal unit tests for each callback, especially:
+   - `properties` filtering logic
+   - `apex.log` resubmission confirmation logic
+   - Account password non-echo logic
+3. When adding a new profile, be sure to also add the four param sub-templates under `default_config/<profile>/`.
 
-## 9. 快速联调
+## 10. Quick Debug
 
 ```bash
 apex gui --no-browser
 ```
 
-默认地址：`http://127.0.0.1:8060/`
+Default address: `http://127.0.0.1:8060/`
 
-若改动了 GUI，建议至少执行：
+If you modify the GUI, it is recommended to at least run:
 
 ```bash
 python -m py_compile apex/gui.py tests/test_gui_submit_builder.py

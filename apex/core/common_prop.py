@@ -13,7 +13,7 @@ from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
 from apex.core.property.Decohesive import Decohesive
-from apex.core.property.FiniteTElastic import FiniteTElastic
+from apex.core.property.FiniteTelastic import FiniteTelastic
 from apex.core.property.FiniteTlatt import FiniteTlatt
 from apex.core.property.GammaSurface import GammaSurface
 from apex.core.property.Gruneisen import Gruneisen
@@ -58,13 +58,13 @@ def make_property_instance(parameters, inter_param):
         return Phonon(parameters, inter_param)
     elif prop_type == "decohesive":
         return Decohesive(parameters, inter_param)
-    elif prop_type in ["finitetlatt", "Lat_param_T"]:
-        if prop_type == "Lat_param_T":
+    elif prop_type in ["finite_t_latt", "finitetlatt", "Lat_param_T"]:
+        if prop_type in ["finitetlatt", "Lat_param_T"]:
             parameters = dict(parameters)
-            parameters["type"] = "finitetlatt"
+            parameters["type"] = "finite_t_latt"
         return FiniteTlatt(parameters, inter_param)
     elif prop_type == "finite_t_elastic":
-        return FiniteTElastic(parameters, inter_param)
+        return FiniteTelastic(parameters, inter_param)
     elif prop_type == "gruneisen":
         return Gruneisen(parameters, inter_param)
     elif prop_type in ["annealing", "Annealing"]:

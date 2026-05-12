@@ -40,16 +40,18 @@ def return_prop_class(prop_type: str):
         return PhononReport
     elif prop_type == 'decohesive':
         return DecohesiveReport
-    elif prop_type == 'finitetlatt':
+    elif prop_type == 'finite_t_latt':
         return FiniteTlattReport
     elif prop_type == 'finite_t_elastic':
-        return FiniteTElasticReport
+        return FiniteTelasticReport
 
 
 def return_prop_type(prop: str):
     try:
         if prop.startswith('gamma_surface'):
             return 'gamma_surface'
+        if prop.startswith('finite_t_latt'):
+            return 'finite_t_latt'
         if prop.startswith('finite_t_elastic'):
             return 'finite_t_elastic'
         prop_type = prop.split('_')[0]

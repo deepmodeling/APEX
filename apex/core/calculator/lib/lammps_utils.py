@@ -438,17 +438,6 @@ def make_lammps_elastic(
     return ret
 
 def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None):
-    """Build LAMMPS input for finite-T lattice parameter sampling.
-
-    This mirrors the TiAl workflow: equilibrate, then time-average box lengths.
-
-    - Uses variables defined in `variable_FiniteTlatt.in` for temperature and
-      averaging controls (N_every/N_repeat/N_freq/equi_step/ave_step/nx/ny/nz).
-    - Supports thermostat/ensemble selection via optional `cal_setting` keys:
-      thermostat: "nose_hoover" (default) | "langevin"
-      ensemble:   "isothermal" (default) | "adiabatic"
-      tdamp/pdamp: damping parameters; velocity_seed/dump_step optional.
-    """
     type_map_list = element_list(type_map)
     deepmd_version = param.get("deepmd_version", None)
     dump_step = 100
@@ -531,20 +520,20 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None
     ret += 'print "Final Length (box_x box_y box_z) = ${lx} ${ly} ${lz}"\n'
     return ret
 
-def make_lammps_FiniteTElastic(conf, type_map, interaction, param, task_dir="."):
+def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir="."):
     type_map_list = element_list(type_map)
-    metadata_path = os.path.join(task_dir, "FiniteTElastic.json")
+    metadata_path = os.path.join(task_dir, "FiniteTelastic.json")
     with open(metadata_path, "r") as fp:
         metadata = json.load(fp)
 
     role = metadata["role"]
     if role not in ["equi", "reference", "strained"]:
-        raise RuntimeError(f"unsupported FiniteTElastic role {role}")
+        raise RuntimeError(f"unsupported FiniteTelastic role {role}")
 
     def setup_from_data():
         text = ""
         text += "clear\n"
-        text += "include  variable_FiniteTElastic.in\n"
+        text += "include  variable_FiniteTelastic.in\n"
         text += "units 	metal\n"
         text += "dimension	3\n"
         text += "boundary	p p p\n"
@@ -560,7 +549,7 @@ def make_lammps_FiniteTElastic(conf, type_map, interaction, param, task_dir=".")
     def setup_from_restart():
         text = ""
         text += "clear\n"
-        text += "include  variable_FiniteTElastic.in\n"
+        text += "include  variable_FiniteTelastic.in\n"
         text += "units 	metal\n"
         text += "dimension	3\n"
         text += "boundary	p p p\n"
@@ -591,7 +580,7 @@ def make_lammps_FiniteTElastic(conf, type_map, interaction, param, task_dir=".")
     ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
     ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
     if role == "equi":
-        ret += "include  output_FiniteTElastic.in\n"
+        ret += "include  output_FiniteTelastic.in\n"
     ret += "fix             1 all npt temp ${temperature} ${temperature} ${tdamp} aniso 0.0 0.0 ${pdamp}\n"
     ret += "run             ${equi_step}\n"
     ret += "write_restart   ${equi_restart}\n"
@@ -601,10 +590,10 @@ def make_lammps_FiniteTElastic(conf, type_map, interaction, param, task_dir=".")
         ret += force_field_setup()
         ret += "change_box all triclinic\n"
         ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
-        ret += "include  deform_FiniteTElastic.in\n"
+        ret += "include  deform_FiniteTelastic.in\n"
         ret += "reset_timestep  0\n"
         ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
-        ret += "include  output_FiniteTElastic.in\n"
+        ret += "include  output_FiniteTelastic.in\n"
         ret += "fix             1 all nve\n"
         ret += "fix             2 all langevin ${temperature} ${temperature} ${tdamp} ${seed} zero yes\n"
         ret += "run             ${response_step}\n"

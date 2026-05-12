@@ -1,1 +1,1 @@
-from apex.core.property.FiniteTElastic import FiniteTElastic
+from apex.core.property.FiniteTelastic import FiniteTelastic

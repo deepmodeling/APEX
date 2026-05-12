@@ -36,7 +36,7 @@ APEX currently offers calculation methods for the following alloy properties:
 * Phonon spectra
 * Grüneisen parameters and thermal expansion
 * Finite-temperature lattice parameters (FiniteTlatt)
-* Finite-temperature Elastic Constant (FiniteTElastic)
+* Finite-temperature Elastic Constant (FiniteTelastic)
 
 ## What's Inside
 - [1. Installation](#1installation)

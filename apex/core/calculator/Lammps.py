@@ -85,7 +85,7 @@ def _eos_runtime_policy(default_policy):
 
 PROPERTY_LAMMPS_INPUT_RENDERERS = {
     "elastic": _render_elastic_input,
-    "finitetlatt": _render_finitetlatt_input,
+    "finite_t_latt": _render_finitetlatt_input,
     "gamma": _render_gamma_input,
     "gamma_surface": _render_gamma_input,
     "phonon": _render_phonon_input,
@@ -93,7 +93,7 @@ PROPERTY_LAMMPS_INPUT_RENDERERS = {
 
 PROPERTY_LAMMPS_FILE_MANIFESTS = {
     "eos": _eos_file_manifest,
-    "finitetlatt": _finitetlatt_file_manifest,
+    "finite_t_latt": _finitetlatt_file_manifest,
     "phonon": _phonon_file_manifest,
 }
 
@@ -409,7 +409,7 @@ class Lammps(Task):
                     cal_setting,
                 )
             elif cal_type == "finite_t_elastic":
-                fc = lammps_utils.make_lammps_FiniteTElastic(
+                fc = lammps_utils.make_lammps_FiniteTelastic(
                     "conf.lmp",
                     self.type_map,
                     self.inter_func,
@@ -668,7 +668,7 @@ class Lammps(Task):
 
     def forward_files(self, property_type="relaxation"):
         model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
-        if property_type == "finitetlatt":
+        if property_type == "finite_t_latt":
             return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
         elif property_type in ["annealing", "Annealing"]:
             return ["in.lammps", "variable_Annealing.in"] + model_files
@@ -676,10 +676,10 @@ class Lammps(Task):
             return [
                 "conf.lmp",
                 "in.lammps",
-                "variable_FiniteTElastic.in",
-                "deform_FiniteTElastic.in",
-                "output_FiniteTElastic.in",
-                "FiniteTElastic.json",
+                "variable_FiniteTelastic.in",
+                "deform_FiniteTelastic.in",
+                "output_FiniteTelastic.in",
+                "FiniteTelastic.json",
             ] + model_files
         elif self.inter_type in MULTI_MODELS_INTER_TYPE:
             return ["conf.lmp", "in.lammps"] + model_files
@@ -689,7 +689,7 @@ class Lammps(Task):
     def forward_common_files(self, property_type="relaxation"):
         model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
         if property_type not in ["eos"]:
-            if property_type == "finitetlatt":
+            if property_type == "finite_t_latt":
                 return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
             elif property_type in ["annealing", "Annealing"]:
                 return ["in.lammps", "variable_Annealing.in"] + model_files
@@ -717,7 +717,7 @@ class Lammps(Task):
                 "band.yaml",
                 "phonopy.yaml",
             ]
-        elif property_type == "finitetlatt":
+        elif property_type == "finite_t_latt":
             return ["log.lammps", "outlog"] + debug_files + ["dump.relax", "average_box.txt"]
         elif property_type in ["annealing", "Annealing"]:
             return ["log.lammps", "outlog"] + debug_files + ["dump.anneal_ramp", "dump.anneal_cool", "restart.*"]

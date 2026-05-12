@@ -10,8 +10,8 @@ from monty.serialization import loadfn
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
 
-from apex.core.property.FiniteTElastic import (
-    FiniteTElastic,
+from apex.core.property.FiniteTelastic import (
+    FiniteTelastic,
     _block_average,
     _compute_pair_delta,
     _derive_moduli_from_voigt_gpa,
@@ -22,12 +22,12 @@ from apex.core.property.FiniteTElastic import (
     normalize_strain_components,
 )
 from apex.reporter.DashReportApp import DashReportApp, return_prop_class, return_prop_type
-from apex.reporter.property_report import FiniteTElasticReport
+from apex.reporter.property_report import FiniteTelasticReport
 
 TEST_DIR = os.path.dirname(__file__)
 
 
-class TestFiniteTElasticHelpers(unittest.TestCase):
+class TestFiniteTelasticHelpers(unittest.TestCase):
     def test_component_normalization(self):
         self.assertEqual(normalize_strain_components(["xx", "yy", "xy"]), [0, 1, 5])
 
@@ -116,7 +116,7 @@ class TestFiniteTElasticHelpers(unittest.TestCase):
         self.assertGreater(poisson, 0.0)
 
 
-class TestFiniteTElasticProperty(unittest.TestCase):
+class TestFiniteTelasticProperty(unittest.TestCase):
     def setUp(self):
         self.equi_path = os.path.join(TEST_DIR, "confs/hcp-Ti/relaxation/relax_task")
         self.source_path = os.path.join(TEST_DIR, "equi/lammps")
@@ -141,29 +141,29 @@ class TestFiniteTElasticProperty(unittest.TestCase):
             shutil.rmtree(self.target_path)
 
     def test_make_confs_generates_equi_and_paired_tasks(self):
-        prop = FiniteTElastic(self.parameter, {"type": "meam_spline"})
+        prop = FiniteTelastic(self.parameter, {"type": "meam_spline"})
         shutil.copy(
             os.path.join(self.source_path, "hcp-Ti-CONTCAR"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
         task_list = prop.make_confs(self.target_path, self.equi_path)
         self.assertEqual(len(task_list), 9)
-        self.assertTrue(os.path.isfile(os.path.join(task_list[0], "FiniteTElastic.json")))
-        self.assertTrue(os.path.isfile(os.path.join(task_list[0], "variable_FiniteTElastic.in")))
-        self.assertTrue(os.path.isfile(os.path.join(task_list[1], "deform_FiniteTElastic.in")))
+        self.assertTrue(os.path.isfile(os.path.join(task_list[0], "FiniteTelastic.json")))
+        self.assertTrue(os.path.isfile(os.path.join(task_list[0], "variable_FiniteTelastic.in")))
+        self.assertTrue(os.path.isfile(os.path.join(task_list[1], "deform_FiniteTelastic.in")))
         self.assertFalse(os.path.exists(os.path.join(task_list[0], "POSCAR.tmp")))
-        response_meta = loadfn(os.path.join(task_list[1], "FiniteTElastic.json"))
+        response_meta = loadfn(os.path.join(task_list[1], "FiniteTelastic.json"))
         self.assertEqual(response_meta["restart_source"], "finite_t_elastic.equi.restart")
 
     def test_rejects_vasp(self):
         with self.assertRaises(TypeError):
-            FiniteTElastic({"type": "finite_t_elastic"}, {"type": "vasp"})
+            FiniteTelastic({"type": "finite_t_elastic"}, {"type": "vasp"})
 
 
-class TestFiniteTElasticReport(unittest.TestCase):
+class TestFiniteTelasticReport(unittest.TestCase):
     def test_reporter_registered_for_numbered_property_name(self):
         self.assertEqual(return_prop_type("finite_t_elastic_00"), "finite_t_elastic")
-        self.assertIs(return_prop_class("finite_t_elastic"), FiniteTElasticReport)
+        self.assertIs(return_prop_class("finite_t_elastic"), FiniteTelasticReport)
 
     def test_reporter_builds_graph_and_table(self):
         res_data = {
@@ -183,8 +183,8 @@ class TestFiniteTElasticReport(unittest.TestCase):
             }
         }
 
-        traces, layout = FiniteTElasticReport.plotly_graph(res_data, "test")
-        table, df = FiniteTElasticReport.dash_table(res_data)
+        traces, layout = FiniteTelasticReport.plotly_graph(res_data, "test")
+        table, df = FiniteTelasticReport.dash_table(res_data)
 
         self.assertGreaterEqual(len(traces), 3)
         self.assertEqual(layout.title.text, "Finite-Temperature Elastic Constants")

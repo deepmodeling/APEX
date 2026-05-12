@@ -22,7 +22,7 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 PROPERTY_TYPE = "finite_t_elastic"
-METADATA_FILE = "FiniteTElastic.json"
+METADATA_FILE = "FiniteTelastic.json"
 STRESS_FILE = "stress_timeseries.txt"
 EQUI_RESTART = "finite_t_elastic.equi.restart"
 
@@ -88,7 +88,7 @@ COMPONENT_ALIASES = {
 }
 
 
-class FiniteTElastic(Property):
+class FiniteTelastic(Property):
     """
     LAMMPS-only finite-temperature elastic constants from paired stress response.
 
@@ -100,7 +100,7 @@ class FiniteTElastic(Property):
 
     def __init__(self, parameter: Dict, inter_param: Dict | None = None):
         if inter_param is not None and inter_param.get("type") in ["vasp", "abacus"]:
-            raise TypeError("FiniteTElastic supports only LAMMPS interactions.")
+            raise TypeError("FiniteTelastic supports only LAMMPS interactions.")
 
         parameter.setdefault("type", PROPERTY_TYPE)
         parameter.setdefault("cal_setting", {})
@@ -108,7 +108,7 @@ class FiniteTElastic(Property):
             parameter["cal_setting"].setdefault(key, val)
 
         if parameter["cal_setting"].get("method") != "paired_langevin":
-            raise ValueError("FiniteTElastic currently supports only method='paired_langevin'.")
+            raise ValueError("FiniteTelastic currently supports only method='paired_langevin'.")
 
         parameter["cal_setting"]["strain_components"] = normalize_strain_components(
             parameter["cal_setting"]["strain_components"]
@@ -127,7 +127,7 @@ class FiniteTElastic(Property):
         os.makedirs(path_to_work, exist_ok=True)
 
         if self.inter_param["type"] in ["vasp", "abacus"]:
-            raise TypeError("FiniteTElastic only supports LAMMPS calculation.")
+            raise TypeError("FiniteTelastic only supports LAMMPS calculation.")
 
         if refine:
             return self._make_refine(path_to_work)
@@ -295,9 +295,9 @@ class FiniteTElastic(Property):
     def _make_refine(self, path_to_work: str) -> List[str]:
         if "init_from_suffix" not in self.parameter or "output_suffix" not in self.parameter:
             raise NotImplementedError(
-                "FiniteTElastic refine requires init_from_suffix and output_suffix."
+                "FiniteTelastic refine requires init_from_suffix and output_suffix."
             )
-        logging.info("FiniteTElastic refine starts")
+        logging.info("FiniteTelastic refine starts")
         task_list = make_refine(
             self.parameter["init_from_suffix"],
             self.parameter["output_suffix"],
@@ -314,9 +314,9 @@ class FiniteTElastic(Property):
             out_task = os.path.join(path_to_work, task_name)
             for fname in [
                 METADATA_FILE,
-                "variable_FiniteTElastic.in",
-                "deform_FiniteTElastic.in",
-                "output_FiniteTElastic.in",
+                "variable_FiniteTelastic.in",
+                "deform_FiniteTelastic.in",
+                "output_FiniteTelastic.in",
             ]:
                 src = os.path.join(init_task, fname)
                 dst = os.path.join(out_task, fname)
@@ -348,9 +348,9 @@ class FiniteTElastic(Property):
             "in.lammps",
             "STRU",
             METADATA_FILE,
-            "variable_FiniteTElastic.in",
-            "deform_FiniteTElastic.in",
-            "output_FiniteTElastic.in",
+            "variable_FiniteTelastic.in",
+            "deform_FiniteTelastic.in",
+            "output_FiniteTelastic.in",
         ]:
             path = os.path.join(task_dir, fname)
             if os.path.exists(path) or os.path.islink(path):
@@ -367,11 +367,11 @@ class FiniteTElastic(Property):
             restart_source=restart_source,
         )
         dumpfn(metadata, os.path.join(task_dir, METADATA_FILE), indent=4)
-        with open(os.path.join(task_dir, "variable_FiniteTElastic.in"), "w") as fp:
+        with open(os.path.join(task_dir, "variable_FiniteTelastic.in"), "w") as fp:
             fp.write(self._variable(metadata))
-        with open(os.path.join(task_dir, "deform_FiniteTElastic.in"), "w") as fp:
+        with open(os.path.join(task_dir, "deform_FiniteTelastic.in"), "w") as fp:
             fp.write(_deform_include(strain_component, strain_value))
-        with open(os.path.join(task_dir, "output_FiniteTElastic.in"), "w") as fp:
+        with open(os.path.join(task_dir, "output_FiniteTelastic.in"), "w") as fp:
             fp.write(_output_include())
 
     def _metadata(
@@ -409,7 +409,7 @@ class FiniteTElastic(Property):
     def _variable(self, metadata: Dict) -> str:
         restart_source = metadata["restart_source"] or EQUI_RESTART
         return (
-            "# variable_FiniteTElastic.in\n"
+            "# variable_FiniteTelastic.in\n"
             f"variable role string {metadata['role']}\n"
             f"variable temperature equal {metadata['temperature']:.8g}\n"
             f"variable nx equal {self.supercell_size[0]}\n"
@@ -450,7 +450,7 @@ class FiniteTElastic(Property):
                 raise RuntimeError(f"missing pair_id in {record['task_dir']}")
             pairs.setdefault(pair_id, {})
             if role not in ["reference", "strained"]:
-                raise RuntimeError(f"invalid FiniteTElastic role '{role}' in {record['task_dir']}")
+                raise RuntimeError(f"invalid FiniteTelastic role '{role}' in {record['task_dir']}")
             if role in pairs[pair_id]:
                 raise RuntimeError(f"duplicate {role} task for pair_id {pair_id}")
             pairs[pair_id][role] = record
@@ -618,7 +618,7 @@ def _derive_moduli_from_voigt_gpa(c_voigt_gpa):
 
 
 def _deform_include(strain_component: int | None, strain_value: float) -> str:
-    ret = "# deform_FiniteTElastic.in\n"
+    ret = "# deform_FiniteTelastic.in\n"
     ret += "# Shear tilt uses engineering shear gamma; fitting uses Voigt shear gamma.\n"
     if strain_component is None or abs(float(strain_value)) == 0.0:
         ret += "# reference/equilibration task: no strain deformation\n"
@@ -648,7 +648,7 @@ def _deform_include(strain_component: int | None, strain_value: float) -> str:
 
 def _output_include() -> str:
     return (
-        "# output_FiniteTElastic.in\n"
+        "# output_FiniteTelastic.in\n"
         "variable out_pxx equal pxx\n"
         "variable out_pyy equal pyy\n"
         "variable out_pzz equal pzz\n"
