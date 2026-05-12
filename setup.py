@@ -34,7 +34,7 @@ setuptools.setup(
         "License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)",
         "Operating System :: OS Independent",
     ],
-    python_requires='>=3.12,<3.13',
+    python_requires='>=3.10,<3.13',
     entry_points={'console_scripts': [
          'apex = apex.__main__:main',
      ]}
