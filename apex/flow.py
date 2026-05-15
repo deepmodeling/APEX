@@ -567,6 +567,9 @@ class FlowGenerator:
         relaxations independently and exposes their artifacts to downstream
         property tasks without a global barrier.
         """
+        if relax_parameter.get("relaxation", {}).get("req_calc", True) is False:
+            return [], []
+
         confs = relax_parameter["structures"]
         conf_dirs = []
         for conf in confs:

@@ -528,6 +528,7 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
       "type_map": {"Mo": 0}
     },
     "relaxation": {
+      "req_calc": true,
       "cal_setting": {
         "etol": 0,
         "ftol": 1e-10,
@@ -603,6 +604,12 @@ The JSON schema inherits from `dpgen.autotest`. Below are example snippets for e
     ]
   }
   ```
+
+Relaxation selection behavior:
+- If `relaxation.req_calc` is omitted, relaxation is calculated by default.
+- In a joint workflow, set `"relaxation": {"req_calc": false}` to skip relaxation and submit properties from each structure directory's `POSCAR`.
+- When relaxation is skipped, APEX exposes that `POSCAR` as the equilibrium structure consumed by property setup. 
+- elastic/vacancy/interstitial/surface/gammaline/gamma_surface require relaxation step
 
 Property selection behavior:
 - If a property block is not present in `properties`, it is not calculated.

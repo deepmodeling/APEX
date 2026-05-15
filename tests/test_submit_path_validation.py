@@ -207,3 +207,69 @@ class TestSubmitPathValidation(unittest.TestCase):
                     flow_type="relax",
                     exclude_upload_files=[],
                 )
+
+    def test_pack_joint_stages_poscar_when_relaxation_req_calc_false(self):
+        with tempfile.TemporaryDirectory() as work_dir, \
+                tempfile.TemporaryDirectory() as upload_dir:
+            conf_dir = os.path.join(work_dir, "confs", "std-001")
+            os.makedirs(conf_dir, exist_ok=True)
+            with open(os.path.join(conf_dir, "POSCAR"), "w", encoding="utf-8") as fp:
+                fp.write("raw-poscar\n")
+
+            relax_param = {
+                "structures": ["confs/std-*"],
+                "interaction": {"type": "lammps"},
+                "relaxation": {"req_calc": False},
+            }
+            prop_param = {
+                "structures": ["confs/std-*"],
+                "interaction": {"type": "lammps"},
+                "properties": [{"type": "eos", "req_calc": True}],
+            }
+
+            pack_upload_dir(
+                work_dir=work_dir,
+                upload_dir=upload_dir,
+                relax_param=relax_param,
+                prop_param=prop_param,
+                flow_type="joint",
+                exclude_upload_files=[],
+            )
+
+            staged_contcar = os.path.join(
+                upload_dir,
+                "confs",
+                "std-001",
+                "relaxation",
+                "relax_task",
+                "CONTCAR",
+            )
+            self.assertTrue(os.path.isfile(staged_contcar))
+            with open(staged_contcar, "r", encoding="utf-8") as fp:
+                self.assertEqual(fp.read(), "raw-poscar\n")
+            self.assertEqual(prop_param["pre_relaxed_structures"], ["confs/std-001"])
+
+    def test_pack_joint_requires_poscar_when_relaxation_req_calc_false(self):
+        with tempfile.TemporaryDirectory() as work_dir, \
+                tempfile.TemporaryDirectory() as upload_dir:
+            os.makedirs(os.path.join(work_dir, "confs", "std-001"), exist_ok=True)
+            relax_param = {
+                "structures": ["confs/std-*"],
+                "interaction": {"type": "lammps"},
+                "relaxation": {"req_calc": False},
+            }
+            prop_param = {
+                "structures": ["confs/std-*"],
+                "interaction": {"type": "lammps"},
+                "properties": [{"type": "eos", "req_calc": True}],
+            }
+
+            with self.assertRaisesRegex(RuntimeError, "requires POSCAR"):
+                pack_upload_dir(
+                    work_dir=work_dir,
+                    upload_dir=upload_dir,
+                    relax_param=relax_param,
+                    prop_param=prop_param,
+                    flow_type="joint",
+                    exclude_upload_files=[],
+                )

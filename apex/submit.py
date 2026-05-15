@@ -158,6 +158,26 @@ def _glob_structures_in_work_dir(work_dir: os.PathLike, pattern: str) -> List[st
     return sorted(set(matches))
 
 
+def _relaxation_required(relax_param: dict | None) -> bool:
+    if not relax_param:
+        return True
+    relaxation = relax_param.get("relaxation", {})
+    return relaxation.get("req_calc", True) is not False
+
+
+def _stage_unrelaxed_structure_as_equilibrium(conf_dir: str, build_conf_path: str) -> None:
+    """Expose a POSCAR as the equilibrium structure expected by property code."""
+    source_poscar = os.path.abspath(os.path.join(conf_dir, "POSCAR"))
+    if not os.path.isfile(source_poscar):
+        raise RuntimeError(
+            "relaxation.req_calc=false requires POSCAR in each structure directory: "
+            f"{source_poscar}"
+        )
+    relax_task_dir = os.path.join(build_conf_path, "relaxation", "relax_task")
+    os.makedirs(relax_task_dir, exist_ok=True)
+    shutil.copy(source_poscar, os.path.join(relax_task_dir, "CONTCAR"))
+
+
 def pack_upload_dir(
         work_dir: os.PathLike,
         upload_dir: os.PathLike,
@@ -267,11 +287,17 @@ def pack_upload_dir(
     
     if flow_type == 'joint' and relax_param and prop_param:
         # Split finished vs pending relaxations so we can skip reruns while still running properties
+        req_relax = _relaxation_required(relax_param)
         rerun_finished = relax_param.get("interaction", {}).get("rerun_finished", True)
         skip_finished_properties = []
         finished_relax = []
         pending_relax = conf_dirs
-        if rerun_finished is False:
+        if not req_relax:
+            pending_relax = []
+            finished_relax = conf_dirs
+            relax_param["skip_finished_structures"] = finished_relax
+            prop_param["pre_relaxed_structures"] = finished_relax
+        elif rerun_finished is False:
             pending_relax = []
             for c in conf_dirs:
                 if relaxation_finished(c):
@@ -355,7 +381,13 @@ def pack_upload_dir(
         if flow_type in ['props', 'joint']:
             copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
             target_relaxation_path = os.path.join(build_conf_path, "relaxation")
-            if os.path.isdir(copy_relaxation_path):
+            if flow_type == 'joint' and relax_param and not _relaxation_required(relax_param):
+                try:
+                    _stage_unrelaxed_structure_as_equilibrium(ii, build_conf_path)
+                except Exception:
+                    os.chdir(cwd)
+                    raise
+            elif os.path.isdir(copy_relaxation_path):
                 shutil.copytree(copy_relaxation_path, target_relaxation_path)
             else:
                 logging.warning(f"Skip copying relaxation for {ii}: {copy_relaxation_path} not found.")
