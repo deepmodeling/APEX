@@ -697,15 +697,6 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     - ensemble: for nose_hoover: npt|nvt; for langevin: nph|nve (barostat on/off)
     """
 
-    # Power-user override: if a user template is provided, return its content.
-    if cal_setting is not None:
-        template_in = cal_setting.get("template_in")
-        if template_in:
-            try:
-                with open(template_in, "r") as fp:
-                    return fp.read()
-            except Exception:
-                pass
     type_map_list = element_list(type_map)
     dump_step = int(cal_setting.get("dump_step", 1000))
     tdamp = cal_setting.get("tdamp", 100)
