@@ -72,7 +72,8 @@ def make_equi(confs, inter_param, relax_param):
             print(f"Skip generating relaxation tasks for {ii} (results already exist, rerun_finished=False)")
             continue
 
-        if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
+        has_abacus_stru = inter_param["type"] == "abacus" and os.path.exists(os.path.join(ii, "STRU"))
+        if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")) and not has_abacus_stru:
             get_structure(crys_type).to("POSCAR", os.path.join(ii, "POSCAR"))
             if inter_param["type"] == "abacus" and not os.path.exists("STRU"):
                 abacus_utils.poscar2stru(
