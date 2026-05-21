@@ -7,12 +7,14 @@ import shutil
 import subprocess
 from typing import Dict, List
 
+import dpdata
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 import seekpath
 import yaml
 
 from apex.core.calculator.Lammps import Lammps
+from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import lammps_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.calculator.calculator import LAMMPS_INTER_TYPE
@@ -130,6 +132,9 @@ class Gruneisen(Property):
         if self.reprod:
             raise NotImplementedError("gruneisen reproduce mode is not implemented yet")
 
+        if self.inter_param["type"] == "abacus":
+            return self._make_abacus_confs(path_to_work, path_to_equi)
+
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
             logging.debug("%s already exists" % path_to_work)
@@ -151,25 +156,155 @@ class Gruneisen(Property):
 
         try:
             dumpfn(band_payload["band_path"], os.path.join(path_to_work, "band_path.json"), indent=4)
-            for task_id, strain in enumerate(self.volume_strains):
-                output_task = os.path.join(path_to_work, f"task.{task_id:06d}")
-                os.makedirs(output_task, exist_ok=True)
-                os.chdir(output_task)
-                for file_name in [
-                    "POSCAR.orig",
-                    "POSCAR",
-                    "POSCAR-unitcell",
-                    "SPOSCAR",
-                    "phonopy_disp.yaml",
-                    "volume.json",
-                    "band.conf",
-                ]:
-                    if os.path.exists(file_name):
-                        os.remove(file_name)
+            if self.inter_param["type"] == "vasp" and self.approach == "displacement":
+                manifest = {"volume_points": []}
+                task_counter = 0
+                for volume_index, strain in enumerate(self.volume_strains):
+                    helper_dir = os.path.join(path_to_work, f"volume.{volume_index:06d}")
+                    os.makedirs(helper_dir, exist_ok=True)
+                    os.chdir(helper_dir)
+                    for file_name in [
+                        "POSCAR.orig",
+                        "POSCAR",
+                        "POSCAR-unitcell",
+                        "SPOSCAR",
+                        "phonopy_disp.yaml",
+                        "volume.json",
+                        "band.conf",
+                    ]:
+                        if os.path.exists(file_name):
+                            os.remove(file_name)
 
-                os.symlink(os.path.relpath(equi_contcar), "POSCAR.orig")
+                    os.symlink(os.path.relpath(equi_contcar, helper_dir), "POSCAR.orig")
+                    scale = (1.0 + float(strain)) ** (1.0 / 3.0)
+                    vasp_utils.poscar_scale("POSCAR.orig", "POSCAR", scale)
+                    scaled_volume = vasp_utils.poscar_vol("POSCAR")
+                    volume_data = {
+                        "strain": float(strain),
+                        "scale": scale,
+                        "volume": scaled_volume,
+                        "volume_per_atom": scaled_volume / natoms,
+                        "reference_volume": base_volume,
+                        "reference_volume_per_atom": base_volume / natoms,
+                    }
+                    dumpfn(volume_data, "volume.json", indent=4)
+                    with open("band.conf", "w") as fp:
+                        fp.write(band_payload["band_conf"])
+                    self._prepare_vasp_phonon_task()
+
+                    reference_task = os.path.join(path_to_work, f"task.{task_counter:06d}")
+                    os.makedirs(reference_task, exist_ok=True)
+                    self._create_vasp_displacement_reference_task(reference_task, helper_dir, volume_data)
+                    task_list.append(reference_task)
+                    task_counter += 1
+
+                    displacement_tasks = []
+                    for displacement_index, poscar_name in enumerate(
+                        sorted(
+                            path
+                            for path in glob.glob(os.path.join(helper_dir, "POSCAR-*"))
+                            if os.path.basename(path)[7:].isdigit()
+                        )
+                    ):
+                        displacement_task = os.path.join(path_to_work, f"task.{task_counter:06d}")
+                        os.makedirs(displacement_task, exist_ok=True)
+                        self._create_vasp_displacement_task(
+                            displacement_task, helper_dir, poscar_name, volume_data, displacement_index
+                        )
+                        task_list.append(displacement_task)
+                        displacement_tasks.append(os.path.basename(displacement_task))
+                        task_counter += 1
+
+                    volume_points.append(volume_data)
+                    manifest["volume_points"].append(
+                        {
+                            "volume_index": volume_index,
+                            "helper_dir": os.path.basename(helper_dir),
+                            "reference_task": os.path.basename(reference_task),
+                            "displacement_tasks": displacement_tasks,
+                            "strain": float(strain),
+                        }
+                    )
+            else:
+                for task_id, strain in enumerate(self.volume_strains):
+                    output_task = os.path.join(path_to_work, f"task.{task_id:06d}")
+                    os.makedirs(output_task, exist_ok=True)
+                    os.chdir(output_task)
+                    for file_name in [
+                        "POSCAR.orig",
+                        "POSCAR",
+                        "POSCAR-unitcell",
+                        "SPOSCAR",
+                        "phonopy_disp.yaml",
+                        "volume.json",
+                        "band.conf",
+                    ]:
+                        if os.path.exists(file_name):
+                            os.remove(file_name)
+
+                    os.symlink(os.path.relpath(equi_contcar), "POSCAR.orig")
+                    scale = (1.0 + float(strain)) ** (1.0 / 3.0)
+                    vasp_utils.poscar_scale("POSCAR.orig", "POSCAR", scale)
+                    scaled_volume = vasp_utils.poscar_vol("POSCAR")
+                    volume_data = {
+                        "strain": float(strain),
+                        "scale": scale,
+                        "volume": scaled_volume,
+                        "volume_per_atom": scaled_volume / natoms,
+                        "reference_volume": base_volume,
+                        "reference_volume_per_atom": base_volume / natoms,
+                    }
+                    dumpfn(volume_data, "volume.json", indent=4)
+                    with open("band.conf", "w") as fp:
+                        fp.write(band_payload["band_conf"])
+                    if self.inter_param["type"] == "vasp":
+                        self._prepare_vasp_phonon_task()
+                    volume_points.append(volume_data)
+                    task_list.append(output_task)
+
+            os.chdir(path_to_work)
+            dumpfn(volume_points, volume_path, indent=4)
+            if self.inter_param["type"] == "vasp" and self.approach == "displacement":
+                dumpfn(manifest, os.path.join(path_to_work, "vasp_gruneisen_tasks.json"), indent=4)
+        finally:
+            os.chdir(cwd)
+        return task_list
+
+    def _make_abacus_confs(self, path_to_work: str, path_to_equi: str) -> List[str]:
+        path_to_work = os.path.abspath(path_to_work)
+        os.makedirs(path_to_work, exist_ok=True)
+        path_to_equi = os.path.abspath(path_to_equi)
+
+        equi_stru_rel = abacus_utils.final_stru(path_to_equi)
+        equi_stru = os.path.join(path_to_equi, equi_stru_rel)
+        if not os.path.isfile(equi_stru):
+            raise RuntimeError("please do relaxation first")
+
+        task_list: List[str] = []
+        volume_points: List[dict] = []
+        manifest = {"volume_points": []}
+        cwd = os.getcwd()
+        equi_poscar = os.path.join(path_to_work, "_equi_poscar.tmp")
+        task_counter = 0
+
+        try:
+            dpdata.System(equi_stru, fmt="stru").to("vasp/poscar", equi_poscar)
+            natoms = vasp_utils.poscar_natoms(equi_poscar)
+            base_volume = vasp_utils.poscar_vol(equi_poscar)
+            band_payload = self._build_band_payload(equi_poscar)
+            dumpfn(band_payload["band_path"], os.path.join(path_to_work, "band_path.json"), indent=4)
+
+            for volume_index, strain in enumerate(self.volume_strains):
+                helper_dir = os.path.join(path_to_work, f"volume.{volume_index:06d}")
+                os.makedirs(helper_dir, exist_ok=True)
+                os.chdir(helper_dir)
+
                 scale = (1.0 + float(strain)) ** (1.0 / 3.0)
-                vasp_utils.poscar_scale("POSCAR.orig", "POSCAR", scale)
+                abacus_utils.stru_scale(equi_stru, "STRU", scale)
+                abacus_utils.append_orb_file_to_stru(
+                    "STRU", self.inter_param.get("orb_files"), prefix="pp_orb"
+                )
+                dpdata.System("STRU", fmt="stru").to("vasp/poscar", "POSCAR")
                 scaled_volume = vasp_utils.poscar_vol("POSCAR")
                 volume_data = {
                     "strain": float(strain),
@@ -182,16 +317,144 @@ class Gruneisen(Property):
                 dumpfn(volume_data, "volume.json", indent=4)
                 with open("band.conf", "w") as fp:
                     fp.write(band_payload["band_conf"])
-                if self.inter_param["type"] == "vasp":
-                    self._prepare_vasp_phonon_task()
+                with open("setting.conf", "w") as fp:
+                    fp.write(
+                        "DIM = %s %s %s\n"
+                        % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+                    )
+                    fp.write(
+                        "ATOM_NAME =%s\n"
+                        % "".join(f" {name}" for name in vasp_utils.get_poscar_types("POSCAR"))
+                    )
+                    if self.PRIMITIVE_AXES:
+                        fp.write(f"PRIMITIVE_AXES = {self.PRIMITIVE_AXES}\n")
+                subprocess.check_call("phonopy setting.conf --abacus -d", shell=True)
+
+                displaced_stru_files = sorted(
+                    os.path.basename(path)
+                    for path in glob.glob(os.path.join(helper_dir, "STRU-*"))
+                )
+                if not displaced_stru_files:
+                    raise FileNotFoundError(f"no displaced STRU files created in {helper_dir}")
+
+                reference_task = os.path.join(path_to_work, f"task.{task_counter:06d}")
+                self._create_abacus_gruneisen_task(
+                    reference_task,
+                    os.path.join(helper_dir, "STRU"),
+                    volume_data,
+                    volume_index,
+                    role="reference",
+                )
+                task_list.append(reference_task)
+                task_counter += 1
+
+                displacement_tasks = []
+                for displacement_index, stru_name in enumerate(displaced_stru_files):
+                    displacement_task = os.path.join(path_to_work, f"task.{task_counter:06d}")
+                    self._create_abacus_gruneisen_task(
+                        displacement_task,
+                        os.path.join(helper_dir, stru_name),
+                        volume_data,
+                        volume_index,
+                        role="displacement",
+                        displacement_index=displacement_index,
+                    )
+                    task_list.append(displacement_task)
+                    displacement_tasks.append(os.path.basename(displacement_task))
+                    task_counter += 1
+
                 volume_points.append(volume_data)
-                task_list.append(output_task)
+                manifest["volume_points"].append(
+                    {
+                        "volume_index": volume_index,
+                        "helper_dir": os.path.basename(helper_dir),
+                        "reference_task": os.path.basename(reference_task),
+                        "displacement_tasks": displacement_tasks,
+                        "strain": float(strain),
+                    }
+                )
 
             os.chdir(path_to_work)
-            dumpfn(volume_points, volume_path, indent=4)
+            dumpfn(volume_points, os.path.join(path_to_work, "volume_points.json"), indent=4)
+            dumpfn(
+                manifest,
+                os.path.join(path_to_work, "abacus_gruneisen_tasks.json"),
+                indent=4,
+            )
         finally:
             os.chdir(cwd)
+            if os.path.exists(equi_poscar):
+                os.remove(equi_poscar)
+
         return task_list
+
+    def _create_abacus_gruneisen_task(
+        self,
+        task_path: str,
+        stru_source: str,
+        volume_data: dict,
+        volume_index: int,
+        role: str,
+        displacement_index: int | None = None,
+    ) -> None:
+        os.makedirs(task_path, exist_ok=True)
+        stru_target = os.path.join(task_path, "STRU")
+        if os.path.lexists(stru_target):
+            os.remove(stru_target)
+        os.symlink(os.path.relpath(stru_source, task_path), stru_target)
+        dpdata.System(os.path.realpath(stru_target), fmt="stru").to(
+            "vasp/poscar", os.path.join(task_path, "POSCAR")
+        )
+        dumpfn(
+            {
+                "role": role,
+                "volume_index": volume_index,
+                "displacement_index": displacement_index,
+                "strain": float(volume_data["strain"]),
+            },
+            os.path.join(task_path, "gruneisen_task.json"),
+            indent=4,
+        )
+
+    def _create_vasp_displacement_reference_task(
+        self, task_path: str, helper_dir: str, volume_data: dict
+    ) -> None:
+        for file_name in ["POSCAR", "POSCAR-unitcell", "volume.json", "gruneisen_task.json"]:
+            target = os.path.join(task_path, file_name)
+            if os.path.lexists(target):
+                os.remove(target)
+        os.symlink(os.path.relpath(os.path.join(helper_dir, "POSCAR"), task_path), os.path.join(task_path, "POSCAR"))
+        os.symlink(
+            os.path.relpath(os.path.join(helper_dir, "POSCAR-unitcell"), task_path),
+            os.path.join(task_path, "POSCAR-unitcell"),
+        )
+        dumpfn(
+            {"role": "reference", "strain": float(volume_data["strain"])},
+            os.path.join(task_path, "gruneisen_task.json"),
+            indent=4,
+        )
+
+    def _create_vasp_displacement_task(
+        self, task_path: str, helper_dir: str, poscar_source: str, volume_data: dict, displacement_index: int
+    ) -> None:
+        for file_name in ["POSCAR", "POSCAR-unitcell", "gruneisen_task.json"]:
+            target = os.path.join(task_path, file_name)
+            if os.path.lexists(target):
+                os.remove(target)
+        os.symlink(os.path.relpath(poscar_source, task_path), os.path.join(task_path, "POSCAR"))
+        os.symlink(
+            os.path.relpath(os.path.join(helper_dir, "POSCAR-unitcell"), task_path),
+            os.path.join(task_path, "POSCAR-unitcell"),
+        )
+        dumpfn(
+            {
+                "role": "displacement",
+                "displacement_index": displacement_index,
+                "strain": float(volume_data["strain"]),
+            },
+            os.path.join(task_path, "gruneisen_task.json"),
+            indent=4,
+        )
 
     def post_process(self, task_list):
         cwd = os.getcwd()
@@ -217,9 +480,6 @@ class Gruneisen(Property):
         os.chdir(cwd)
 
     def _prepare_vasp_phonon_task(self) -> None:
-        if self.approach != "linear":
-            raise NotImplementedError("VASP gruneisen currently supports approach='linear' only")
-
         if self.primitive:
             subprocess.check_call("phonopy --symmetry", shell=True)
             if not os.path.isfile("PPOSCAR"):
@@ -234,10 +494,19 @@ class Gruneisen(Property):
             % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
             shell=True,
         )
-        if not os.path.isfile("SPOSCAR"):
-            raise FileNotFoundError("SPOSCAR was not created by phonopy")
-        os.remove("POSCAR")
-        os.symlink("SPOSCAR", "POSCAR")
+        if self.approach == "linear":
+            if not os.path.isfile("SPOSCAR"):
+                raise FileNotFoundError("SPOSCAR was not created by phonopy")
+            os.remove("POSCAR")
+            os.symlink("SPOSCAR", "POSCAR")
+        elif self.approach == "displacement":
+            displaced_poscars = sorted(glob.glob("POSCAR-*"))
+            if not displaced_poscars:
+                raise FileNotFoundError("POSCAR-* displacement files were not created by phonopy")
+        else:
+            raise NotImplementedError(
+                f"VASP gruneisen currently does not support approach={self.approach!r}"
+            )
 
     def task_type(self):
         return self.parameter["type"]
@@ -252,12 +521,17 @@ class Gruneisen(Property):
         cwd = os.getcwd()
 
         try:
-            for task_dir in all_tasks:
-                self._ensure_mesh_yaml(task_dir)
+            if self.inter_param["type"] == "abacus":
+                task_infos = self._build_abacus_task_infos(work_path, all_res)
+            elif self.inter_param["type"] == "vasp" and self.approach == "displacement":
+                task_infos = self._build_vasp_displacement_task_infos(work_path, all_res)
+            else:
+                for task_dir in all_tasks:
+                    self._ensure_mesh_yaml(task_dir)
 
-            task_infos = [self._load_task_info(task_dir) for task_dir in all_tasks]
-            if self.alpha_mode == "full":
-                self._attach_task_energies(task_infos, all_res)
+                task_infos = [self._load_task_info(task_dir) for task_dir in all_tasks]
+                if self.alpha_mode == "full":
+                    self._attach_task_energies(task_infos, all_res)
             ref_info, minus_info, plus_info = self._select_reference_triplet(task_infos)
             sign_only = self._compute_sign_only(ref_info, minus_info, plus_info)
             bulk_modulus = None
@@ -361,7 +635,11 @@ class Gruneisen(Property):
             os.chdir(cwd)
 
     def _build_band_payload(self, poscar_path: str) -> dict:
-        structure = Structure.from_file(poscar_path)
+        try:
+            structure = Structure.from_file(poscar_path)
+        except ValueError:
+            with open(poscar_path, "r") as fp:
+                structure = Structure.from_str(fp.read(), fmt="poscar")
         if self.BAND:
             band_path = Phonon.phonopy_band_string_2_band_list(self.BAND, self.BAND_LABELS)
             band_string = self.BAND
@@ -515,6 +793,206 @@ if __name__ == "__main__":
         subprocess.check_call(command, shell=True)
         if not os.path.isfile(mesh_path):
             raise FileNotFoundError(f"mesh.yaml was not created in {task_dir}")
+
+    def _build_vasp_displacement_task_infos(self, work_path: str, all_res: List[str]) -> List[dict]:
+        manifest_path = os.path.join(work_path, "vasp_gruneisen_tasks.json")
+        if not os.path.isfile(manifest_path):
+            raise FileNotFoundError(f"vasp gruneisen manifest not found at {manifest_path}")
+        manifest = loadfn(manifest_path)
+        task_result_map = {
+            os.path.basename(os.path.dirname(result_path)): result_path for result_path in all_res
+        }
+        task_infos = []
+        for entry in manifest["volume_points"]:
+            helper_dir = os.path.join(work_path, entry["helper_dir"])
+            self._ensure_vasp_volume_outputs(work_path, helper_dir, entry["displacement_tasks"])
+            info = self._load_task_info(helper_dir)
+            info["reference_task_name"] = entry["reference_task"]
+            task_infos.append(info)
+        if self.alpha_mode == "full":
+            for info in task_infos:
+                reference_task = info["reference_task_name"]
+                result_path = task_result_map.get(reference_task)
+                if not result_path:
+                    raise ValueError(
+                        f"full gruneisen requires result_task.json for reference task {reference_task}"
+                    )
+                task_result = loadfn(result_path)
+                energy = self._last_result_value(task_result, "energies")
+                atom_count = self._result_atom_count(task_result)
+                if atom_count <= 0:
+                    raise ValueError(f"invalid atom count in {result_path}")
+                info["energy"] = energy
+                info["atom_count"] = atom_count
+                info["energy_per_atom"] = energy / atom_count
+                if info["phonon_cell_natoms"]:
+                    info["fit_volume_per_atom"] = info["phonon_cell_volume"] / info["phonon_cell_natoms"]
+        return task_infos
+
+    def _ensure_vasp_volume_outputs(
+        self, work_path: str, helper_dir: str, displacement_tasks: List[str]
+    ) -> None:
+        force_sets = os.path.join(helper_dir, "FORCE_SETS")
+        if not os.path.isfile(force_sets):
+            vaspruns = [
+                os.path.join(work_path, task_name, "vasprun.xml")
+                for task_name in displacement_tasks
+            ]
+            missing = [path for path in vaspruns if not os.path.isfile(path)]
+            if missing:
+                raise FileNotFoundError(
+                    f"VASP displacement vasprun.xml files not found for {helper_dir}: {missing}"
+                )
+            cwd = os.getcwd()
+            try:
+                os.chdir(helper_dir)
+                vasprun_args = " ".join(os.path.relpath(path, helper_dir) for path in vaspruns)
+                subprocess.check_call(f"phonopy -f {vasprun_args}", shell=True)
+            finally:
+                os.chdir(cwd)
+        if not os.path.isfile(force_sets):
+            raise FileNotFoundError(f"FORCE_SETS was not created in {helper_dir}")
+        force_constants = os.path.join(helper_dir, "FORCE_CONSTANTS")
+        if not os.path.isfile(force_constants):
+            cwd = os.getcwd()
+            try:
+                os.chdir(helper_dir)
+                subprocess.check_call(
+                    'phonopy --dim="%s %s %s" -c POSCAR-unitcell --writefc'
+                    % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+                    shell=True,
+                )
+            finally:
+                os.chdir(cwd)
+        if not os.path.isfile(force_constants):
+            raise FileNotFoundError(f"FORCE_CONSTANTS was not created in {helper_dir}")
+        if not os.path.isfile(os.path.join(helper_dir, "mesh.yaml")):
+            cwd = os.getcwd()
+            try:
+                os.chdir(helper_dir)
+                subprocess.check_call(
+                    'phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf'
+                    % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+                    shell=True,
+                )
+                self._write_band_dat()
+            finally:
+                os.chdir(cwd)
+        if not os.path.isfile(os.path.join(helper_dir, "mesh.yaml")):
+            raise FileNotFoundError(f"mesh.yaml was not created in {helper_dir}")
+
+    def _build_abacus_task_infos(self, work_path: str, all_res: List[str]) -> List[dict]:
+        manifest_path = os.path.join(work_path, "abacus_gruneisen_tasks.json")
+        if not os.path.isfile(manifest_path):
+            raise FileNotFoundError(f"abacus gruneisen manifest not found at {manifest_path}")
+        manifest = loadfn(manifest_path)
+        task_result_map = {
+            os.path.basename(os.path.dirname(result_path)): result_path for result_path in all_res
+        }
+        task_infos = []
+        for entry in manifest["volume_points"]:
+            helper_dir = os.path.join(work_path, entry["helper_dir"])
+            self._ensure_abacus_volume_outputs(work_path, helper_dir, entry["displacement_tasks"])
+            info = self._load_task_info(helper_dir)
+            info["reference_task_name"] = entry["reference_task"]
+            task_infos.append(info)
+        if self.alpha_mode == "full":
+            self._attach_abacus_reference_energies(task_infos, task_result_map)
+        return task_infos
+
+    def _ensure_abacus_volume_outputs(
+        self, work_path: str, helper_dir: str, displacement_tasks: List[str]
+    ) -> None:
+        force_sets = os.path.join(helper_dir, "FORCE_SETS")
+        if not os.path.isfile(force_sets):
+            logs = [
+                os.path.join(work_path, task_name, "OUT.ABACUS", "running_scf.log")
+                for task_name in displacement_tasks
+            ]
+            missing_logs = [path for path in logs if not os.path.isfile(path)]
+            if missing_logs:
+                raise FileNotFoundError(
+                    f"ABACUS displacement logs not found for {helper_dir}: {missing_logs}"
+                )
+            cwd = os.getcwd()
+            try:
+                os.chdir(helper_dir)
+                log_args = " ".join(os.path.relpath(path, helper_dir) for path in logs)
+                subprocess.check_call(f"phonopy -f {log_args}", shell=True)
+            finally:
+                os.chdir(cwd)
+        if not os.path.isfile(force_sets):
+            raise FileNotFoundError(f"FORCE_SETS was not created in {helper_dir}")
+        force_constants = os.path.join(helper_dir, "FORCE_CONSTANTS")
+        if not os.path.isfile(force_constants) or not os.path.isfile(
+            os.path.join(helper_dir, "mesh.yaml")
+        ):
+            cwd = os.getcwd()
+            try:
+                os.chdir(helper_dir)
+                # band.conf contains FORCE_CONSTANTS=READ; create it from FORCE_SETS first.
+                # Pass phonopy_disp.yaml explicitly so phonopy reads the supercell from the yaml
+                # rather than falling into old-style POSCAR mode (which has no DIM).
+                if not os.path.isfile("FORCE_CONSTANTS"):
+                    subprocess.check_call("phonopy phonopy_disp.yaml --writefc", shell=True)
+                if not os.path.isfile("FORCE_CONSTANTS"):
+                    raise FileNotFoundError(f"FORCE_CONSTANTS was not created in {helper_dir}")
+                if not os.path.isfile("mesh.yaml"):
+                    subprocess.check_call("phonopy band.conf", shell=True)
+                    self._write_band_dat()
+            finally:
+                os.chdir(cwd)
+        if not os.path.isfile(os.path.join(helper_dir, "mesh.yaml")):
+            raise FileNotFoundError(f"mesh.yaml was not created in {helper_dir}")
+
+    @staticmethod
+    def _write_band_dat() -> None:
+        if not os.path.isfile("band.yaml"):
+            logging.warning("band.yaml was not created; skipping band.dat export")
+            return
+        with open("band.dat", "w") as fp:
+            result = subprocess.run(
+                ["phonopy-bandplot", "--gnuplot", "band.yaml"],
+                stdout=fp,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        if result.returncode == 0:
+            return
+        if os.path.isfile("band.dat") and os.path.getsize("band.dat") > 0:
+            logging.warning(
+                "phonopy-bandplot exited with code %s after writing band.dat; continuing. stderr: %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+            return
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            ["phonopy-bandplot", "--gnuplot", "band.yaml"],
+            output=None,
+            stderr=result.stderr,
+        )
+
+    def _attach_abacus_reference_energies(
+        self, task_infos: List[dict], task_result_map: Dict[str, str]
+    ) -> None:
+        for info in task_infos:
+            reference_task = info["reference_task_name"]
+            result_path = task_result_map.get(reference_task)
+            if not result_path:
+                raise ValueError(
+                    f"full gruneisen requires result_task.json for reference task {reference_task}"
+                )
+            task_result = loadfn(result_path)
+            energy = self._last_result_value(task_result, "energies")
+            atom_count = self._result_atom_count(task_result)
+            if atom_count <= 0:
+                raise ValueError(f"invalid atom count in {result_path}")
+            info["energy"] = energy
+            info["atom_count"] = atom_count
+            info["energy_per_atom"] = energy / atom_count
+            if info["phonon_cell_natoms"]:
+                info["fit_volume_per_atom"] = info["phonon_cell_volume"] / info["phonon_cell_natoms"]
 
     def _load_task_info(self, task_dir: str) -> dict:
         with open(os.path.join(task_dir, "volume.json"), "r") as fp:
