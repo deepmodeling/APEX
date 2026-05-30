@@ -1,15 +1,17 @@
 import glob
 import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 import json
 from unittest.mock import patch
 
+import dpdata
 import yaml
 
-from monty.serialization import loadfn
+from monty.serialization import dumpfn, loadfn
 
 from apex.core.calculator.Lammps import Lammps
 from apex.core.lib.mfp_eosfit import fit_birch_murnaghan
@@ -20,11 +22,14 @@ class TestGruneisen(unittest.TestCase):
     def setUp(self):
         tests_dir = Path(__file__).resolve().parent
         self.source_path = tests_dir / "equi" / "vasp" / "CONTCAR"
+        self.abacus_source_path = tests_dir / "equi" / "abacus"
         self.tmpdir = tempfile.TemporaryDirectory(prefix="apex-gruneisen-test-")
         self.work_root = Path(self.tmpdir.name)
         self.equi_path = self.work_root / "relaxation" / "relax_task"
+        self.abacus_equi_path = self.work_root / "relaxation_abacus" / "relax_task"
         self.target_path = self.work_root / "gruneisen_00"
         self.equi_path.mkdir(parents=True, exist_ok=True)
+        self.abacus_equi_path.mkdir(parents=True, exist_ok=True)
 
         self.prop_param = {
             "type": "gruneisen",
@@ -106,20 +111,49 @@ class TestGruneisen(unittest.TestCase):
 
         self.assertTrue((self.target_path / "band_path.json").is_file())
 
-    def test_vasp_displacement_gruneisen_is_explicitly_unsupported(self):
+    def test_make_confs_generates_vasp_displacement_volume_manifest_and_tasks(self):
         gruneisen = Gruneisen(
             {
                 "type": "gruneisen",
                 "volume_strains": [-0.01, 0.0, 0.01],
                 "temperatures": [300],
                 "approach": "displacement",
+                "supercell_size": [2, 2, 2],
             },
             inter_param={"type": "vasp"},
         )
         shutil.copy(self.source_path, self.equi_path / "CONTCAR")
 
-        with self.assertRaisesRegex(NotImplementedError, "approach='linear'"):
-            gruneisen.make_confs(str(self.target_path), str(self.equi_path))
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            self.assertIn("phonopy -d", command)
+            Path("phonopy_disp.yaml").write_text("displacements: []\n")
+            Path("POSCAR-001").write_text(Path("POSCAR").read_text())
+            Path("POSCAR-002").write_text(Path("POSCAR").read_text())
+
+        with patch("apex.core.property.Gruneisen.subprocess.check_call", side_effect=fake_check_call):
+            task_list = gruneisen.make_confs(str(self.target_path), str(self.equi_path))
+
+        task_dirs = sorted(self.target_path.glob("task.*"))
+        self.assertEqual(len(task_list), 9)
+        self.assertEqual(len(task_dirs), 9)
+        manifest = loadfn(self.target_path / "vasp_gruneisen_tasks.json")
+        self.assertEqual(len(manifest["volume_points"]), 3)
+        self.assertEqual(manifest["volume_points"][0]["reference_task"], "task.000000")
+        self.assertEqual(manifest["volume_points"][0]["displacement_tasks"], ["task.000001", "task.000002"])
+
+        helper_dir = self.target_path / "volume.000000"
+        self.assertTrue((helper_dir / "POSCAR").is_file())
+        self.assertTrue((helper_dir / "POSCAR-unitcell").is_file())
+        self.assertTrue((helper_dir / "phonopy_disp.yaml").is_file())
+        self.assertTrue((helper_dir / "band.conf").is_file())
+
+        reference_task = self.target_path / "task.000000"
+        displacement_task = self.target_path / "task.000001"
+        self.assertTrue((reference_task / "POSCAR").exists())
+        self.assertTrue((reference_task / "POSCAR-unitcell").exists())
+        self.assertEqual(loadfn(reference_task / "gruneisen_task.json")["role"], "reference")
+        self.assertEqual(loadfn(displacement_task / "gruneisen_task.json")["role"], "displacement")
 
     def test_vasp_ensure_mesh_yaml_builds_force_constants_from_vasprun(self):
         gruneisen = Gruneisen(
@@ -173,6 +207,189 @@ class TestGruneisen(unittest.TestCase):
         self.assertEqual(calls[0], "phonopy --fc vasprun.xml")
         self.assertIn("-c POSCAR-unitcell", calls[1])
         self.assertIn("--nomeshsym", calls[1])
+
+    def test_sign_only_compute_lower_from_vasp_displacement_manifest(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [100, 300],
+                "alpha_mode": "sign_only",
+                "approach": "displacement",
+            },
+            inter_param={"type": "vasp"},
+        )
+        work_dir = self.work_root / "gruneisen_vasp_displacement_compute"
+        task_dirs = self._write_synthetic_vasp_displacement_gruneisen_layout(work_dir)
+        calls = []
+
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            calls.append((Path.cwd().name, command))
+            if command.startswith("phonopy -f "):
+                Path("FORCE_SETS").write_text("fake force sets\n")
+            elif command.startswith("phonopy --dim=") and "--writefc" in command:
+                Path("FORCE_CONSTANTS").write_text("fake force constants\n")
+            elif command.startswith("phonopy --dim="):
+                strain = loadfn("volume.json")["strain"]
+                if strain < 0:
+                    frequencies = [4.2, 8.4]
+                elif strain > 0:
+                    frequencies = [4.0, 8.0]
+                else:
+                    frequencies = [4.1, 8.2]
+                Path("band.yaml").write_text("phonon: []\n")
+                Path("mesh.yaml").write_text(
+                    yaml.safe_dump(
+                        {
+                            "phonon": [
+                                {
+                                    "q-position": [0.0, 0.0, 0.0],
+                                    "weight": 1,
+                                    "band": [{"frequency": freq} for freq in frequencies],
+                                }
+                            ]
+                        },
+                        sort_keys=False,
+                    )
+                )
+            else:
+                raise AssertionError(f"unexpected command: {command}")
+
+        def fake_run(command, stdout, stderr, text):
+            self.assertEqual(command, ["phonopy-bandplot", "--gnuplot", "band.yaml"])
+            stdout.write("0 0\n")
+            return subprocess.CompletedProcess(command, 1, stderr="bandplot warning")
+
+        with patch("apex.core.property.Gruneisen.subprocess.check_call", side_effect=fake_check_call), \
+                patch("apex.core.property.Gruneisen.subprocess.run", side_effect=fake_run):
+            result, ptr = gruneisen._compute_lower(str(work_dir / "result.json"), task_dirs, [])
+
+        self.assertEqual(result["thermal_expansion"]["sign"], ["positive", "positive"])
+        self.assertEqual(result["gruneisen"]["qpoint_count"], 1)
+        self.assertEqual(len([cmd for _, cmd in calls if cmd.startswith("phonopy -f ")]), 3)
+        self.assertTrue((work_dir / "volume.000000" / "mesh.yaml").is_file())
+        self.assertTrue((work_dir / "volume.000001" / "band.dat").is_file())
+        self.assertIn("Temperature(K)  SumGammaCv  Sign", ptr)
+
+    def test_make_confs_generates_abacus_volume_manifest_and_tasks(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "supercell_size": [2, 2, 2],
+            },
+            inter_param={
+                "type": "abacus",
+                "incar": "abacus_input/INPUT",
+                "potcar_prefix": "abacus_input",
+                "potcars": {"Al": "Al_ONCV_PBE-1.0.upf"},
+                "orb_files": {"Al": "Al_gga_9au_100Ry_4s4p1d.orb"},
+            },
+        )
+        self._prepare_abacus_relax_fixture()
+
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            self.assertEqual(command, "phonopy setting.conf --abacus -d")
+            source = Path("STRU").read_text()
+            Path("phonopy_disp.yaml").write_text("displacements: []\n")
+            Path("STRU-001").write_text(source)
+            Path("STRU-002").write_text(source)
+
+        with patch("apex.core.property.Gruneisen.subprocess.check_call", side_effect=fake_check_call):
+            task_list = gruneisen.make_confs(str(self.target_path), str(self.abacus_equi_path))
+
+        task_dirs = sorted(self.target_path.glob("task.*"))
+        self.assertEqual(len(task_list), 9)
+        self.assertEqual(len(task_dirs), 9)
+        manifest = loadfn(self.target_path / "abacus_gruneisen_tasks.json")
+        self.assertEqual(len(manifest["volume_points"]), 3)
+        self.assertEqual(manifest["volume_points"][0]["reference_task"], "task.000000")
+        self.assertEqual(manifest["volume_points"][0]["displacement_tasks"], ["task.000001", "task.000002"])
+        self.assertEqual(manifest["volume_points"][1]["reference_task"], "task.000003")
+        self.assertTrue((self.target_path / "band_path.json").is_file())
+
+        helper_dir = self.target_path / "volume.000000"
+        self.assertTrue((helper_dir / "STRU").is_file())
+        self.assertTrue((helper_dir / "POSCAR").is_file())
+        self.assertTrue((helper_dir / "volume.json").is_file())
+        self.assertTrue((helper_dir / "phonopy_disp.yaml").is_file())
+        self.assertTrue((helper_dir / "band.conf").is_file())
+
+        reference_task = self.target_path / "task.000000"
+        displacement_task = self.target_path / "task.000001"
+        self.assertTrue((reference_task / "STRU").exists())
+        self.assertTrue((reference_task / "POSCAR").is_file())
+        self.assertTrue((reference_task / "gruneisen_task.json").is_file())
+        self.assertEqual(loadfn(reference_task / "gruneisen_task.json")["role"], "reference")
+        self.assertEqual(loadfn(displacement_task / "gruneisen_task.json")["role"], "displacement")
+
+    def test_sign_only_compute_lower_from_abacus_manifest(self):
+        gruneisen = Gruneisen(
+            {
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [100, 300],
+                "alpha_mode": "sign_only",
+            },
+            inter_param={"type": "abacus"},
+        )
+        work_dir = self.work_root / "gruneisen_abacus_compute"
+        task_dirs = self._write_synthetic_abacus_gruneisen_layout(work_dir)
+        calls = []
+
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            calls.append((Path.cwd().name, command))
+            if command.startswith("phonopy -f "):
+                Path("FORCE_SETS").write_text("fake force sets\n")
+            elif command == "phonopy --writefc":
+                Path("FORCE_CONSTANTS").write_text("fake force constants\n")
+            elif command == "phonopy band.conf --abacus":
+                strain = loadfn("volume.json")["strain"]
+                if strain < 0:
+                    frequencies = [4.2, 8.4]
+                elif strain > 0:
+                    frequencies = [4.0, 8.0]
+                else:
+                    frequencies = [4.1, 8.2]
+                Path("band.yaml").write_text("phonon: []\n")
+                Path("mesh.yaml").write_text(
+                    yaml.safe_dump(
+                        {
+                            "phonon": [
+                                {
+                                    "q-position": [0.0, 0.0, 0.0],
+                                    "weight": 1,
+                                    "band": [{"frequency": freq} for freq in frequencies],
+                                }
+                            ]
+                        },
+                        sort_keys=False,
+                    )
+                )
+            else:
+                raise AssertionError(f"unexpected command: {command}")
+
+        def fake_run(command, stdout, stderr, text):
+            self.assertEqual(command, ["phonopy-bandplot", "--gnuplot", "band.yaml"])
+            stdout.write("0 0\n")
+            return subprocess.CompletedProcess(command, 1, stderr="bandplot warning")
+
+        with patch("apex.core.property.Gruneisen.subprocess.check_call", side_effect=fake_check_call), \
+                patch("apex.core.property.Gruneisen.subprocess.run", side_effect=fake_run):
+            result, ptr = gruneisen._compute_lower(str(work_dir / "result.json"), task_dirs, [])
+
+        self.assertEqual(result["thermal_expansion"]["alpha_mode"], "sign_only")
+        self.assertEqual(result["thermal_expansion"]["sign"], ["positive", "positive"])
+        self.assertEqual(result["gruneisen"]["qpoint_count"], 1)
+        self.assertEqual(result["gruneisen"]["mode_count"], 2)
+        self.assertEqual(len([cmd for _, cmd in calls if cmd.startswith("phonopy -f ")]), 3)
+        self.assertTrue((work_dir / "volume.000000" / "mesh.yaml").is_file())
+        self.assertTrue((work_dir / "volume.000001" / "band.dat").is_file())
+        self.assertTrue("Temperature(K)  SumGammaCv  Sign" in ptr)
 
     def test_post_process_prepares_phonon_run_inputs_for_lammps(self):
         deepmd_gruneisen = Gruneisen(
@@ -475,3 +692,108 @@ class TestGruneisen(unittest.TestCase):
             task_dirs.append(str(task_dir))
             result_paths.append(str(result_path))
         return task_dirs, result_paths
+
+    def _prepare_abacus_relax_fixture(self):
+        out_dir = self.abacus_equi_path / "OUT.ABACUS"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy(self.abacus_source_path / "INPUT", self.abacus_equi_path / "INPUT")
+        shutil.copy(self.abacus_source_path / "STRU", self.abacus_equi_path / "STRU")
+        shutil.copy(
+            self.abacus_source_path / "running_cell-relax.log",
+            out_dir / "running_cell-relax.log",
+        )
+        shutil.copy(self.abacus_source_path / "STRU_ION_D", out_dir / "STRU_ION_D")
+
+    def _write_synthetic_abacus_gruneisen_layout(self, work_dir: Path):
+        work_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {"volume_points": []}
+        task_dirs = []
+        source_stru = self.abacus_source_path / "STRU_ION_D"
+        for volume_index, strain in enumerate([-0.01, 0.0, 0.01]):
+            helper_dir = work_dir / f"volume.{volume_index:06d}"
+            helper_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy(source_stru, helper_dir / "STRU")
+            dpdata.System(str(helper_dir / "STRU"), fmt="stru").to("vasp/poscar", str(helper_dir / "POSCAR"))
+            (helper_dir / "phonopy_disp.yaml").write_text("displacements: []\n")
+            (helper_dir / "band.conf").write_text("MESH = 1 1 1\nFORCE_CONSTANTS = READ\n")
+            (helper_dir / "volume.json").write_text(
+                json.dumps(
+                    {
+                        "strain": strain,
+                        "scale": 1.0,
+                        "volume": 100.0 + strain * 100.0,
+                        "volume_per_atom": 25.0 + strain * 25.0,
+                        "reference_volume": 100.0,
+                        "reference_volume_per_atom": 25.0,
+                    }
+                )
+            )
+            reference_task = work_dir / f"task.{volume_index * 3:06d}"
+            reference_task.mkdir(parents=True, exist_ok=True)
+            displacement_tasks = []
+            for offset in [1, 2]:
+                task_dir = work_dir / f"task.{volume_index * 3 + offset:06d}"
+                out_dir = task_dir / "OUT.ABACUS"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                (out_dir / "running_scf.log").write_text("SEE INFORMATION IN\n")
+                task_dirs.append(str(task_dir))
+                displacement_tasks.append(task_dir.name)
+            task_dirs.append(str(reference_task))
+            manifest["volume_points"].append(
+                {
+                    "volume_index": volume_index,
+                    "helper_dir": helper_dir.name,
+                    "reference_task": reference_task.name,
+                    "displacement_tasks": displacement_tasks,
+                    "strain": strain,
+                }
+            )
+        dumpfn(manifest, work_dir / "abacus_gruneisen_tasks.json", indent=4)
+        task_dirs.sort()
+        return task_dirs
+
+    def _write_synthetic_vasp_displacement_gruneisen_layout(self, work_dir: Path):
+        work_dir.mkdir(parents=True, exist_ok=True)
+        manifest = {"volume_points": []}
+        task_dirs = []
+        poscar_text = self.source_path.read_text()
+        for volume_index, strain in enumerate([-0.01, 0.0, 0.01]):
+            helper_dir = work_dir / f"volume.{volume_index:06d}"
+            helper_dir.mkdir(parents=True, exist_ok=True)
+            (helper_dir / "POSCAR-unitcell").write_text(poscar_text)
+            (helper_dir / "phonopy_disp.yaml").write_text("displacements: []\n")
+            (helper_dir / "band.conf").write_text("MESH = 1 1 1\nFORCE_CONSTANTS = READ\n")
+            (helper_dir / "volume.json").write_text(
+                json.dumps(
+                    {
+                        "strain": strain,
+                        "scale": 1.0,
+                        "volume": 100.0 + strain * 100.0,
+                        "volume_per_atom": 25.0 + strain * 25.0,
+                        "reference_volume": 100.0,
+                        "reference_volume_per_atom": 25.0,
+                    }
+                )
+            )
+            reference_task = work_dir / f"task.{volume_index * 3:06d}"
+            reference_task.mkdir(parents=True, exist_ok=True)
+            displacement_tasks = []
+            for offset in [1, 2]:
+                task_dir = work_dir / f"task.{volume_index * 3 + offset:06d}"
+                task_dir.mkdir(parents=True, exist_ok=True)
+                (task_dir / "vasprun.xml").write_text("<modeling />\n")
+                task_dirs.append(str(task_dir))
+                displacement_tasks.append(task_dir.name)
+            task_dirs.append(str(reference_task))
+            manifest["volume_points"].append(
+                {
+                    "volume_index": volume_index,
+                    "helper_dir": helper_dir.name,
+                    "reference_task": reference_task.name,
+                    "displacement_tasks": displacement_tasks,
+                    "strain": strain,
+                }
+            )
+        dumpfn(manifest, work_dir / "vasp_gruneisen_tasks.json", indent=4)
+        task_dirs.sort()
+        return task_dirs
