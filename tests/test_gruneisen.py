@@ -230,6 +230,10 @@ class TestGruneisen(unittest.TestCase):
             [
                 "log.lammps",
                 "outlog",
+                "apex_task_status.json",
+                ".debug.log",
+                ".debug.stdout",
+                ".debug.stderr",
                 "dump.relax",
                 "FORCE_CONSTANTS",
                 "mesh.yaml",

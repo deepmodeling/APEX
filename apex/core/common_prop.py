@@ -13,13 +13,21 @@ from apex.core.property.Surface import Surface
 from apex.core.property.Vacancy import Vacancy
 from apex.core.property.Phonon import Phonon
 from apex.core.property.Decohesive import Decohesive
+from apex.core.property.FiniteTelastic import FiniteTelastic
 from apex.core.property.FiniteTlatt import FiniteTlatt
 from apex.core.property.GammaSurface import GammaSurface
 from apex.core.property.Gruneisen import Gruneisen
+from apex.core.property.Annealing import Annealing
 from apex.core.lib.utils import create_path
 from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
-from apex.utils import sepline, get_task_type, handle_prop_suffix
+from apex.utils import (
+    sepline,
+    get_task_type,
+    handle_prop_suffix,
+    apex_task_succeeded,
+    all_apex_task_status_succeeded,
+)
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 
@@ -50,10 +58,17 @@ def make_property_instance(parameters, inter_param):
         return Phonon(parameters, inter_param)
     elif prop_type == "decohesive":
         return Decohesive(parameters, inter_param)
-    elif prop_type == "finitetlatt":
+    elif prop_type in ["finite_t_latt", "finitetlatt", "Lat_param_T"]:
+        if prop_type in ["finitetlatt", "Lat_param_T"]:
+            parameters = dict(parameters)
+            parameters["type"] = "finite_t_latt"
         return FiniteTlatt(parameters, inter_param)
+    elif prop_type == "finite_t_elastic":
+        return FiniteTelastic(parameters, inter_param)
     elif prop_type == "gruneisen":
         return Gruneisen(parameters, inter_param)
+    elif prop_type in ["annealing", "Annealing"]:
+        return Annealing(parameters, inter_param)
     else:
         raise RuntimeError(f"unknown APEX type {prop_type}")
 
@@ -91,12 +106,9 @@ def make_property(confs, inter_param, property_list):
                 continue
 
             rerun_finished = jj.get("rerun_finished", True)
-            result_json = os.path.join(path_to_work, "result.json")
-            result_out = os.path.join(path_to_work, "result.out")
             if (not rerun_finished
-                    and os.path.isfile(result_json)
-                    and os.path.isfile(result_out)):
-                print(f"Skip generating property tasks for {path_to_work} (results already exist)")
+                    and all_apex_task_status_succeeded(path_to_work)):
+                print(f"Skip generating property tasks for {path_to_work} (all apex_task_status.json state=succeeded)")
                 continue
 
             create_path(path_to_work)
@@ -175,12 +187,9 @@ def run_property(confs, inter_param, property_list, mdata):
             )
 
             rerun_finished = jj.get("rerun_finished", True)
-            result_json = os.path.join(path_to_work, "result.json")
-            result_out = os.path.join(path_to_work, "result.out")
             if (not rerun_finished
-                    and os.path.isfile(result_json)
-                    and os.path.isfile(result_out)):
-                print(f"Skip running property tasks for {path_to_work} (results already exist)")
+                    and all_apex_task_status_succeeded(path_to_work)):
+                print(f"Skip running property tasks for {path_to_work} (all apex_task_status.json state=succeeded)")
                 continue
 
             work_path_list.append(path_to_work)
@@ -203,7 +212,12 @@ def run_property(confs, inter_param, property_list, mdata):
             task_type = get_task_type({"interaction": inter_param})
             inter_type = inter_param_prop["type"]
             work_path = path_to_work
-            all_task = tmp_task_list
+            if rerun_finished:
+                all_task = tmp_task_list
+            else:
+                all_task = [task for task in tmp_task_list if not apex_task_succeeded(task)]
+                for task in sorted(set(tmp_task_list) - set(all_task)):
+                    print(f"Skip completed property task {task} (apex_task_status.json state=succeeded, rerun_finished=False)")
             run_tasks = collect_task(all_task, inter_type)
             if len(run_tasks) == 0:
                 continue
@@ -268,11 +282,13 @@ def post_property(confs, inter_param, property_list):
             rerun_finished = jj.get("rerun_finished", True)
             result_json = os.path.join(path_to_work, "result.json")
             result_out = os.path.join(path_to_work, "result.out")
-            if rerun_finished or not (os.path.isfile(result_json) and os.path.isfile(result_out)):
+            result_exists = os.path.isfile(result_json) and os.path.isfile(result_out)
+            tasks_succeeded = all_apex_task_status_succeeded(path_to_work)
+            if rerun_finished or not (result_exists and tasks_succeeded):
                 prop.compute(
                     result_json,
                     result_out,
                     path_to_work
                 )
             else:
-                print(f"Skip post processing property results at {path_to_work} (results already exist)")
+                print(f"Skip post processing property results at {path_to_work} (results exist and all apex_task_status.json state=succeeded)")

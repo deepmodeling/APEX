@@ -13,6 +13,7 @@ from apex.core.lib.utils import create_path
 from apex.core.lib.dispatcher import make_submission
 from apex.core.mpdb import get_structure
 from apex.core.structure import StructureInfo
+from apex.utils import apex_task_succeeded
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace', 'nep']
@@ -66,10 +67,9 @@ def make_equi(confs, inter_param, relax_param):
         crys_type = ii.split("/")[-1]
         logging.debug(f"crys_type: {crys_type}")
 
-        result_json_path = os.path.join(ii, "relaxation", "relax_task", "result.json")
-        #print(inter_param["rerun_finished"], result_json_path, os.path.isfile(result_json_path))
-        if (not rerun_finished) and os.path.isfile(result_json_path):
-            print(f"Skip generating relaxation tasks for {ii} (results already exist, rerun_finished=False)")
+        task_status_dir = os.path.join(ii, "relaxation", "relax_task")
+        if (not rerun_finished) and apex_task_succeeded(task_status_dir):
+            print(f"Skip generating relaxation tasks for {ii} (apex_task_status.json state=succeeded, rerun_finished=False)")
             continue
 
         if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
@@ -154,9 +154,8 @@ def run_equi(confs, inter_param, mdata):
     rerun_finished = inter_param.get("rerun_finished", True)
     for ii in work_path_list:
         task_dir = os.path.join(ii, "relax_task")
-        result_json_path = os.path.join(task_dir, "result.json")
-        if (not rerun_finished) and os.path.isfile(result_json_path):
-            print(f"Skip running relaxation for {task_dir} (results already exist, rerun_finished=False)")
+        if (not rerun_finished) and apex_task_succeeded(task_dir):
+            print(f"Skip running relaxation for {task_dir} (apex_task_status.json state=succeeded, rerun_finished=False)")
             continue
         all_task.append(task_dir)
     run_tasks = all_task
@@ -210,8 +209,8 @@ def post_equi(confs, inter_param):
         inter = make_calculator(inter_param, poscar)
         rerun_finished = inter_param.get("rerun_finished", True)
         result_json_path = os.path.join(ii, "result.json")
-        if (not rerun_finished) and os.path.isfile(result_json_path):
-            print(f"Skip post-processing {ii} (results already exist, rerun_finished=False)")
+        if (not rerun_finished) and os.path.isfile(result_json_path) and apex_task_succeeded(ii):
+            print(f"Skip post-processing {ii} (result exists and apex_task_status.json state=succeeded, rerun_finished=False)")
             continue
         res = inter.compute(ii)
         contcar = os.path.join(ii, "CONTCAR")

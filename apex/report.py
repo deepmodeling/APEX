@@ -25,7 +25,7 @@ def tag_dataset(orig_dataset: dict) -> dict:
     return tagged_dataset
 
 
-def report_local(input_path_list):
+def report_local(input_path_list, open_browser: bool = False, host: str = "127.0.0.1", port: int = 8070):
     path_list = []
     for ii in input_path_list:
         glob_list = glob.glob(os.path.abspath(ii))
@@ -62,18 +62,32 @@ def report_local(input_path_list):
 
     # simplify the work path key for all datasets
     simplified_dataset = tag_dataset(all_data_dict)
-    DashReportApp(datasets=simplified_dataset).run(debug=True, use_reloader=True)
+    DashReportApp(
+        datasets=simplified_dataset,
+        open_browser=open_browser,
+        host=host,
+        port=port,
+    ).run(debug=False, use_reloader=False)
 
 
-def report_result(config_dict: dict, path_list: List[os.PathLike]):
+def report_result(
+    config_dict: dict,
+    path_list: List[os.PathLike],
+    open_browser: bool = False,
+    host: str = "127.0.0.1",
+    port: int = 8070,
+):
     config = Config(**config_dict)
-    report_local(path_list)
+    report_local(path_list, open_browser=open_browser, host=host, port=port)
 
 
-def report_from_args(config_file, path_list):
+def report_from_args(config_file, path_list, open_browser: bool = False, host: str = "127.0.0.1", port: int = 8070):
     print('-------Report Visualization Mode-------')
     report_result(
         config_dict=load_config_file(config_file),
-        path_list=path_list
+        path_list=path_list,
+        open_browser=open_browser,
+        host=host,
+        port=port,
     )
     print('Complete!')

@@ -24,7 +24,7 @@ class TestFiniteTlatt(unittest.TestCase):
             },
             "properties": [
                 {
-                    "type": "finitetlatt",
+                    "type": "finite_t_latt",
                     "supercell_size":  [2, 2, 2],
                     "cal_setting":{
                         "temperature": [400, 600],
@@ -63,7 +63,7 @@ class TestFiniteTlatt(unittest.TestCase):
             shutil.rmtree(self.target_path)
 
     def test_task_type(self):
-        self.assertEqual("finitetlatt", self.finite.task_type())
+        self.assertEqual("finite_t_latt", self.finite.task_type())
 
     def test_task_param(self):
         self.assertEqual(self.prop_param[0], self.finite.task_param())
@@ -95,6 +95,7 @@ class TestFiniteTlatt(unittest.TestCase):
 
         for ii in dfm_dirs:
             self.assertTrue(os.path.isfile(os.path.join(ii, "POSCAR")))
+            self.assertFalse(os.path.exists(os.path.join(ii, "POSCAR.tmp")))
             FiniteTlatt_json_file = os.path.join(ii, "FiniteTlatt.json")
             self.assertTrue(os.path.isfile(FiniteTlatt_json_file))
             variable_FiniteTlatt_file = os.path.join(ii, "variable_FiniteTlatt.in")
@@ -110,6 +111,15 @@ class TestFiniteTlatt(unittest.TestCase):
         self.assertEqual(self.lammps.forward_common_files(self.prop_param[0]["type"]), fc_files)
 
     def test_backward_files(self):
-        backward_files = ["log.lammps", "outlog", "dump.relax", "average_box.txt"]
+        backward_files = [
+            "log.lammps",
+            "outlog",
+            "apex_task_status.json",
+            ".debug.log",
+            ".debug.stdout",
+            ".debug.stderr",
+            "dump.relax",
+            "average_box.txt",
+        ]
         self.assertEqual(self.lammps.backward_files(self.prop_param[0]["type"]), backward_files)
 

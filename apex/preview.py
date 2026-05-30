@@ -7,10 +7,11 @@ import glob
 import os
 import re
 import shutil
+import sys
 import tempfile
 from copy import deepcopy
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 import numpy as np
 from monty.serialization import loadfn
@@ -145,6 +146,44 @@ def _centered_bbox(
     )
 
 
+class _ProgressBar:
+    def __init__(self, label: str, total: int, *, width: int = 30):
+        self.label = label
+        self.total = max(int(total), 0)
+        self.width = max(int(width), 1)
+        self.current = 0
+        self._stream = sys.stderr
+        self._enabled = self.total > 0
+
+    def __enter__(self):
+        self.update(0)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._enabled:
+            if exc_type is None and self.current < self.total:
+                self.current = self.total
+                self._write()
+            self._stream.write("\n")
+            self._stream.flush()
+
+    def update(self, step: int = 1):
+        if not self._enabled:
+            return
+        self.current = min(self.total, self.current + step)
+        self._write()
+
+    def _write(self):
+        fraction = self.current / self.total if self.total else 1.0
+        filled = int(round(self.width * fraction))
+        bar = "#" * filled + "-" * (self.width - filled)
+        percent = int(round(100 * fraction))
+        self._stream.write(
+            f"\r{self.label} [{bar}] {self.current}/{self.total} ({percent:3d}%)"
+        )
+        self._stream.flush()
+
+
 def _write_gif(
     frames,
     output_gif: str,
@@ -154,6 +193,7 @@ def _write_gif(
     padding: float = 0.30,
     xshift: float = 0.0,
     yshift: float = 0.0,
+    progress_label: Optional[str] = None,
 ):
     try:
         import imageio.v2 as imageio
@@ -180,35 +220,48 @@ def _write_gif(
     )
 
     images = []
-    for i, (atoms, bounds) in enumerate(zip(frames, frame_bounds)):
-        x_min, x_max, y_min, y_max = _centered_bbox(
-            bounds,
-            view_size=view_size,
-            xshift=xshift,
-            yshift=yshift,
-        )
-        fig = plt.figure(figsize=figsize, dpi=dpi)
-        ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
-        plot_atoms(
-            atoms,
-            ax,
-            radii=radii_scale,
-            rotation="0x,0y,0z",
-            show_unit_cell=1,
-            bbox=(x_min, y_min, x_max, y_max),
-        )
-        ax.set_aspect("equal", adjustable="box")
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_axis_off()
-        fig.text(0.02, 0.02, f"Frame {i:03d}", color="0.25", fontsize=10)
-        fig.canvas.draw()
-        rgba = np.asarray(fig.canvas.buffer_rgba())
-        images.append(rgba[:, :, :3].copy())
-        plt.close(fig)
+    progress = _ProgressBar(progress_label, len(frames)) if progress_label else None
+    progress_context = progress if progress is not None else _nullcontext()
+    with progress_context as progress_bar:
+        for i, (atoms, bounds) in enumerate(zip(frames, frame_bounds)):
+            x_min, x_max, y_min, y_max = _centered_bbox(
+                bounds,
+                view_size=view_size,
+                xshift=xshift,
+                yshift=yshift,
+            )
+            fig = plt.figure(figsize=figsize, dpi=dpi)
+            ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+            plot_atoms(
+                atoms,
+                ax,
+                radii=radii_scale,
+                rotation="0x,0y,0z",
+                show_unit_cell=1,
+                bbox=(x_min, y_min, x_max, y_max),
+            )
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_axis_off()
+            fig.text(0.02, 0.02, f"Frame {i:03d}", color="0.25", fontsize=10)
+            fig.canvas.draw()
+            rgba = np.asarray(fig.canvas.buffer_rgba())
+            images.append(rgba[:, :, :3].copy())
+            plt.close(fig)
+            if progress_bar is not None:
+                progress_bar.update()
 
     duration = 1.0 / max(fps, 1)
     imageio.mimsave(output_gif, images, duration=duration)
+
+
+class _nullcontext:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
 
 
 def _load_frames(poscar_files: Iterable[str]):
@@ -218,6 +271,28 @@ def _load_frames(poscar_files: Iterable[str]):
     for path in poscar_files:
         frames.append(read(path, format="vasp"))
     return frames
+
+
+def _arrange_gamma_surface_tasks(task_list: List[str]) -> List[str]:
+    indexed_tasks = []
+    for fallback_index, task_dir in enumerate(task_list):
+        displacement_path = os.path.join(task_dir, "displacement.json")
+        if not os.path.isfile(displacement_path):
+            return task_list
+        displacement = loadfn(displacement_path)
+        try:
+            idx_x = int(displacement["idx_x"])
+            idx_y = int(displacement["idx_y"])
+        except (KeyError, TypeError, ValueError):
+            return task_list
+        indexed_tasks.append((idx_x, idx_y, fallback_index, task_dir))
+
+    def surface_slide_key(item):
+        idx_x, idx_y, fallback_index, _ = item
+        x_order = idx_x if idx_y % 2 == 0 else -idx_x
+        return idx_y, x_order, fallback_index
+
+    return [task_dir for _, _, _, task_dir in sorted(indexed_tasks, key=surface_slide_key)]
 
 
 def _derive_output_gif_path(parameter_path: Path, structures_count: int, prop_label: str) -> Path:
@@ -322,6 +397,8 @@ def preview_parameter_file(
                 )
                 task_list = prop_obj.make_confs(str(work_dir), equi_dir, refine=do_refine)
                 prop_obj.post_process(task_list)
+                if prop.get("type") == "gamma_surface":
+                    task_list = _arrange_gamma_surface_tasks(task_list)
 
                 poscar_files = [os.path.join(task_dir, "POSCAR") for task_dir in task_list]
                 frames = _load_frames(poscar_files)
@@ -333,6 +410,7 @@ def preview_parameter_file(
                     padding=gif_padding,
                     xshift=gif_xshift,
                     yshift=gif_yshift,
+                    progress_label="Loading...",
                 )
                 output_paths.append(str(output_gif))
 

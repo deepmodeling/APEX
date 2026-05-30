@@ -362,7 +362,7 @@ APEX supports:
             "miller_index": [0, 0, 1]
         },
         {
-            "type": "finitetlatt",
+            "type": "finite_t_latt",
             "supercell_size": [2, 2, 2],
             "cal_setting": {
             "temperature": [200, 400, 600, 800],
@@ -415,7 +415,7 @@ APEX supports:
 | **vacancy** | Vacancy Formation | supercell |
 | **interstitial** | Interstitial Formation | insert_ele, supercell |
 | **gamma** | Stacking Fault Energy | plane_miller, slip_direction |
-| **finitetlatt** | Lattice parameters at finite temperatures | supercell_size |
+| **finite_t_latt** | Lattice parameters at finite temperatures | supercell_size |
 | **phonon** | Phonon Spectra | supercell_size, MESH |
 
 #### Workflow Execution

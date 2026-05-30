@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import json
+import glob
 import string
 import random
 from typing import Type, List
@@ -13,15 +14,48 @@ from dflow.python import upload_packages
 from fpop.vasp import RunVasp
 from fpop.abacus import RunAbacus
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.account import merge_bohrium_defaults
 from apex.core.calculator import LAMMPS_INTER_TYPE
 
 upload_packages.append(__file__)
 
 MaxLength = 70
+APEX_TASK_STATUS = "apex_task_status.json"
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 
 
 # write a function to replace all '/' in the input string with '-'
+
+def load_apex_task_status(task_dir_or_file):
+    status_path = task_dir_or_file
+    if os.path.isdir(status_path):
+        status_path = os.path.join(status_path, APEX_TASK_STATUS)
+    if not os.path.isfile(status_path):
+        return None
+    try:
+        return loadfn(status_path)
+    except Exception as exc:
+        logging.warning(f"Could not parse {status_path}: {exc}")
+        return None
+
+
+def apex_task_state(task_dir_or_file):
+    status = load_apex_task_status(task_dir_or_file)
+    if not isinstance(status, dict):
+        return None
+    return status.get("state")
+
+
+def apex_task_succeeded(task_dir_or_file) -> bool:
+    return apex_task_state(task_dir_or_file) == "succeeded"
+
+
+def all_apex_task_status_succeeded(work_dir, task_glob="task.[0-9]*[0-9]") -> bool:
+    task_dirs = glob.glob(os.path.join(work_dir, task_glob))
+    task_dirs.sort()
+    if not task_dirs:
+        return False
+    return all(apex_task_succeeded(task_dir) for task_dir in task_dirs)
 
 def backup_path(path) -> None:
     path += "/"
@@ -113,6 +147,7 @@ def load_config_file(config_file: os.PathLike) -> dict:
                 'or use optional argument: -c to indicate a specific json file.'
         )
         config_dict = {}
+    config_dict = merge_bohrium_defaults(config_dict, config_file)
     return config_dict
 
 
@@ -137,7 +172,11 @@ def recursive_search(directories, path='.'):
 
 
 def handle_prop_suffix(parameter: dict):
-    if parameter.get('skip', False):
+    # Prefer req_calc as the explicit switch for running a property.
+    if "req_calc" in parameter:
+        if not parameter.get("req_calc"):
+            return None, None
+    elif parameter.get("skip", False):
         return None, None
     if 'init_from_suffix' and 'output_suffix' in parameter:
         do_refine = True
