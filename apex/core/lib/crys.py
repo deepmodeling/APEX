@@ -112,12 +112,16 @@ def _make_structure_from_prototype(
 
 
 def _resolve_ele_a(ele_name, a):
+    if ele_name is None:
+        return "ele", a
     if isinstance(ele_name, (int, float, np.integer, np.floating)):
         return "ele", float(ele_name)
     return ele_name, a
 
 
 def _resolve_ele_a_c(ele_name, a, c, default_a, default_c):
+    if ele_name is None:
+        return "ele", a, c
     if isinstance(ele_name, (int, float, np.integer, np.floating)):
         if a != default_a and c == default_c:
             return "ele", float(ele_name), a
@@ -169,6 +173,8 @@ def fcc1(ele_name="ele", a=4.05):
 
 
 def sc(ele_name="ele", a=2.551340126037118):
+    if ele_name is None:
+        ele_name = "ele"
     latt = Lattice.cubic(a)
     return Structure(latt, [ele_name], [[0, 0, 0]])
 
@@ -247,6 +253,8 @@ def L10(a=3.8, c=3.6, species=("A", "B"), supercell=None):
 def dhcp(
     ele_name="ele", a=4.05 / np.sqrt(2), c=4.05 / np.sqrt(2) * 4.0 * np.sqrt(2.0 / 3.0)
 ):
+    if ele_name is None:
+        ele_name = "ele"
     box = np.array([[1, 0, 0], [0.5, 0.5 * np.sqrt(3), 0], [0, 0, 1]])
     box[0] *= a
     box[1] *= a
@@ -265,6 +273,8 @@ def dhcp(
 
 
 def diamond(ele_name="ele", a=2.551340126037118):
+    if ele_name is None:
+        ele_name = "ele"
     box = np.array([[0.0, 1.0, 1.0], [1.0, 0.0, 1.0], [1.0, 1.0, 0.0]])
     box *= a
     latt = Lattice(box)

@@ -634,16 +634,22 @@ def generate_rss(
 
     weights = _normalize_shell_weights(cutoffs, shell_weights)
 
-    composition_fractions = _composition_fractions_from_state(state_species)
-    current_sro = _compute_warren_cowley_sro(
-        state_species,
-        shell_pairs,
-        target_pair_keys,
-        composition_fractions,
+    def _evaluate_species(species_snapshot):
+        composition_fractions = _composition_fractions_from_state(species_snapshot)
+        sro = _compute_warren_cowley_sro(
+            species_snapshot,
+            shell_pairs,
+            target_pair_keys,
+            composition_fractions,
+        )
+        objective = _objective_function(sro, target_sro, weights)
+        gap_metrics = _sro_gap_metrics(sro, target_sro, weights)
+        return sro, objective, gap_metrics
+
+    current_sro, current_objective, current_gap_metrics = _evaluate_species(
+        state_species
     )
-    current_objective = _objective_function(current_sro, target_sro, weights)
     initial_objective = float(current_objective)
-    current_gap_metrics = _sro_gap_metrics(current_sro, target_sro, weights)
     initial_gap_metrics = dict(current_gap_metrics)
 
     best_species = list(state_species)
@@ -689,6 +695,28 @@ def generate_rss(
         sampled_cache_index.clear()
         for index, cached_entry in enumerate(sampled_cache):
             sampled_cache_index[tuple(cached_entry["species"])] = index
+
+    if num_configs > 1 and max_steps == 0:
+        _store_sample(state_species, 0, float(current_gap_metrics["rmse"]))
+        for _ in range(num_configs - 1):
+            candidate_species = [str(site.specie) for site in parent.sites]
+            for sub_name, indices in sub_map.items():
+                _assign_initial_species(
+                    candidate_species,
+                    indices,
+                    composition_counts[sub_name],
+                    rng,
+                )
+            candidate_sro, candidate_objective, candidate_gap_metrics = (
+                _evaluate_species(candidate_species)
+            )
+            _store_sample(candidate_species, 0, float(candidate_gap_metrics["rmse"]))
+            if candidate_objective + tol < best_objective:
+                best_objective = candidate_objective
+                best_sro = candidate_sro
+                best_species = list(candidate_species)
+                best_gap_metrics = dict(candidate_gap_metrics)
+
     progress_bar = None
     if show_progress:
         if tqdm is None:
@@ -719,14 +747,9 @@ def generate_rss(
         attempted_moves += 1
         state_species[i], state_species[j] = state_species[j], state_species[i]
 
-        composition_fractions = _composition_fractions_from_state(state_species)
-        trial_sro = _compute_warren_cowley_sro(
-            state_species,
-            shell_pairs,
-            target_pair_keys,
-            composition_fractions,
+        trial_sro, trial_objective, trial_gap_metrics = _evaluate_species(
+            state_species
         )
-        trial_objective = _objective_function(trial_sro, target_sro, weights)
         delta = trial_objective - current_objective
 
         accept = False
@@ -740,7 +763,7 @@ def generate_rss(
             accepted_moves += 1
             current_sro = trial_sro
             current_objective = trial_objective
-            current_gap_metrics = _sro_gap_metrics(current_sro, target_sro, weights)
+            current_gap_metrics = trial_gap_metrics
             if trial_objective + tol < best_objective:
                 best_objective = trial_objective
                 best_sro = trial_sro

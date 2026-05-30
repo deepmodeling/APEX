@@ -3,6 +3,7 @@ import tempfile
 import sys
 import random
 import unittest
+import warnings
 from pathlib import Path
 from collections import Counter
 from unittest.mock import patch
@@ -10,7 +11,15 @@ from unittest.mock import patch
 from pymatgen.core import Lattice, Structure
 from pymatgen.io.vasp import Poscar
 
-from apex.core.lib.crys import bcc, fcc, suggest_supercell
+from apex.core.lib.crys import (
+    bcc,
+    diamond,
+    fcc,
+    hcp,
+    sc,
+    suggest_supercell,
+    tetragonal,
+)
 from apex.core.lib.rss import (
     RSSInputError,
     _assign_initial_species,
@@ -35,6 +44,20 @@ from apex.main import parse_args
 
 
 class TestRSS(unittest.TestCase):
+    def test_parent_lattice_builders_accept_none_placeholder_element(self):
+        builders = [
+            (fcc, {"a": 3.6}),
+            (bcc, {"a": 3.0}),
+            (sc, {"a": 3.0}),
+            (hcp, {"a": 3.0, "c": 4.9}),
+            (tetragonal, {"a": 3.0, "c": 3.2}),
+            (diamond, {"a": 3.6}),
+        ]
+        for builder, kwargs in builders:
+            with self.subTest(builder=builder.__name__):
+                structure = builder(None, **kwargs)
+                self.assertGreater(len(structure), 0)
+
     def test_rss_cli_parser(self):
         argv = ["apex", "rss", "examples/rss/rss.json"]
         with patch.object(sys, "argv", argv):
@@ -243,6 +266,11 @@ class TestRSS(unittest.TestCase):
         self.assertEqual(meta["sampling"]["num_configs"], 3)
         self.assertEqual(meta["sampling"]["interval"], 20)
         self.assertEqual(len(meta["sampling"]["sampled_rmses"]), 3)
+        species_signatures = {
+            tuple(str(site.specie) for site in structure.sites)
+            for structure in outputs
+        }
+        self.assertEqual(len(species_signatures), len(outputs))
 
     def test_num_configs_cache_keeps_best_unique_configs_by_rmse(self):
         st = fcc("Ni", a=3.6)
@@ -504,22 +532,38 @@ class TestRSS(unittest.TestCase):
                     max_steps=10,
                 )
 
-    def test_num_configs_fallback_uses_best_species(self):
+    def test_default_sro_targets_and_zero_step_num_configs_are_distinct(self):
         st = bcc("Fe", a=2.85)
-        st.make_supercell([2, 1, 1])
+        st.make_supercell([2, 2, 1])
 
-        outputs, meta = generate_rss(
-            structure=st,
-            compositions={"all": {"Fe": 1.0}},
-            shell_cutoffs=[2.6],
-            max_steps=0,
-            num_configs=3,
-            return_metadata=True,
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            outputs, meta = generate_rss(
+                structure=st,
+                compositions={"all": {"Co": 0.5, "Ni": 0.5}},
+                shell_cutoffs=[2.6],
+                max_steps=0,
+                seed=19,
+                num_configs=3,
+                return_metadata=True,
+            )
 
         self.assertEqual(len(outputs), 3)
-        self.assertEqual(meta["sampling"]["sampled_steps"], [-1, -1, -1])
-        self.assertEqual(meta["sampling"]["sampled_rmses"], [0.0, 0.0, 0.0])
+        self.assertEqual(
+            set(meta["target_sro"][0]),
+            {("Co", "Co"), ("Co", "Ni"), ("Ni", "Ni")},
+        )
+        self.assertTrue(
+            all(value == 0.0 for value in meta["target_sro"][0].values())
+        )
+        species_signatures = {
+            tuple(str(site.specie) for site in structure.sites)
+            for structure in outputs
+        }
+        self.assertEqual(len(species_signatures), len(outputs))
+        self.assertEqual(meta["sampling"]["sampled_steps"], [0, 0, 0])
+        self.assertEqual(meta["attempted_moves"], 0)
+        self.assertEqual(meta["accepted_moves"], 0)
 
 
 class TestRSSRunner(unittest.TestCase):
