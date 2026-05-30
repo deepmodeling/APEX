@@ -120,7 +120,7 @@ def _apply_gamma_fix_to_lammps_input(contents, add_fix):
     for idx, line in enumerate(lines):
         if "min_style       cg" in line:
             lower_id = idx
-        elif line.split()[:3] == ["variable", "N", "equal"]:
+        elif line.split()[:4] == ["variable", "N", "equal", "count(all)"]:
             upper_id = idx
             break
     if lower_id is None or upper_id is None:
