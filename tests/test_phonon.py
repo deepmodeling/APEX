@@ -4,6 +4,7 @@ import shutil
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import dpdata
 import numpy as np
@@ -68,6 +69,20 @@ class TestPhonon(unittest.TestCase):
     def test_task_param(self):
         self.assertEqual(self.prop_param[0], self.phonon.task_param())
         self.assertEqual(self.phonon.task_param()["BAND_POINTS"], 51)
+        self.assertEqual(self.phonon.task_param()["PRIMITIVE_AXES"], "P")
+
+    def test_phonopy_setup_command_prefers_v4_setup_tool(self):
+        with patch("apex.core.property.Phonon.shutil.which", return_value="/usr/bin/phonopy-init"):
+            self.assertEqual(
+                Phonon.phonopy_setup_command("-d --dim='2 2 2' -c POSCAR"),
+                "phonopy-init -d --dim='2 2 2' -c POSCAR",
+            )
+
+        with patch("apex.core.property.Phonon.shutil.which", return_value=None):
+            self.assertEqual(
+                Phonon.phonopy_setup_command("-d --dim='2 2 2' -c POSCAR"),
+                "phonopy -d --dim='2 2 2' -c POSCAR",
+            )
 
     def test_make_phonon_conf(self):
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
@@ -82,6 +97,8 @@ class TestPhonon(unittest.TestCase):
         self.assertEqual(len(dfm_dirs), 1)
         self.assertTrue(os.path.isfile(os.path.join(self.target_path, "phonopy_disp.yaml")))
         self.assertTrue(os.path.isfile(os.path.join(self.target_path, "task.000000/band.conf")))
+        with open(os.path.join(self.target_path, "task.000000/band.conf")) as fp:
+            self.assertIn("PRIMITIVE_AXES = P", fp.read())
 
     def test_post_process_injects_deepmd_plugin_for_phonon(self):
         deepmd_phonon = Phonon(

@@ -25,6 +25,11 @@ upload_packages.append(__file__)
 
 
 class Phonon(Property):
+    @staticmethod
+    def phonopy_setup_command(arguments: str) -> str:
+        executable = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
+        return f"{executable} {arguments}"
+
     def __init__(self, parameter, inter_param=None):
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
@@ -42,7 +47,7 @@ class Phonon(Property):
                 self.seekpath_param = parameter["seekpath_param"]
                 parameter["MESH"] = parameter.get('MESH', None)
                 self.MESH = parameter["MESH"]
-                parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', None)
+                parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', "P")
                 self.PRIMITIVE_AXES = parameter["PRIMITIVE_AXES"]
                 parameter["BAND"] = parameter.get('BAND', None)
                 self.BAND = parameter["BAND"]
@@ -282,7 +287,7 @@ class Phonon(Property):
                     orb_file = self.inter_param.get("orb_files", None)
                     abacus_utils.append_orb_file_to_stru("STRU", orb_file, prefix='pp_orb')
                     ## generate STRU-00x
-                    cmd = "phonopy setting.conf --abacus -d"
+                    cmd = self.phonopy_setup_command("setting.conf --abacus -d")
                     subprocess.call(cmd, shell=True)
 
                     with open("band.conf", "a") as fp:
@@ -307,7 +312,7 @@ class Phonon(Property):
 
                 # ------------make for vasp and lammps------------
                 if self.primitive:
-                    subprocess.call('phonopy --symmetry', shell=True)
+                    subprocess.call(self.phonopy_setup_command("--symmetry"), shell=True)
                     subprocess.call('cp PPOSCAR POSCAR', shell=True)
                     shutil.copyfile("PPOSCAR", "POSCAR-unitcell")
                 else:
@@ -315,10 +320,13 @@ class Phonon(Property):
 
                 # make tasks
                 if self.inter_param["type"] == 'vasp':
-                    cmd = "phonopy -d --dim='%d %d %d' -c POSCAR" % (
-                        int(self.supercell_size[0]),
-                        int(self.supercell_size[1]),
-                        int(self.supercell_size[2])
+                    cmd = self.phonopy_setup_command(
+                        "-d --dim='%d %d %d' -c POSCAR"
+                        % (
+                            int(self.supercell_size[0]),
+                            int(self.supercell_size[1]),
+                            int(self.supercell_size[2]),
+                        )
                     )
                     subprocess.call(cmd, shell=True)
                     # linear response method
@@ -540,7 +548,7 @@ class Phonon(Property):
                 self.check_same_copy("task.000000/band.conf", "band.conf")
                 self.check_same_copy("task.000000/STRU.ori", "STRU")
                 self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
+                os.system(self.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
                 if os.path.exists("FORCE_SETS"):
                     print('FORCE_SETS is created')
                 else:
@@ -555,7 +563,7 @@ class Phonon(Property):
                 if self.approach == "linear":
                     os.chdir(all_tasks[0])
                     assert os.path.isfile('vasprun.xml'), "vasprun.xml not found"
-                    os.system('phonopy --fc vasprun.xml')
+                    os.system(self.phonopy_setup_command("--fc vasprun.xml"))
                     assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
                     os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
                             self.supercell_size[0],
@@ -568,7 +576,7 @@ class Phonon(Property):
                 elif self.approach == "displacement":
                     self.check_same_copy("task.000000/band.conf", "band.conf")
                     self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                    os.system('phonopy -f task.0*/vasprun.xml')
+                    os.system(self.phonopy_setup_command("-f task.0*/vasprun.xml"))
                     if os.path.exists("FORCE_SETS"):
                         print('FORCE_SETS is created')
                     else:
