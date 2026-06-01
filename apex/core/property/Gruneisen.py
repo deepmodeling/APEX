@@ -51,7 +51,7 @@ class Gruneisen(Property):
         self.seekpath_param = parameter["seekpath_param"]
         parameter["MESH"] = parameter.get("MESH", None)
         self.MESH = parameter["MESH"]
-        parameter["PRIMITIVE_AXES"] = parameter.get("PRIMITIVE_AXES", None)
+        parameter["PRIMITIVE_AXES"] = parameter.get("PRIMITIVE_AXES", "P")
         self.PRIMITIVE_AXES = parameter["PRIMITIVE_AXES"]
         parameter["BAND"] = parameter.get("BAND", None)
         self.BAND = parameter["BAND"]
@@ -328,7 +328,10 @@ class Gruneisen(Property):
                     )
                     if self.PRIMITIVE_AXES:
                         fp.write(f"PRIMITIVE_AXES = {self.PRIMITIVE_AXES}\n")
-                subprocess.check_call("phonopy setting.conf --abacus -d", shell=True)
+                subprocess.check_call(
+                    Phonon.phonopy_setup_command("setting.conf --abacus -d"),
+                    shell=True,
+                )
 
                 displaced_stru_files = sorted(
                     os.path.basename(path)
@@ -481,7 +484,7 @@ class Gruneisen(Property):
 
     def _prepare_vasp_phonon_task(self) -> None:
         if self.primitive:
-            subprocess.check_call("phonopy --symmetry", shell=True)
+            subprocess.check_call(Phonon.phonopy_setup_command("--symmetry"), shell=True)
             if not os.path.isfile("PPOSCAR"):
                 raise FileNotFoundError("PPOSCAR was not created by phonopy --symmetry")
             shutil.copyfile("PPOSCAR", "POSCAR-unitcell")
@@ -490,8 +493,10 @@ class Gruneisen(Property):
             shutil.copyfile("POSCAR", "POSCAR-unitcell")
 
         subprocess.check_call(
-            'phonopy -d --dim="%s %s %s" -c POSCAR'
-            % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+            Phonon.phonopy_setup_command(
+                '-d --dim="%s %s %s" -c POSCAR'
+                % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+            ),
             shell=True,
         )
         if self.approach == "linear":
@@ -774,7 +779,10 @@ if __name__ == "__main__":
                 if not os.path.isfile(vasprun):
                     raise FileNotFoundError(f"vasprun.xml not found in {task_dir}")
                 os.chdir(task_dir)
-                subprocess.check_call("phonopy --fc vasprun.xml", shell=True)
+                subprocess.check_call(
+                    Phonon.phonopy_setup_command("--fc vasprun.xml"),
+                    shell=True,
+                )
             poscar = os.path.join(task_dir, "POSCAR-unitcell")
         else:
             poscar = os.path.join(task_dir, "POSCAR")
@@ -847,7 +855,10 @@ if __name__ == "__main__":
             try:
                 os.chdir(helper_dir)
                 vasprun_args = " ".join(os.path.relpath(path, helper_dir) for path in vaspruns)
-                subprocess.check_call(f"phonopy -f {vasprun_args}", shell=True)
+                subprocess.check_call(
+                    Phonon.phonopy_setup_command(f"-f {vasprun_args}"),
+                    shell=True,
+                )
             finally:
                 os.chdir(cwd)
         if not os.path.isfile(force_sets):
@@ -858,8 +869,14 @@ if __name__ == "__main__":
             try:
                 os.chdir(helper_dir)
                 subprocess.check_call(
-                    'phonopy --dim="%s %s %s" -c POSCAR-unitcell --writefc'
-                    % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+                    Phonon.phonopy_setup_command(
+                        '--dim="%s %s %s" -c POSCAR-unitcell --writefc'
+                        % (
+                            self.supercell_size[0],
+                            self.supercell_size[1],
+                            self.supercell_size[2],
+                        )
+                    ),
                     shell=True,
                 )
             finally:
@@ -918,7 +935,10 @@ if __name__ == "__main__":
             try:
                 os.chdir(helper_dir)
                 log_args = " ".join(os.path.relpath(path, helper_dir) for path in logs)
-                subprocess.check_call(f"phonopy -f {log_args}", shell=True)
+                subprocess.check_call(
+                    Phonon.phonopy_setup_command(f"-f {log_args}"),
+                    shell=True,
+                )
             finally:
                 os.chdir(cwd)
         if not os.path.isfile(force_sets):
@@ -934,7 +954,10 @@ if __name__ == "__main__":
                 # Pass phonopy_disp.yaml explicitly so phonopy reads the supercell from the yaml
                 # rather than falling into old-style POSCAR mode (which has no DIM).
                 if not os.path.isfile("FORCE_CONSTANTS"):
-                    subprocess.check_call("phonopy phonopy_disp.yaml --writefc", shell=True)
+                    subprocess.check_call(
+                        Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc"),
+                        shell=True,
+                    )
                 if not os.path.isfile("FORCE_CONSTANTS"):
                     raise FileNotFoundError(f"FORCE_CONSTANTS was not created in {helper_dir}")
                 if not os.path.isfile("mesh.yaml"):

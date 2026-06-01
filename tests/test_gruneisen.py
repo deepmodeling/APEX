@@ -16,6 +16,7 @@ from monty.serialization import dumpfn, loadfn
 from apex.core.calculator.Lammps import Lammps
 from apex.core.lib.mfp_eosfit import fit_birch_murnaghan
 from apex.core.property.Gruneisen import Gruneisen
+from apex.core.property.Phonon import Phonon
 
 
 class TestGruneisen(unittest.TestCase):
@@ -52,6 +53,7 @@ class TestGruneisen(unittest.TestCase):
         self.assertEqual(task_param["BAND_POINTS"], 51)
         self.assertEqual(task_param["supercell_size"], [2, 2, 2])
         self.assertEqual(task_param["approach"], "linear")
+        self.assertEqual(task_param["PRIMITIVE_AXES"], "P")
 
     def test_validation_rejects_invalid_schema(self):
         with self.assertRaises(ValueError):
@@ -86,7 +88,7 @@ class TestGruneisen(unittest.TestCase):
         shutil.copy(self.source_path, self.equi_path / "CONTCAR")
         def fake_check_call(command, shell):
             self.assertTrue(shell)
-            self.assertIn("phonopy -d", command)
+            self.assertTrue(command.startswith(Phonon.phonopy_setup_command("-d")))
             Path("SPOSCAR").write_text(Path("POSCAR").read_text())
             Path("phonopy_disp.yaml").write_text("displacements: []\n")
 
@@ -126,7 +128,7 @@ class TestGruneisen(unittest.TestCase):
 
         def fake_check_call(command, shell):
             self.assertTrue(shell)
-            self.assertIn("phonopy -d", command)
+            self.assertTrue(command.startswith(Phonon.phonopy_setup_command("-d")))
             Path("phonopy_disp.yaml").write_text("displacements: []\n")
             Path("POSCAR-001").write_text(Path("POSCAR").read_text())
             Path("POSCAR-002").write_text(Path("POSCAR").read_text())
@@ -175,7 +177,7 @@ class TestGruneisen(unittest.TestCase):
         def fake_check_call(command, shell):
             self.assertTrue(shell)
             calls.append(command)
-            if command == "phonopy --fc vasprun.xml":
+            if command == Phonon.phonopy_setup_command("--fc vasprun.xml"):
                 (task_dir / "FORCE_CONSTANTS").write_text("fake force constants\n")
             elif "POSCAR-unitcell" in command:
                 (task_dir / "mesh.yaml").write_text(
@@ -204,7 +206,7 @@ class TestGruneisen(unittest.TestCase):
 
         self.assertTrue((task_dir / "FORCE_CONSTANTS").is_file())
         self.assertTrue((task_dir / "mesh.yaml").is_file())
-        self.assertEqual(calls[0], "phonopy --fc vasprun.xml")
+        self.assertEqual(calls[0], Phonon.phonopy_setup_command("--fc vasprun.xml"))
         self.assertIn("-c POSCAR-unitcell", calls[1])
         self.assertIn("--nomeshsym", calls[1])
 
@@ -226,9 +228,9 @@ class TestGruneisen(unittest.TestCase):
         def fake_check_call(command, shell):
             self.assertTrue(shell)
             calls.append((Path.cwd().name, command))
-            if command.startswith("phonopy -f "):
+            if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command.startswith("phonopy --dim=") and "--writefc" in command:
+            elif command.startswith(Phonon.phonopy_setup_command("--dim=")) and "--writefc" in command:
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
             elif command.startswith("phonopy --dim="):
                 strain = loadfn("volume.json")["strain"]
@@ -267,7 +269,10 @@ class TestGruneisen(unittest.TestCase):
 
         self.assertEqual(result["thermal_expansion"]["sign"], ["positive", "positive"])
         self.assertEqual(result["gruneisen"]["qpoint_count"], 1)
-        self.assertEqual(len([cmd for _, cmd in calls if cmd.startswith("phonopy -f ")]), 3)
+        self.assertEqual(
+            len([cmd for _, cmd in calls if cmd.startswith(Phonon.phonopy_setup_command("-f"))]),
+            3,
+        )
         self.assertTrue((work_dir / "volume.000000" / "mesh.yaml").is_file())
         self.assertTrue((work_dir / "volume.000001" / "band.dat").is_file())
         self.assertIn("Temperature(K)  SumGammaCv  Sign", ptr)
@@ -292,7 +297,7 @@ class TestGruneisen(unittest.TestCase):
 
         def fake_check_call(command, shell):
             self.assertTrue(shell)
-            self.assertEqual(command, "phonopy setting.conf --abacus -d")
+            self.assertEqual(command, Phonon.phonopy_setup_command("setting.conf --abacus -d"))
             source = Path("STRU").read_text()
             Path("phonopy_disp.yaml").write_text("displacements: []\n")
             Path("STRU-001").write_text(source)
@@ -343,9 +348,9 @@ class TestGruneisen(unittest.TestCase):
         def fake_check_call(command, shell):
             self.assertTrue(shell)
             calls.append((Path.cwd().name, command))
-            if command.startswith("phonopy -f "):
+            if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == "phonopy phonopy_disp.yaml --writefc":
+            elif command == Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc"):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
             elif command == "phonopy band.conf":
                 strain = loadfn("volume.json")["strain"]
@@ -386,9 +391,16 @@ class TestGruneisen(unittest.TestCase):
         self.assertEqual(result["thermal_expansion"]["sign"], ["positive", "positive"])
         self.assertEqual(result["gruneisen"]["qpoint_count"], 1)
         self.assertEqual(result["gruneisen"]["mode_count"], 2)
-        self.assertEqual(len([cmd for _, cmd in calls if cmd.startswith("phonopy -f ")]), 3)
         self.assertEqual(
-            len([cmd for _, cmd in calls if cmd == "phonopy phonopy_disp.yaml --writefc"]),
+            len([cmd for _, cmd in calls if cmd.startswith(Phonon.phonopy_setup_command("-f"))]),
+            3,
+        )
+        self.assertEqual(
+            len([
+                cmd
+                for _, cmd in calls
+                if cmd == Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc")
+            ]),
             3,
         )
         self.assertEqual(len([cmd for _, cmd in calls if cmd == "phonopy band.conf"]), 3)

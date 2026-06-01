@@ -126,3 +126,4 @@ Major additions include:
 - Added runnable examples for RSS, GammaSurface, and finite-temperature elasticity.
 - Added GUI developer documentation.
 - Added `monty` to the package dependencies and constrained supported Python versions to `<3.13`.
+- Added support for Phonopy v4 in terms of phonon calculation.
