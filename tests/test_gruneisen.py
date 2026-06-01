@@ -345,9 +345,9 @@ class TestGruneisen(unittest.TestCase):
             calls.append((Path.cwd().name, command))
             if command.startswith("phonopy -f "):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == "phonopy --writefc":
+            elif command == "phonopy phonopy_disp.yaml --writefc":
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command == "phonopy band.conf --abacus":
+            elif command == "phonopy band.conf":
                 strain = loadfn("volume.json")["strain"]
                 if strain < 0:
                     frequencies = [4.2, 8.4]
@@ -387,6 +387,11 @@ class TestGruneisen(unittest.TestCase):
         self.assertEqual(result["gruneisen"]["qpoint_count"], 1)
         self.assertEqual(result["gruneisen"]["mode_count"], 2)
         self.assertEqual(len([cmd for _, cmd in calls if cmd.startswith("phonopy -f ")]), 3)
+        self.assertEqual(
+            len([cmd for _, cmd in calls if cmd == "phonopy phonopy_disp.yaml --writefc"]),
+            3,
+        )
+        self.assertEqual(len([cmd for _, cmd in calls if cmd == "phonopy band.conf"]), 3)
         self.assertTrue((work_dir / "volume.000000" / "mesh.yaml").is_file())
         self.assertTrue((work_dir / "volume.000001" / "band.dat").is_file())
         self.assertTrue("Temperature(K)  SumGammaCv  Sign" in ptr)

@@ -120,7 +120,7 @@ def _apply_gamma_fix_to_lammps_input(contents, add_fix):
     for idx, line in enumerate(lines):
         if "min_style       cg" in line:
             lower_id = idx
-        elif "variable        N equal count(all)" in line:
+        elif line.split()[:4] == ["variable", "N", "equal", "count(all)"]:
             upper_id = idx
             break
     if lower_id is None or upper_id is None:
@@ -720,7 +720,18 @@ class Lammps(Task):
         elif property_type == "finite_t_latt":
             return ["log.lammps", "outlog"] + debug_files + ["dump.relax", "average_box.txt"]
         elif property_type in ["annealing", "Annealing"]:
-            return ["log.lammps", "outlog"] + debug_files + ["dump.anneal_ramp", "dump.anneal_cool", "restart.*"]
+            return [
+                "log.lammps",
+                "outlog",
+                *debug_files,
+                "dump.anneal_ramp",
+                "dump.anneal_cool",
+                "heating_interval.dat",
+                "cooling_interval.dat",
+                "rdf_ramp.dat",
+                "rdf_cool.dat",
+                "restart.*",
+            ]
         elif property_type == "finite_t_elastic":
             return [
                 "log.lammps",

@@ -274,11 +274,11 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += (
-        "thermo_style    custom step temp pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\ntimestep ${timestep}\nvariable        N equal step\nvariable        V equal vol\nvariable        Vatom equal ${V}/count(all)\nvariable        Temp equal temp\nvariable        pote equal c_mype\nvariable        Etotal equal etotal\nvariable        Press equal press\nvariable        stepVal equal step\nvariable        stepVal equal step\ncompute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}\n"
+        "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
     )
     ret += "dump            1 all custom 100 dump.relax id type xs ys zs fx fy fz\n"  # 06/09 give dump.relax
     ret += "run    0\n"
-    ret += "variable        N equal step\n"
+    ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        tmplx equal lx\n"
@@ -365,7 +365,7 @@ def make_lammps_equi(
             ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
             ret += "fix             1 all box/relax tri 0.0 \n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-    ret += "variable        N equal step\n"
+    ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        tmplx equal lx\n"
@@ -419,7 +419,7 @@ def make_lammps_elastic(
     ret += "dump            1 all custom 100 dump.relax id type xs ys zs fx fy fz\n"
     ret += "min_style       cg\n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-    ret += "variable        N equal step\n"
+    ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        Pxx equal pxx\n"
@@ -496,8 +496,8 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None
     ret += "fix 2 all ave/time ${N_every} ${N_repeat} ${N_freq}  v_lx v_ly v_lz  ave running file average_box.txt\n"
     ret += "run ${ave_step} \n"
 
-    # Bookkeeping outputs
-    ret += "variable        N equal step\n"
+    # Final log summaries
+    ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        tmplx equal lx\n"
@@ -670,7 +670,7 @@ def make_lammps_press_relax(
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
     ret += "fix             1 all box/relax aniso ${Px} \n"
     ret += "minimize        %e %e %d %d\n" % (etol, ftol, maxiter, maxeval)
-    ret += "variable        N equal step\n"
+    ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
     ret += 'variable        E equal "c_mype"\n'
     ret += "variable        Pxx equal pxx\n"
@@ -722,6 +722,16 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     ret += "compute         mype all pe\n"
     ret += "thermo          100\n"
     ret += ("thermo_style    custom step temp pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n")
+    ret += "timestep ${timestep}\n"
+    ret += "variable        N equal count(all)\n"
+    ret += "variable        V equal vol\n"
+    ret += "variable        Vatom equal v_V/count(all)\n"
+    ret += "variable        Temp equal temp\n"
+    ret += "variable        pote equal c_mype\n"
+    ret += "variable        Etotal equal etotal\n"
+    ret += "variable        Press equal press\n"
+    ret += "variable        stepVal equal step\n"
+    ret += "compute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}\n"
 
     # Initialize velocities and equilibrate at start_temp
     ret += f"velocity all create ${{start_temp}} {vseed} mom yes rot yes dist gaussian\n"
@@ -758,7 +768,8 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
         else:
             ret += f"fix 1 all npt temp ${{start_temp}} ${{target_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
     ret += f"dump            1 all custom  {dump_step} dump.anneal_ramp id type xs ys zs fx fy fz\n"
-    ret += "fix heat_log all print ${rdf_interval} \"v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press\" file heating_interval.dat screen no title \"# TimeStep v_N v_Temp v_Vatom v_pote v_Etotal v_Press\"\n"
+    ret += "fix rdf_ramp all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] file rdf_ramp.dat mode vector\n"
+    ret += "fix heat_log all ave/time ${rdf_interval} 1 ${rdf_interval} v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press file heating_interval.dat\n"
     ret += "run ${ramp_step}\n"
     ret += "unfix heat_log\n"
     ret += "unfix rdf_ramp\n"
@@ -784,7 +795,7 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
             ret += f"fix 1 all npt temp ${{target_temp}} ${{end_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
     ret += f"dump            2 all custom  {dump_step} dump.anneal_cool id type xs ys zs fx fy fz\n"
     ret += "fix rdf_cool all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] file rdf_cool.dat mode vector\n"
-    ret += "fix cool_log all print ${rdf_interval} \"v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press\" file cooling_interval.dat screen no title \"# TimeStep v_N v_Temp v_Vatom v_pote v_Etotal v_Press\"\n"
+    ret += "fix cool_log all ave/time ${rdf_interval} 1 ${rdf_interval} v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press file cooling_interval.dat\n"
     ret += "run ${cool_step}\n"
     ret += "unfix cool_log\n"
     ret += "unfix rdf_cool\n"
