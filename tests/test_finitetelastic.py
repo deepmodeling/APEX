@@ -3,6 +3,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -527,6 +528,47 @@ def test_finite_t_elastic_invalid_method_and_component_raise(tmp_path):
 def test_format_temperature_for_integer_and_fractional_values():
     assert _format_temperature(300.0) == "300"
     assert _format_temperature(300.5) == "300p5"
+
+
+class TestFiniteTelasticCoverage(unittest.TestCase):
+    def test_finite_t_elastic_generates_metadata_and_include_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_finite_t_elastic_generates_metadata_and_include_files(Path(tmp))
+
+    def test_finite_t_elastic_defaults_task_type_and_scalar_temperature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_finite_t_elastic_defaults_task_type_and_scalar_temperature(Path(tmp))
+
+    def test_finite_t_elastic_deform_include_components(self):
+        cases = [
+            (1, "change_box all y scale ${scale_y} remap units box"),
+            (2, "change_box all z scale ${scale_z} remap units box"),
+            (3, "change_box all yz delta ${d_yz} remap units box"),
+            (4, "change_box all xz delta ${d_xz} remap units box"),
+            (5, "change_box all xy delta ${d_xy} remap units box"),
+        ]
+        for component, expected in cases:
+            with self.subTest(component=component):
+                test_finite_t_elastic_deform_include_components(component, expected)
+
+    def test_finite_t_elastic_helper_error_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_finite_t_elastic_helper_error_paths(Path(tmp))
+
+    def test_finite_t_elastic_compute_lower_with_synthetic_stress_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_finite_t_elastic_compute_lower_with_synthetic_stress_data(Path(tmp))
+
+    def test_finite_t_elastic_missing_contcar_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_finite_t_elastic_missing_contcar_raises(Path(tmp))
+
+    def test_finite_t_elastic_invalid_method_and_component_raise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_finite_t_elastic_invalid_method_and_component_raise(Path(tmp))
+
+    def test_format_temperature_for_integer_and_fractional_values(self):
+        test_format_temperature_for_integer_and_fractional_values()
 
 
 if __name__ == "__main__":
