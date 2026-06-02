@@ -1,4 +1,7 @@
 import json
+import tempfile
+import unittest
+from pathlib import Path
 
 import pytest
 
@@ -468,3 +471,89 @@ def test_make_lammps_annealing_langevin_nve():
     assert "fix tg all langevin ${start_temp} ${target_temp} tdamp_var 24680" in script
     assert "fix tg all langevin ${target_temp} ${end_temp} tdamp_var 24680" in script
     assert script.count("unfix tg") == 3
+
+
+class TestLammpsUtils(unittest.TestCase):
+    def test_element_list_orders_by_lammps_type_id(self):
+        test_element_list_orders_by_lammps_type_id()
+
+    def test_make_lammps_eval_static_input_generation(self):
+        test_make_lammps_eval_static_input_generation()
+
+    def test_make_lammps_eval_mace_adds_atom_map_and_newton(self):
+        test_make_lammps_eval_mace_adds_atom_map_and_newton()
+
+    def test_standard_lammps_builders_mace_add_atom_map_and_newton(self):
+        builders = [
+            lambda: lammps_utils.make_lammps_equi(
+                "conf.lmp", TYPE_MAP, dummy_interaction, {"type": "mace"}
+            ),
+            lambda: lammps_utils.make_lammps_elastic(
+                "conf.lmp", TYPE_MAP, dummy_interaction, {"type": "mace"}
+            ),
+            lambda: lammps_utils.make_lammps_press_relax(
+                "conf.lmp", TYPE_MAP, 0.95, dummy_interaction, {"type": "mace"}
+            ),
+        ]
+        for builder in builders:
+            with self.subTest(builder=builder):
+                test_standard_lammps_builders_mace_add_atom_map_and_newton(builder)
+
+    def test_make_lammps_equi_relaxation_default_change_box(self):
+        test_make_lammps_equi_relaxation_default_change_box()
+
+    def test_make_lammps_equi_without_box_relax_for_fixed_cell_property(self):
+        test_make_lammps_equi_without_box_relax_for_fixed_cell_property()
+
+    def test_make_lammps_equi_new_deepmd_relaxation_uses_large_dump_step(self):
+        test_make_lammps_equi_new_deepmd_relaxation_uses_large_dump_step()
+
+    def test_make_lammps_equi_new_deepmd_property_detour_skips_middle_minimizations(self):
+        test_make_lammps_equi_new_deepmd_property_detour_skips_middle_minimizations()
+
+    def test_make_lammps_elastic_input_generation(self):
+        test_make_lammps_elastic_input_generation()
+
+    def test_make_lammps_press_relax_eos_input_generation(self):
+        test_make_lammps_press_relax_eos_input_generation()
+
+    def test_make_lammps_finite_t_latt_default_cal_setting(self):
+        test_make_lammps_finite_t_latt_default_cal_setting()
+
+    def test_make_lammps_finite_t_latt_adiabatic_ensemble(self):
+        test_make_lammps_finite_t_latt_adiabatic_ensemble()
+
+    def test_make_lammps_finite_t_latt_langevin_thermostat(self):
+        test_make_lammps_finite_t_latt_langevin_thermostat()
+
+    def test_make_lammps_finite_t_latt_custom_settings(self):
+        test_make_lammps_finite_t_latt_custom_settings()
+
+    def test_make_lammps_finite_t_elastic_equi_role(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_make_lammps_finite_t_elastic_equi_role(Path(tmp))
+
+    def test_make_lammps_finite_t_elastic_mace_setup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_make_lammps_finite_t_elastic_mace_setup(Path(tmp))
+
+    def test_make_lammps_finite_t_elastic_response_roles(self):
+        for role in ["reference", "strained"]:
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as tmp:
+                test_make_lammps_finite_t_elastic_response_roles(Path(tmp), role)
+
+    def test_make_lammps_finite_t_elastic_invalid_role_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_make_lammps_finite_t_elastic_invalid_role_raises(Path(tmp))
+
+    def test_make_lammps_annealing_default_nose_hoover_npt(self):
+        test_make_lammps_annealing_default_nose_hoover_npt()
+
+    def test_make_lammps_annealing_nose_hoover_nvt(self):
+        test_make_lammps_annealing_nose_hoover_nvt()
+
+    def test_make_lammps_annealing_langevin_nph(self):
+        test_make_lammps_annealing_langevin_nph()
+
+    def test_make_lammps_annealing_langevin_nve(self):
+        test_make_lammps_annealing_langevin_nve()

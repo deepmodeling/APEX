@@ -1,4 +1,8 @@
+import os
 import shutil
+import tempfile
+import unittest
+from pathlib import Path
 
 import pytest
 from monty.serialization import loadfn
@@ -7,7 +11,9 @@ from apex.core.calculator.lib import lammps_utils
 from apex.core.property.Annealing import Annealing
 
 
-TEST_CONTCAR = "tests/equi/lammps/hcp-Ti-CONTCAR"
+TEST_CONTCAR = os.path.join(
+    os.path.dirname(__file__), "equi", "lammps", "hcp-Ti-CONTCAR"
+)
 TYPE_MAP = {"Ti": 0}
 PARAM = {"type": "deepmd"}
 
@@ -289,3 +295,34 @@ def test_annealing_lammps_input_contains_all_md_stages_and_outputs():
     assert "file cooling_interval.dat" in script
     assert "dump.anneal_ramp" in script
     assert "dump.anneal_cool" in script
+
+
+class TestAnnealingCoverage(unittest.TestCase):
+    def test_annealing_default_parameter_parsing(self):
+        test_annealing_default_parameter_parsing()
+
+    def test_annealing_custom_cal_setting_override(self):
+        test_annealing_custom_cal_setting_override()
+
+    def test_annealing_make_confs_writes_task_files_and_variables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_make_confs_writes_task_files_and_variables(Path(tmp))
+
+    def test_annealing_supercell_length_derives_replication_and_task_param(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_supercell_length_derives_replication_and_task_param(Path(tmp))
+
+    def test_annealing_rate_controls_derive_ramp_and_cool_steps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_rate_controls_derive_ramp_and_cool_steps(Path(tmp))
+
+    def test_annealing_rate_fallback_and_missing_relaxation_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_rate_fallback_and_missing_relaxation_error(Path(tmp))
+
+    def test_annealing_compute_lower_returns_task_notes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_compute_lower_returns_task_notes(Path(tmp))
+
+    def test_annealing_lammps_input_contains_all_md_stages_and_outputs(self):
+        test_annealing_lammps_input_contains_all_md_stages_and_outputs()

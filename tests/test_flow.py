@@ -1,4 +1,7 @@
 import os
+import tempfile
+import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -418,3 +421,61 @@ def test_terminate_workflow_and_raise_if_failed():
 
     with pytest.raises(RuntimeError, match="Property workflow failed with 1 failed step"):
         generator._raise_if_failed(["detail"], "Property workflow")
+
+
+class TestFlowCoverage(unittest.TestCase):
+    def run_with_tmp_and_monkeypatch(self, func):
+        monkeypatch = pytest.MonkeyPatch()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                return func(Path(tmp), monkeypatch)
+        finally:
+            monkeypatch.undo()
+
+    def run_with_monkeypatch(self, func):
+        monkeypatch = pytest.MonkeyPatch()
+        try:
+            return func(monkeypatch)
+        finally:
+            monkeypatch.undo()
+
+    def test_flow_static_helpers_and_failure_formatting(self):
+        test_flow_static_helpers_and_failure_formatting()
+
+    def test_download_artifact_with_retry_retries_transient_and_stops_on_missing(self):
+        self.run_with_monkeypatch(
+            test_download_artifact_with_retry_retries_transient_and_stops_on_missing
+        )
+
+    def test_step_artifact_lookup_and_main_log_download_from_child(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_step_artifact_lookup_and_main_log_download_from_child
+        )
+
+    def test_diagnostic_artifact_downloads_only_allowed_debug_artifacts(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_diagnostic_artifact_downloads_only_allowed_debug_artifacts
+        )
+
+    def test_set_relax_flows_and_tasks_expand_globs_and_skip_finished(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_set_relax_flows_and_tasks_expand_globs_and_skip_finished
+        )
+
+    def test_set_props_flow_expands_properties_skips_and_removes_existing_dir(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_set_props_flow_expands_properties_skips_and_removes_existing_dir
+        )
+
+    def test_set_props_tasks_uses_relax_output_or_pre_relaxed_base_and_errors(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_set_props_tasks_uses_relax_output_or_pre_relaxed_base_and_errors
+        )
+
+    def test_submit_relax_props_and_joint_submit_only_paths(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_submit_relax_props_and_joint_submit_only_paths
+        )
+
+    def test_terminate_workflow_and_raise_if_failed(self):
+        test_terminate_workflow_and_raise_if_failed()

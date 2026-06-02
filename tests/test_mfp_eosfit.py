@@ -1,3 +1,7 @@
+import tempfile
+import unittest
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -195,3 +199,83 @@ def test_fit_birch_murnaghan_invalid_inputs_raise():
 
     with pytest.raises(ValueError, match="at least 3"):
         mfp_eosfit.init_guess_from_data([1, 2], [1, 2])
+
+
+class TestMfpEosfitCoverage(unittest.TestCase):
+    def test_eos_lists_include_expected_models(self):
+        test_eos_lists_include_expected_models()
+
+    def test_four_parameter_eos_models_equal_e0_at_v0(self):
+        for model in [
+            mfp_eosfit.murnaghan,
+            mfp_eosfit.birch,
+            mfp_eosfit.BM4,
+            mfp_eosfit.rBM4,
+            mfp_eosfit.LOG4,
+            mfp_eosfit.rPT4,
+            mfp_eosfit.vinet,
+            mfp_eosfit.universal,
+        ]:
+            with self.subTest(model=model.__name__):
+                test_four_parameter_eos_models_equal_e0_at_v0(model)
+
+    def test_birch_residual_is_zero_for_matching_data(self):
+        test_birch_residual_is_zero_for_matching_data()
+
+    def test_four_parameter_residual_wrappers_zero_for_matching_data(self):
+        for model, residual in [
+            (mfp_eosfit.murnaghan, mfp_eosfit.res_murnaghan),
+            (mfp_eosfit.mBM4, mfp_eosfit.res_mBM4),
+            (mfp_eosfit.BM4, mfp_eosfit.res_BM4),
+            (mfp_eosfit.rBM4, mfp_eosfit.res_rBM4),
+            (mfp_eosfit.universal, mfp_eosfit.res_universal),
+            (mfp_eosfit.LOG4, mfp_eosfit.res_LOG4),
+            (mfp_eosfit.rPT4, mfp_eosfit.res_rPT4),
+            (mfp_eosfit.vinet, mfp_eosfit.res_vinet),
+            (mfp_eosfit.Li4p, mfp_eosfit.res_Li4p),
+        ]:
+            with self.subTest(model=model.__name__):
+                test_four_parameter_residual_wrappers_zero_for_matching_data(
+                    model, residual
+                )
+
+    def test_five_parameter_eos_models_equal_e0_at_v0(self):
+        for model in [
+            mfp_eosfit.mBM5,
+            mfp_eosfit.BM5,
+            mfp_eosfit.rBM5,
+            mfp_eosfit.LOG5,
+            mfp_eosfit.rPT5,
+        ]:
+            with self.subTest(model=model.__name__):
+                test_five_parameter_eos_models_equal_e0_at_v0(model)
+
+    def test_eos_property_calculators_return_expected_shapes(self):
+        test_eos_property_calculators_return_expected_shapes()
+
+    def test_other_eos_residual_wrappers_zero_for_matching_data(self):
+        for model, residual, pars in [
+            (mfp_eosfit.morse, mfp_eosfit.res_morse, [-3.0, 0.5, 4.0, 10.0]),
+            (mfp_eosfit.morse_AB, mfp_eosfit.res_morse_AB, [-3.0, 0.5, 1.0, 10.0]),
+            (mfp_eosfit.morse_3p, mfp_eosfit.res_morse_3p, [-3.0, 0.5, 10.0]),
+            (mfp_eosfit.mie, mfp_eosfit.res_mie, [-3.0, 0.5, 4.0, 10.0]),
+            (mfp_eosfit.mie_simple, mfp_eosfit.res_mie_simple, [-3.0, 0.5, 10.0, 2.0]),
+        ]:
+            with self.subTest(model=model.__name__):
+                test_other_eos_residual_wrappers_zero_for_matching_data(
+                    model, residual, pars
+                )
+
+    def test_read_ve_and_init_guess_from_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_read_ve_and_init_guess_from_data(Path(tmp))
+
+    def test_read_velp_and_vlp_parse_selected_ranges(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_read_velp_and_vlp_parse_selected_ranges(Path(tmp))
+
+    def test_fit_birch_murnaghan_free_and_fixed_bp_with_synthetic_data(self):
+        test_fit_birch_murnaghan_free_and_fixed_bp_with_synthetic_data()
+
+    def test_fit_birch_murnaghan_invalid_inputs_raise(self):
+        test_fit_birch_murnaghan_invalid_inputs_raise()

@@ -4,6 +4,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -316,6 +317,34 @@ def test_gamma_surface_compute_lower_with_synthetic_results(tmp_path):
     assert res_data["0.500000,1.000000"][0:2] == [1.0, 3.0]
     assert res_data["0.500000,1.000000"][2] == pytest.approx(8.01088285)
     assert (prop_dir / "result.json").is_file()
+
+
+class TestGammaSurfaceCoverage(unittest.TestCase):
+    def test_gamma_surface_reproduce_defaults_to_static_calculation(self):
+        test_gamma_surface_reproduce_defaults_to_static_calculation()
+
+    def test_gamma_surface_default_cal_setting_fills_missing_values(self):
+        test_gamma_surface_default_cal_setting_fills_missing_values()
+
+    def test_gamma_surface_resolve_equilibrium_structure_for_vasp_and_abacus(self):
+        monkeypatch = pytest.MonkeyPatch()
+        try:
+            test_gamma_surface_resolve_equilibrium_structure_for_vasp_and_abacus(
+                monkeypatch
+            )
+        finally:
+            monkeypatch.undo()
+
+    def test_gamma_surface_resolve_slip_length_numeric_vector_and_invalid(self):
+        test_gamma_surface_resolve_slip_length_numeric_vector_and_invalid()
+
+    def test_gamma_surface_post_process_injects_lammps_setforce(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_post_process_injects_lammps_setforce(Path(tmp))
+
+    def test_gamma_surface_compute_lower_with_synthetic_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_compute_lower_with_synthetic_results(Path(tmp))
 
 
 if __name__ == "__main__":
