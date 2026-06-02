@@ -3,6 +3,8 @@ import os
 import shutil
 import sys
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import dpdata
 import numpy as np
@@ -16,6 +18,7 @@ __package__ = "tests"
 
 class TestPhonon(unittest.TestCase):
     def setUp(self):
+        tests_dir = Path(__file__).resolve().parent
         _jdata = {
             "structures": ["confs/std-bcc"],
             "interaction": {
@@ -28,13 +31,13 @@ class TestPhonon(unittest.TestCase):
                     "type": "phonon",
                     "skip": False,
                     "BAND": "0.0000 0.0000 0.5000  0.0000 0.0000 0.0000  0.5000 -0.5000 0.5000  0.25000 0.2500 0.2500  0 0 0",
-                    "supercell_matrix": [2, 2, 2]
+                    "supercell_size": [2, 2, 2]
                 },
             ],
         }
 
         self.equi_path = "confs/hp-Mo/relaxation/relax_task"
-        self.source_path = "equi/vasp"
+        self.source_path = tests_dir / "equi" / "vasp"
         self.target_path = "confs/hp-Mo/phonon_00"
         self.res_data = "output/phonon_00/result.json"
         self.ptr_data = "output/phonon_00/result.out"
@@ -65,13 +68,28 @@ class TestPhonon(unittest.TestCase):
 
     def test_task_param(self):
         self.assertEqual(self.prop_param[0], self.phonon.task_param())
+        self.assertEqual(self.phonon.task_param()["BAND_POINTS"], 51)
+        self.assertEqual(self.phonon.task_param()["PRIMITIVE_AXES"], "P")
+
+    def test_phonopy_setup_command_prefers_v4_setup_tool(self):
+        with patch("apex.core.property.Phonon.shutil.which", return_value="/usr/bin/phonopy-init"):
+            self.assertEqual(
+                Phonon.phonopy_setup_command("-d --dim='2 2 2' -c POSCAR"),
+                "phonopy-init -d --dim='2 2 2' -c POSCAR",
+            )
+
+        with patch("apex.core.property.Phonon.shutil.which", return_value=None):
+            self.assertEqual(
+                Phonon.phonopy_setup_command("-d --dim='2 2 2' -c POSCAR"),
+                "phonopy -d --dim='2 2 2' -c POSCAR",
+            )
 
     def test_make_phonon_conf(self):
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
             with self.assertRaises(RuntimeError):
                 self.phonon.make_confs(self.target_path, self.equi_path)
         shutil.copy(
-            os.path.join(self.source_path, "CONTCAR_Mo_bcc"),
+            self.source_path / "CONTCAR_Mo_bcc",
             os.path.join(self.equi_path, "CONTCAR"),
         )
         task_list = self.phonon.make_confs(self.target_path, self.equi_path)
@@ -79,3 +97,26 @@ class TestPhonon(unittest.TestCase):
         self.assertEqual(len(dfm_dirs), 1)
         self.assertTrue(os.path.isfile(os.path.join(self.target_path, "phonopy_disp.yaml")))
         self.assertTrue(os.path.isfile(os.path.join(self.target_path, "task.000000/band.conf")))
+        with open(os.path.join(self.target_path, "task.000000/band.conf")) as fp:
+            self.assertIn("PRIMITIVE_AXES = P", fp.read())
+
+    def test_post_process_injects_deepmd_plugin_for_phonon(self):
+        deepmd_phonon = Phonon(
+            {"type": "phonon", "supercell_size": [2, 2, 2]},
+            inter_param={"type": "deepmd"},
+        )
+        task_dir = Path("output/phonon_deepmd_post/task.000000")
+        shutil.rmtree(task_dir.parent, ignore_errors=True)
+        task_dir.mkdir(parents=True, exist_ok=True)
+        (task_dir / "in.lammps").write_text(
+            "clear\npair_style deepmd frozen_model.pth\npair_coeff * * Cu O\nrun 0\n"
+        )
+
+        try:
+            deepmd_phonon.post_process([str(task_dir)])
+            rewritten = (task_dir / "in.lammps").read_text()
+            self.assertIn("plugin load libdeepmd_lmp.so", rewritten)
+            self.assertIn("pair_style deepmd frozen_model.pth", rewritten)
+            self.assertNotIn("run 0", rewritten)
+        finally:
+            shutil.rmtree(task_dir.parent, ignore_errors=True)

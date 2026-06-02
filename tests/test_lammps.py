@@ -10,6 +10,7 @@ import numpy as np
 from monty.serialization import dumpfn, loadfn
 
 from apex.core.calculator.Lammps import Lammps
+from apex.core.calculator.lib import lammps_utils
 from apex.core.calculator.lib.lammps_utils import inter_deepmd
 
 #from .context import make_kspacing_kpoints, setUpModule
@@ -57,6 +58,15 @@ class TestLammps(unittest.TestCase):
             self.inter_param, os.path.join(self.source_path, "Al-fcc.vasp")
         )
 
+    def _make_lammps_eval_input(self):
+        self.Lammps.set_model_param()
+        return lammps_utils.make_lammps_eval(
+            "conf.lmp",
+            self.Lammps.type_map,
+            self.Lammps.inter_func,
+            self.Lammps.model_param,
+        )
+
     def tearDown(self):
         if os.path.exists("confs/std-fcc/relaxation"):
             shutil.rmtree("confs/std-fcc/relaxation")
@@ -96,11 +106,25 @@ class TestLammps(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(abs_equi_path, "conf.lmp")))
         self.assertTrue(os.path.islink(os.path.join(abs_equi_path, "in.lammps")))
         self.assertTrue(os.path.isfile(os.path.join(abs_equi_path, "task.json")))
+        with open(os.path.join(abs_equi_path, "in.lammps"), "r") as fp:
+            contents = fp.read()
+        self.assertIn("variable        N equal count(all)", contents)
+        self.assertNotIn("variable        N equal step", contents)
+
 
     def test_forward_common_files(self):
         fc_files = ["in.lammps", "frozen_model.pb"]
         self.assertEqual(self.Lammps.forward_common_files(), fc_files)
 
     def test_backward_files(self):
-        backward_files = ["log.lammps", "outlog", "dump.relax"]
+        backward_files = [
+            "log.lammps",
+            "outlog",
+            "apex_task_status.json",
+            ".debug.log",
+            ".debug.stdout",
+            ".debug.stderr",
+            "dump.relax",
+        ]
         self.assertEqual(self.Lammps.backward_files(), backward_files)
+

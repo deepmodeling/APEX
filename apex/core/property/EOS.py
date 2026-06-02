@@ -165,7 +165,7 @@ class EOS(Property):
                 self.parameter["scale2equi"] = []
 
                 task_num = 0
-                while self.vol_start + self.vol_step * task_num < self.vol_end:
+                while self.vol_start + self.vol_step * task_num <= self.vol_end:
                     vol = self.vol_start + task_num * self.vol_step
                     output_task = os.path.join(path_to_work, "task.%06d" % task_num)
                     os.makedirs(output_task, exist_ok=True)

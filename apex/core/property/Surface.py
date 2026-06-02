@@ -37,7 +37,7 @@ class Surface(Property):
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": True,
-                "relax_vol": False,
+                "relax_vol": False
             }
         else:
             parameter["cal_type"] = "static"
@@ -45,7 +45,7 @@ class Surface(Property):
             default_cal_setting = {
                 "relax_pos": False,
                 "relax_shape": False,
-                "relax_vol": False,
+                "relax_vol": False
             }            
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
@@ -79,7 +79,7 @@ class Surface(Property):
                     self.parameter["start_confs_path"],
                     struct_output_name,
                     "relaxation",
-                    "relax_task",
+                    "relax_task"
                 )
             )
 
@@ -105,14 +105,14 @@ class Surface(Property):
                 task_list = make_refine(
                     self.parameter["init_from_suffix"],
                     self.parameter["output_suffix"],
-                    path_to_work,
+                    path_to_work
                 )
                 # record miller
                 init_from_path = re.sub(
                     self.parameter["output_suffix"][::-1],
                     self.parameter["init_from_suffix"][::-1],
                     path_to_work[::-1],
-                    count=1,
+                    count=1
                 )[::-1]
                 task_list_basename = list(map(os.path.basename, task_list))
 
@@ -124,7 +124,7 @@ class Surface(Property):
                         os.remove("miller.json")
                     os.symlink(
                         os.path.relpath(os.path.join(init_from_task, "miller.json")),
-                        "miller.json",
+                        "miller.json"
                     )
 
             else:
@@ -169,7 +169,7 @@ class Surface(Property):
                         "POSCAR",
                         "conf.lmp",
                         "in.lammps",
-                        "STRU",
+                        "STRU"
                     ]:
                         if os.path.exists(jj):
                             os.remove(jj)
@@ -235,12 +235,12 @@ class Surface(Property):
                     str(miller_index) + "-" + structure_dir + ":",
                     evac,
                     epa,
-                    equi_epa,
+                    equi_epa
                 )
                 res_data[str(miller_index) + "_" + structure_dir] = [
                     evac,
                     epa,
-                    equi_epa,
+                    equi_epa
                 ]
 
         else:
@@ -252,7 +252,7 @@ class Surface(Property):
                 self.parameter["init_from_suffix"],
                 all_tasks,
                 ptr_data,
-                self.parameter.get("reprod_last_frame", True),
+                self.parameter.get("reprod_last_frame", True)
             )
 
         with open(output_file, "w") as fp:

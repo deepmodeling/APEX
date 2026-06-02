@@ -1,0 +1,58 @@
+{
+    "parent_lattice": {
+        "type": "B2",
+        "a": "auto",
+        "supercell": "auto"
+    },
+    "composition_tolerance": 0.001,
+    "supercell_shape": "near_cubic",
+    "maxmium_nums_atoms": 1000,
+    "compositions": {
+        "corner": {
+            "Co": 0.2,
+            "Cr": 0.2,
+            "Fe": 0.2,
+            "Mn": 0.2,
+            "Ni": 0.2
+        },
+        "body": {
+            "Co": 0.2,
+            "Cr": 0.2,
+            "Fe": 0.2,
+            "Mn": 0.2,
+            "Ni": 0.2
+        }
+    },
+    "sro_targets": {
+        "shell0": {
+            "Co-Co": 0.0,
+            "Co-Cr": 0.0,
+            "Co-Fe": 0.0,
+            "Co-Mn": 0.0,
+            "Co-Ni": 0.0,
+            "Cr-Cr": 0.0,
+            "Cr-Fe": 0.0,
+            "Cr-Mn": 0.0,
+            "Cr-Ni": 0.0,
+            "Fe-Fe": 0.0,
+            "Fe-Mn": 0.0,
+            "Fe-Ni": 0.0,
+            "Mn-Mn": 0.0,
+            "Mn-Ni": 0.0,
+            "Ni-Ni": 0.0
+        }
+    },
+    "shell_cutoffs": [2.8],
+    "shell_weights": [1.0],
+    "max_steps": 40000,
+    "temperature": 0.10,
+    "num_configs": 500,
+    "interval": 50,
+    "show_progress": true,
+    "patience": null,
+    "metadata": true,
+    "seed": 21,
+    "tol": 0.001,
+    "allow_vacancies": false,
+    "output_structure": "./RSS_HEA"
+}

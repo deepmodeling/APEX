@@ -13,6 +13,7 @@ from apex.core.lib.utils import create_path
 from apex.core.lib.dispatcher import make_submission
 from apex.core.mpdb import get_structure
 from apex.core.structure import StructureInfo
+from apex.utils import apex_task_succeeded
 from dflow.python import upload_packages
 upload_packages.append(__file__)
 lammps_task_type = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace', 'nep']
@@ -61,11 +62,18 @@ def make_equi(confs, inter_param, relax_param):
     task_dirs = []
     # make task directories like mp-xxx/relaxation/relax_task
     # if mp-xxx/exists then print a warning and exit.
+    rerun_finished = inter_param.get("rerun_finished", True)
     for ii in conf_dirs:
         crys_type = ii.split("/")[-1]
         logging.debug(f"crys_type: {crys_type}")
 
-        if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")):
+        task_status_dir = os.path.join(ii, "relaxation", "relax_task")
+        if (not rerun_finished) and apex_task_succeeded(task_status_dir):
+            print(f"Skip generating relaxation tasks for {ii} (apex_task_status.json state=succeeded, rerun_finished=False)")
+            continue
+
+        has_abacus_stru = inter_param["type"] == "abacus" and os.path.exists(os.path.join(ii, "STRU"))
+        if "mp-" in crys_type and not os.path.exists(os.path.join(ii, "POSCAR")) and not has_abacus_stru:
             get_structure(crys_type).to("POSCAR", os.path.join(ii, "POSCAR"))
             if inter_param["type"] == "abacus" and not os.path.exists("STRU"):
                 abacus_utils.poscar2stru(
@@ -144,8 +152,13 @@ def run_equi(confs, inter_param, mdata):
     for ii in conf_dirs:
         work_path_list.append(os.path.join(ii, "relaxation"))
     all_task = []
+    rerun_finished = inter_param.get("rerun_finished", True)
     for ii in work_path_list:
-        all_task.append(os.path.join(ii, "relax_task"))
+        task_dir = os.path.join(ii, "relax_task")
+        if (not rerun_finished) and apex_task_succeeded(task_dir):
+            print(f"Skip running relaxation for {task_dir} (apex_task_status.json state=succeeded, rerun_finished=False)")
+            continue
+        all_task.append(task_dir)
     run_tasks = all_task
 
     # dispatch the tasks
@@ -195,6 +208,11 @@ def post_equi(confs, inter_param):
     for ii in task_dirs:
         poscar = os.path.join(ii, "POSCAR")
         inter = make_calculator(inter_param, poscar)
+        rerun_finished = inter_param.get("rerun_finished", True)
+        result_json_path = os.path.join(ii, "result.json")
+        if (not rerun_finished) and os.path.isfile(result_json_path) and apex_task_succeeded(ii):
+            print(f"Skip post-processing {ii} (result exists and apex_task_status.json state=succeeded, rerun_finished=False)")
+            continue
         res = inter.compute(ii)
         contcar = os.path.join(ii, "CONTCAR")
         try:
@@ -223,6 +241,3 @@ def post_equi(confs, inter_param):
 
         dumpfn(struct_info_dict, os.path.join(ii, "structure.json"), indent=4)
         dumpfn(res, os.path.join(ii, "result.json"), indent=4)
-
-
-

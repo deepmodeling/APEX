@@ -25,6 +25,11 @@ upload_packages.append(__file__)
 
 
 class Phonon(Property):
+    @staticmethod
+    def phonopy_setup_command(arguments: str) -> str:
+        executable = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
+        return f"{executable} {arguments}"
+
     def __init__(self, parameter, inter_param=None):
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
@@ -42,7 +47,7 @@ class Phonon(Property):
                 self.seekpath_param = parameter["seekpath_param"]
                 parameter["MESH"] = parameter.get('MESH', None)
                 self.MESH = parameter["MESH"]
-                parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', None)
+                parameter["PRIMITIVE_AXES"] = parameter.get('PRIMITIVE_AXES', "P")
                 self.PRIMITIVE_AXES = parameter["PRIMITIVE_AXES"]
                 parameter["BAND"] = parameter.get('BAND', None)
                 self.BAND = parameter["BAND"]
@@ -51,7 +56,7 @@ class Phonon(Property):
                     self.BAND_LABELS = parameter["BAND_LABELS"]
                 else:
                     self.BAND_LABELS = None
-                parameter["BAND_POINTS"] = parameter.get('BAND_POINTS', None)
+                parameter["BAND_POINTS"] = parameter.get('BAND_POINTS', 51)
                 self.BAND_POINTS = parameter["BAND_POINTS"]
                 parameter["BAND_CONNECTION"] = parameter.get('BAND_CONNECTION', True)
                 self.BAND_CONNECTION = parameter["BAND_CONNECTION"]
@@ -72,12 +77,39 @@ class Phonon(Property):
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
         self.cal_type = parameter["cal_type"]
+        parameter["phonolammps_run_command"] = parameter.get("phonolammps_run_command", None)
+        self.phonolammps_run_command = parameter["phonolammps_run_command"]
         parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
         for key in default_cal_setting:
             parameter["cal_setting"].setdefault(key, default_cal_setting[key])
         self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
         self.inter_param = inter_param if inter_param is not None else {"type": "vasp"}
+
+    def _ensure_deepmd_plugin_loaded(self, input_text: str) -> str:
+        if self.inter_param.get("type") != "deepmd":
+            return input_text
+        if "plugin load" in input_text or "pair_style deepmd" not in input_text:
+            return input_text
+        return input_text.replace(
+            "pair_style deepmd",
+            "plugin load libdeepmd_lmp.so\npair_style deepmd",
+            1,
+        )
+
+    def _build_phonolammps_run_command(self) -> str:
+        dim_x, dim_y, dim_z = self.supercell_size
+        command_template = self.phonolammps_run_command
+        if not command_template:
+            return f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z} "
+        return command_template.format(
+            input_file="in.lammps",
+            poscar="POSCAR",
+            dim=f"{dim_x} {dim_y} {dim_z}",
+            dim_x=dim_x,
+            dim_y=dim_y,
+            dim_z=dim_z,
+        )
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
@@ -163,9 +195,19 @@ class Phonon(Property):
                     self.primitive = type_param.get("primitive", self.primitive)
                     self.approach = type_param.get("approach", self.approach)
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
+                    self.seekpath_from_original = type_param.get(
+                        "seekpath_from_original", self.seekpath_from_original
+                    )
+                    self.seekpath_param = type_param.get(
+                        "seekpath_param", self.seekpath_param
+                    )
                     self.MESH = type_param.get("MESH", self.MESH)
                     self.PRIMITIVE_AXES = type_param.get("PRIMITIVE_AXES", self.PRIMITIVE_AXES)
                     self.BAND = type_param.get("BAND", self.BAND)
+                    if self.BAND:
+                        self.BAND_LABELS = type_param.get("BAND_LABELS", self.BAND_LABELS)
+                    else:
+                        self.BAND_LABELS = None
                     self.BAND_POINTS = type_param.get("BAND_POINTS", self.BAND_POINTS)
                     self.BAND_CONNECTION = type_param.get("BAND_CONNECTION", self.BAND_CONNECTION)
 
@@ -245,7 +287,7 @@ class Phonon(Property):
                     orb_file = self.inter_param.get("orb_files", None)
                     abacus_utils.append_orb_file_to_stru("STRU", orb_file, prefix='pp_orb')
                     ## generate STRU-00x
-                    cmd = "phonopy setting.conf --abacus -d"
+                    cmd = self.phonopy_setup_command("setting.conf --abacus -d")
                     subprocess.call(cmd, shell=True)
 
                     with open("band.conf", "a") as fp:
@@ -270,7 +312,7 @@ class Phonon(Property):
 
                 # ------------make for vasp and lammps------------
                 if self.primitive:
-                    subprocess.call('phonopy --symmetry', shell=True)
+                    subprocess.call(self.phonopy_setup_command("--symmetry"), shell=True)
                     subprocess.call('cp PPOSCAR POSCAR', shell=True)
                     shutil.copyfile("PPOSCAR", "POSCAR-unitcell")
                 else:
@@ -278,10 +320,13 @@ class Phonon(Property):
 
                 # make tasks
                 if self.inter_param["type"] == 'vasp':
-                    cmd = "phonopy -d --dim='%d %d %d' -c POSCAR" % (
-                        int(self.supercell_size[0]),
-                        int(self.supercell_size[1]),
-                        int(self.supercell_size[2])
+                    cmd = self.phonopy_setup_command(
+                        "-d --dim='%d %d %d' -c POSCAR"
+                        % (
+                            int(self.supercell_size[0]),
+                            int(self.supercell_size[1]),
+                            int(self.supercell_size[2]),
+                        )
                     )
                     subprocess.call(cmd, shell=True)
                     # linear response method
@@ -354,12 +399,9 @@ class Phonon(Property):
                     del contents[pair_line_id + 1:]
 
                 with open("in.lammps", 'w') as f2:
-                    for jj in range(len(contents)):
-                        f2.write(contents[jj])
+                    f2.write(self._ensure_deepmd_plugin_loaded("".join(contents)))
                 # dump phonolammps command
-                phonolammps_cmd = "phonolammps in.lammps -c POSCAR --dim %s %s %s " %(
-                    self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]
-                )
+                phonolammps_cmd = self._build_phonolammps_run_command()
                 with open("run_command", 'w') as f3:
                     f3.write(phonolammps_cmd)
         elif inter_type == "vasp":
@@ -506,7 +548,7 @@ class Phonon(Property):
                 self.check_same_copy("task.000000/band.conf", "band.conf")
                 self.check_same_copy("task.000000/STRU.ori", "STRU")
                 self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                os.system('phonopy -f task.0*/OUT.ABACUS/running_scf.log')
+                os.system(self.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
                 if os.path.exists("FORCE_SETS"):
                     print('FORCE_SETS is created')
                 else:
@@ -521,7 +563,7 @@ class Phonon(Property):
                 if self.approach == "linear":
                     os.chdir(all_tasks[0])
                     assert os.path.isfile('vasprun.xml'), "vasprun.xml not found"
-                    os.system('phonopy --fc vasprun.xml')
+                    os.system(self.phonopy_setup_command("--fc vasprun.xml"))
                     assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
                     os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
                             self.supercell_size[0],
@@ -534,7 +576,7 @@ class Phonon(Property):
                 elif self.approach == "displacement":
                     self.check_same_copy("task.000000/band.conf", "band.conf")
                     self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                    os.system('phonopy -f task.0*/vasprun.xml')
+                    os.system(self.phonopy_setup_command("-f task.0*/vasprun.xml"))
                     if os.path.exists("FORCE_SETS"):
                         print('FORCE_SETS is created')
                     else:

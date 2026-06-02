@@ -4,6 +4,8 @@ import glob
 import shutil
 import tempfile
 import logging
+import copy
+import json
 from typing import List
 from multiprocessing import Pool
 from monty.serialization import loadfn
@@ -23,8 +25,157 @@ from apex.utils import (
     copy_all_other_files,
     sepline,
     handle_prop_suffix,
-    backup_path
+    backup_path,
+    apex_task_succeeded,
+    all_apex_task_status_succeeded,
 )
+
+
+def validate_submit_paths(parameter_dicts: List[dict]) -> None:
+    """
+    dflow rejects structure path patterns containing '.'.
+    Validate before submit and fail fast with actionable hints.
+    """
+    violations = []
+    for idx, param in enumerate(parameter_dicts):
+        structures = param.get("structures", [])
+        for s_idx, structure in enumerate(structures):
+            if isinstance(structure, str) and "." in structure:
+                violations.append(
+                    f"parameter[{idx}].structures[{s_idx}] = {structure}"
+                )
+
+    if violations:
+        raise RuntimeError(
+            "Invalid `apex submit` paths: dflow does not allow '.' in "
+            "`structures`. "
+            "Please rename the path/file and update param.json.\n"
+            "Offending entries:\n- " + "\n- ".join(violations)
+        )
+
+
+def _infer_type_map_from_structure_file(structure_file: str) -> dict:
+    structure_name = os.path.basename(structure_file)
+    symbols = []
+    if structure_name in {"POSCAR", "CONTCAR"}:
+        from pymatgen.io.vasp import Poscar
+
+        poscar = Poscar.from_file(structure_file)
+        symbols = [str(item) for item in poscar.site_symbols]
+    else:
+        from pymatgen.core import Structure
+
+        structure = Structure.from_file(structure_file)
+        seen = set()
+        for site in structure.sites:
+            symbol = str(site.specie)
+            if symbol not in seen:
+                seen.add(symbol)
+                symbols.append(symbol)
+
+    if not symbols:
+        raise RuntimeError(f"Cannot infer type_map from structure file: {structure_file}")
+    return {symbol: idx for idx, symbol in enumerate(symbols)}
+
+
+def _resolve_first_structure_file(param_path: str, structures: List[str]) -> str:
+    base_dir = os.path.dirname(os.path.abspath(param_path))
+    for pattern in structures:
+        if os.path.isabs(pattern):
+            search_patterns = [pattern]
+        else:
+            search_patterns = [os.path.join(base_dir, pattern), pattern]
+
+        matches = []
+        for search_pattern in search_patterns:
+            matches.extend(glob.glob(search_pattern))
+        matches = sorted(set(matches))
+        for match in matches:
+            if os.path.isdir(match):
+                for candidate in ("POSCAR", "CONTCAR", "STRU"):
+                    candidate_path = os.path.join(match, candidate)
+                    if os.path.isfile(candidate_path):
+                        return candidate_path
+                nested_poscars = sorted(glob.glob(os.path.join(match, "conf_*", "POSCAR")))
+                if nested_poscars:
+                    return nested_poscars[0]
+            elif os.path.isfile(match):
+                return match
+    raise RuntimeError(
+        "Cannot infer interaction.type_map automatically: no structure file found "
+        f"for patterns {structures} from {param_path}"
+    )
+
+
+def auto_fill_type_map_from_poscar(parameter_dict: dict, param_path: str) -> bool:
+    interaction = parameter_dict.get("interaction")
+    if not isinstance(interaction, dict):
+        return False
+    if interaction.get("type") in {"vasp", "abacus"}:
+        return False
+
+    current_type_map = interaction.get("type_map")
+    if isinstance(current_type_map, dict) and current_type_map:
+        return False
+    if current_type_map not in (None, "", "auto"):
+        return False
+
+    structures = parameter_dict.get("structures", [])
+    if not isinstance(structures, list) or not structures:
+        raise RuntimeError(
+            "Cannot infer interaction.type_map automatically because `structures` is empty"
+        )
+
+    structure_file = _resolve_first_structure_file(param_path, structures)
+    interaction["type_map"] = _infer_type_map_from_structure_file(structure_file)
+
+    with open(param_path, "w", encoding="utf-8") as fp:
+        json.dump(parameter_dict, fp, indent=4)
+        fp.write("\n")
+    return True
+
+
+def _glob_structures_in_work_dir(work_dir: os.PathLike, pattern: str) -> List[str]:
+    """Resolve a structure glob the same way pack_upload_dir will use it.
+
+    Submit can be launched from a parent directory while each workflow work_dir
+    contains its own confs/. Keep returned paths relative to work_dir whenever
+    possible because pack_upload_dir changes into work_dir before copying.
+    """
+    abs_work_dir = os.path.abspath(work_dir)
+    search_pattern = pattern if os.path.isabs(pattern) else os.path.join(abs_work_dir, pattern)
+    matches = []
+    for match in glob.glob(search_pattern):
+        abs_match = os.path.abspath(match)
+        try:
+            inside_work_dir = os.path.commonpath([abs_work_dir, abs_match]) == abs_work_dir
+        except ValueError:
+            inside_work_dir = False
+        if inside_work_dir:
+            matches.append(os.path.relpath(abs_match, abs_work_dir))
+        else:
+            matches.append(abs_match)
+    return sorted(set(matches))
+
+
+def _relaxation_required(relax_param: dict | None) -> bool:
+    if not relax_param:
+        return True
+    relaxation = relax_param.get("relaxation", {})
+    return relaxation.get("req_calc", True) is not False
+
+
+def _stage_unrelaxed_structure_as_equilibrium(conf_dir: str, build_conf_path: str) -> None:
+    """Expose a POSCAR as the equilibrium structure expected by property code."""
+    source_poscar = os.path.abspath(os.path.join(conf_dir, "POSCAR"))
+    if not os.path.isfile(source_poscar):
+        raise RuntimeError(
+            "relaxation.req_calc=false requires POSCAR in each structure directory: "
+            f"{source_poscar}"
+        )
+    relax_task_dir = os.path.join(build_conf_path, "relaxation", "relax_task")
+    os.makedirs(relax_task_dir, exist_ok=True)
+    shutil.copy(source_poscar, os.path.join(relax_task_dir, "CONTCAR"))
 
 
 def pack_upload_dir(
@@ -58,6 +209,135 @@ def pack_upload_dir(
         conf_dirs.extend(glob.glob(conf))
     conf_dirs = list(set(conf_dirs))
     conf_dirs.sort()
+    if not conf_dirs:
+        os.chdir(cwd)
+        raise RuntimeError(
+            "No structures matched the submitted patterns under "
+            f"{os.path.abspath(work_dir)}: {confs}"
+        )
+
+    def relaxation_finished(conf_path: str) -> bool:
+        task_dir = os.path.join(conf_path, "relaxation", "relax_task")
+        return apex_task_succeeded(task_dir)
+
+    def property_finished(conf_path: str, properties: list) -> bool:
+        # Finished only if every property that sets rerun_finished=False has
+        # calculator task statuses with state=succeeded.
+        all_done = True
+        for prop in properties:
+            rerun_finished = prop.get("rerun_finished", True)
+            if rerun_finished:
+                all_done = False
+                break
+            do_refine, suffix = handle_prop_suffix(prop)
+            if not suffix:
+                all_done = False
+                break
+            prop_dir = os.path.join(conf_path, prop["type"] + "_" + suffix)
+            if not all_apex_task_status_succeeded(prop_dir):
+                all_done = False
+                break
+        return all_done
+
+    # Optional pruning to skip already-finished tasks before upload.
+    if flow_type == 'relax' and relax_param:
+        rerun_finished = relax_param.get("interaction", {}).get("rerun_finished", True)
+        if rerun_finished is False:
+            pruned = []
+            skipped = []
+            for c in conf_dirs:
+                if relaxation_finished(c):
+                    logging.info(f"Skip uploading finished relaxation for {c} (rerun_finished=False).")
+                    skipped.append(c)
+                else:
+                    pruned.append(c)
+            conf_dirs = pruned
+            if not conf_dirs:
+                raise RuntimeError("All relaxations are already finished; nothing to submit.")
+
+    if flow_type == 'props' and prop_param:
+        properties = prop_param.get("properties", [])
+        finished_props = {}
+        pruned = []
+        for c in conf_dirs:
+            done_all = property_finished(c, properties)
+            if done_all:
+                logging.info(f"Skip uploading finished properties for {c} (all rerun_finished=False task states succeeded).")
+            else:
+                pruned.append(c)
+                # track per-structure finished properties
+                finished_list = []
+                for prop in properties:
+                    if not prop.get("rerun_finished", True):
+                        do_refine, suffix = handle_prop_suffix(prop)
+                        if not suffix:
+                            continue
+                        prop_dir = os.path.join(c, prop["type"] + "_" + suffix)
+                        if all_apex_task_status_succeeded(prop_dir):
+                            finished_list.append(prop_dir)
+                if finished_list:
+                    finished_props[c] = finished_list
+        conf_dirs = pruned
+        if finished_props:
+            prop_param["skip_finished_properties"] = [
+                [c, os.path.basename(p)] for c, lst in finished_props.items() for p in lst
+            ]
+        if not conf_dirs and not prop_param.get("skip_finished_properties", []):
+            raise RuntimeError("All properties are already finished; nothing to submit.")
+    
+    if flow_type == 'joint' and relax_param and prop_param:
+        # Split finished vs pending relaxations so we can skip reruns while still running properties
+        req_relax = _relaxation_required(relax_param)
+        rerun_finished = relax_param.get("interaction", {}).get("rerun_finished", True)
+        skip_finished_properties = []
+        finished_relax = []
+        pending_relax = conf_dirs
+        if not req_relax:
+            pending_relax = []
+            finished_relax = conf_dirs
+            relax_param["skip_finished_structures"] = finished_relax
+            prop_param["pre_relaxed_structures"] = finished_relax
+        elif rerun_finished is False:
+            pending_relax = []
+            for c in conf_dirs:
+                if relaxation_finished(c):
+                    finished_relax.append(c)
+                else:
+                    pending_relax.append(c)
+            if not pending_relax:
+                logging.info("All relaxations finished; joint flow will reuse existing results.")
+            # keep all structures for property stage; mark which relaxations to skip
+            relax_param["skip_finished_structures"] = finished_relax
+            prop_param["pre_relaxed_structures"] = finished_relax
+        # Detect per-structure finished properties when rerun_finished is False for that property
+        properties = prop_param.get("properties", [])
+        requested_property_tasks = []
+        for c in conf_dirs:
+            for prop in properties:
+                do_refine, suffix = handle_prop_suffix(prop)
+                if not suffix:
+                    continue
+                prop_dir_name = f"{prop['type']}_{suffix}"
+                requested_property_tasks.append((c, prop_dir_name))
+                if prop.get("rerun_finished", True):
+                    continue
+                prop_dir = os.path.join(c, prop_dir_name)
+                if all_apex_task_status_succeeded(prop_dir):
+                    skip_finished_properties.append([c, prop_dir_name])
+        if skip_finished_properties:
+            prop_param["skip_finished_properties"] = skip_finished_properties
+        skipped_property_tasks = {
+            (item[0], item[1])
+            for item in skip_finished_properties
+        }
+        if not pending_relax and requested_property_tasks \
+                and all(item in skipped_property_tasks for item in requested_property_tasks):
+            os.chdir(cwd)
+            raise RuntimeError(
+                "All requested joint relaxation and property tasks are already finished; "
+                "nothing to submit. Set rerun_finished=true for relaxation or at least "
+                "one property if you want to resubmit."
+            )
     refine_init_name_list = []
     # backup all existing property work directories
     if flow_type in ['props', 'joint']:
@@ -73,6 +353,11 @@ def pack_upload_dir(
                     refine_init_suffix = jj['init_from_suffix']
                     refine_init_name_list.append(property_type + "_" + refine_init_suffix)
                 path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                # If rerun_finished is False and task states succeeded, skip backing up (keep as-is)
+                if (not jj.get("rerun_finished", True)):
+                    if all_apex_task_status_succeeded(path_to_prop):
+                        logging.info(f"Skip backing up finished property at {path_to_prop} (rerun_finished=False, task states succeeded)")
+                        continue
                 backup_path(path_to_prop)
 
     """copy necessary files and directories into temp upload directory"""
@@ -93,10 +378,19 @@ def pack_upload_dir(
         if os.path.isfile(copy_stru_path):
             target_stru_path = os.path.join(build_conf_path, "STRU")
             shutil.copy(copy_stru_path, target_stru_path)
-        if flow_type == 'props':
+        if flow_type in ['props', 'joint']:
             copy_relaxation_path = os.path.abspath(os.path.join(ii, "relaxation"))
             target_relaxation_path = os.path.join(build_conf_path, "relaxation")
-            shutil.copytree(copy_relaxation_path, target_relaxation_path)
+            if flow_type == 'joint' and relax_param and not _relaxation_required(relax_param):
+                try:
+                    _stage_unrelaxed_structure_as_equilibrium(ii, build_conf_path)
+                except Exception:
+                    os.chdir(cwd)
+                    raise
+            elif os.path.isdir(copy_relaxation_path):
+                shutil.copytree(copy_relaxation_path, target_relaxation_path)
+            else:
+                logging.warning(f"Skip copying relaxation for {ii}: {copy_relaxation_path} not found.")
             # copy refine from init path to upload dir
             if refine_init_name_list:
                 for jj in refine_init_name_list:
@@ -131,6 +425,29 @@ def submit(
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         logging.debug(msg=f'Temporary upload directory:{tmp_dir}')
+
+        # For property-only workflow, drop structures whose relaxation output is missing
+        if flow_type == 'props' and props_param:
+            filtered_structs = []
+            missing_structs = []
+            for pattern in props_param.get("structures", []):
+                matches = _glob_structures_in_work_dir(work_dir, pattern)
+                if not matches:
+                    logging.warning(
+                        f'No structure matched pattern "{pattern}" under "{work_dir}", skip.'
+                    )
+                    continue
+                for m in matches:
+                    relax_dir = os.path.join(work_dir, m, "relaxation")
+                    if os.path.isdir(relax_dir):
+                        filtered_structs.append(m)
+                    else:
+                        missing_structs.append(m)
+                        logging.warning(f'Relaxation directory missing for {m}, skip property calculation on it.')
+            if not filtered_structs:
+                raise RuntimeError("No available relaxed structures for property workflow.")
+            props_param["structures"] = filtered_structs
+
         pack_upload_dir(
             work_dir=work_dir,
             upload_dir=tmp_dir,
@@ -139,7 +456,6 @@ def submit(
             flow_type=flow_type,
             exclude_upload_files=wf_config.exclude_upload_files
         )
-
         cwd = os.getcwd()
         os.chdir(tmp_dir)
         flow_id = None
@@ -191,6 +507,8 @@ def submit_workflow(
     is_debug=False,
     labels=None
 ):
+    validate_submit_paths(parameter_dicts)
+
     # config dflow_config and s3_config
     wf_config = Config(**config_dict)
     Config.config_dflow(wf_config.dflow_config_dict)
@@ -201,10 +519,23 @@ def submit_workflow(
         wf_config.submit_only = True
     # set pre-defined dflow debug mode settings
     if is_debug:
-        tmp_work_dir = tempfile.TemporaryDirectory()
+        # Prefer an explicit debug_workdir from config; otherwise, try to place
+        # the debug work under the configured remote_root (if any) to mimic the
+        # user's desired filesystem layout; fall back to a temp dir.
+        debug_dir = config_dict.get("debug_workdir")
+        if not debug_dir:
+            base_dir = wf_config.remote_root or os.getcwd()
+            # Put artifacts in a hidden folder to avoid clutter
+            debug_dir = os.path.join(base_dir, "dflow_debug")
+        try:
+            os.makedirs(debug_dir, exist_ok=True)
+        except Exception:
+            # Final fallback: system temp
+            debug_dir = tempfile.mkdtemp(prefix="apex-debug-")
         config["mode"] = "debug"
-        config["debug_workdir"] = config_dict.get("debug_workdir", tmp_work_dir.name)
+        config["debug_workdir"] = debug_dir
         logging.info(f'Debug mode activated, debug work directory: {config["debug_workdir"]}')
+        # Use local filesystem instead of object storage in debug
         s3_config["storage_client"] = None
 
     if flow_name:
@@ -222,6 +553,8 @@ def submit_workflow(
     run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config_dict["run_command"]
+    lammps_run_command = wf_config.basic_config_dict["lammps_run_command"]
+    phonolammps_run_command = wf_config.basic_config_dict["phonolammps_run_command"]
     post_image = make_image
     group_size = wf_config.basic_config_dict["group_size"]
     pool_size = wf_config.basic_config_dict["pool_size"]
@@ -244,8 +577,19 @@ def submit_workflow(
         group_size=group_size,
         pool_size=pool_size,
         executor=executor,
-        upload_python_packages=upload_python_packages
+        upload_python_packages=upload_python_packages,
+        debug_mode=is_debug,
     )
+
+    if props_param and (phonolammps_run_command or lammps_run_command):
+        props_param = copy.deepcopy(props_param)
+        for prop in props_param.get("properties", []):
+            if prop.get("type") in {"phonon", "gruneisen"}:
+                if phonolammps_run_command:
+                    prop["phonolammps_run_command"] = phonolammps_run_command
+            if prop.get("type") == "gruneisen" and lammps_run_command:
+                prop["lammps_run_command"] = lammps_run_command
+
     # submit the workflows
     work_dir_list = []
     for ii in work_dirs:
@@ -294,15 +638,39 @@ def submit_from_args(
         flow_name: str = None,
         submit_only=False,
         is_debug=False,
+        labels=None,
 ):
     print('-------Submit Workflow Mode-------')
+    parameter_dicts = []
+    for param_path in parameters:
+        param_dict = loadfn(param_path)
+        if auto_fill_type_map_from_poscar(param_dict, param_path):
+            print(
+                f"Auto-filled interaction.type_map from structure file and updated: {param_path}"
+            )
+        parameter_dicts.append(param_dict)
+
+    label_mapping = None
+    if labels:
+        label_mapping = {}
+        for item in labels:
+            if "=" not in item:
+                raise RuntimeError(f"Invalid submit label {item!r}; expected key=value")
+            key, value = item.split("=", 1)
+            clean_key = key.strip()
+            clean_value = value.strip()
+            if not clean_key or not clean_value:
+                raise RuntimeError(f"Invalid submit label {item!r}; empty key/value is not allowed")
+            label_mapping[clean_key] = clean_value
+
     submit_workflow(
-        parameter_dicts=[loadfn(jj) for jj in parameters],
+        parameter_dicts=parameter_dicts,
         config_dict=load_config_file(config_file),
         work_dirs=work_dirs,
         indicated_flow_type=indicated_flow_type,
         flow_name=flow_name,
         submit_only=submit_only,
         is_debug=is_debug,
+        labels=label_mapping,
     )
     print('Completed!')

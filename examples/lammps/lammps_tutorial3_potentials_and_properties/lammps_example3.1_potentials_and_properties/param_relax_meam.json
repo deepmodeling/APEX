@@ -1,0 +1,16 @@
+{
+    "structures": ["confs/std-*"],
+    "interaction": {
+        "type": "meam",
+        "model": ["library.meam", "Al.meam"],
+        "type_map": {"Al": 0}
+    },
+    "relaxation": {
+        "cal_setting": {
+            "etol": 0,
+            "ftol": 1e-10,
+            "maxiter": 5000,
+            "maximal": 500000
+        }
+    }
+}

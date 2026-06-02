@@ -62,6 +62,7 @@ class Config:
     exclude_upload_files: list = field(default_factory=list)
     lammps_image_name: str = None
     lammps_run_command: str = None
+    phonolammps_run_command: str = None
     vasp_image_name: str = None
     vasp_run_command: str = None
     abacus_image_name: str = None
@@ -251,6 +252,7 @@ class Config:
             "upload_python_packages": self.upload_python_packages,
             "lammps_image_name": self.lammps_image_name,
             "lammps_run_command": self.lammps_run_command,
+            "phonolammps_run_command": self.phonolammps_run_command,
             "vasp_image_name": self.vasp_image_name,
             "vasp_run_command": self.vasp_run_command,
             "abacus_image_name": self.abacus_image_name,

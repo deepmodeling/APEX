@@ -3,7 +3,9 @@ import glob
 import time
 import shutil
 import re
+import copy
 import datetime
+import json
 from typing import (
     Optional,
     Type,
@@ -13,6 +15,7 @@ from typing import (
 import dflow
 from dflow import (
     Step,
+    Task,
     upload_artifact,
     download_artifact,
     Workflow
@@ -47,6 +50,7 @@ class FlowGenerator:
             pool_size: Optional[int] = None,
             executor: Optional[DispatcherExecutor] = None,
             upload_python_packages: Optional[List[os.PathLike]] = None,
+            debug_mode: bool = False,
     ):
         self.download_path = None
         self.upload_path = None
@@ -68,6 +72,7 @@ class FlowGenerator:
         self.pool_size = pool_size
         self.executor = executor
         self.upload_python_packages = upload_python_packages
+        self.debug_mode = debug_mode
 
     @staticmethod
     def regulate_name(name):
@@ -86,13 +91,331 @@ class FlowGenerator:
 
         return name
 
+    @staticmethod
+    def _is_missing_artifact_error(exc: Exception) -> bool:
+        return "the artifact does not exist in the storage" in str(exc).lower()
+
+    @staticmethod
+    def _is_transient_download_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        markers = (
+            "connection",
+            "connect",
+            "timeout",
+            "timed out",
+            "temporarily unavailable",
+            "network",
+            "name resolution",
+            "dns",
+            "reset by peer",
+            "remote disconnected",
+            "broken pipe",
+            "ssl",
+            "proxy",
+        )
+        return any(marker in message for marker in markers)
+
+    @staticmethod
+    def _download_artifact_with_retry(artifact, path, retries: int = 3, delay: int = 10):
+        last_exc = None
+        for attempt in range(1, retries + 1):
+            try:
+                return download_artifact(artifact=artifact, path=path)
+            except Exception as exc:
+                last_exc = exc
+                if (
+                        FlowGenerator._is_missing_artifact_error(exc)
+                        or not FlowGenerator._is_transient_download_error(exc)
+                ):
+                    raise RuntimeError(f"Artifact download failed without retry: {exc}") from exc
+                if attempt >= retries:
+                    break
+                print(
+                    f"Artifact download failed ({attempt}/{retries}): {exc}. "
+                    f"Retrying in {delay}s..."
+                )
+                time.sleep(delay)
+        raise RuntimeError(
+            f"Artifact download failed after {retries} attempt(s): {last_exc}"
+        ) from last_exc
+
+    @staticmethod
+    def _format_step_failure(
+            step,
+            fallback_label: str,
+            main_log_path: Optional[Union[str, List[str]]] = None,
+            main_log_error: Optional[str] = None,
+            diagnostic_artifacts: Optional[List[Union[str, List[str]]]] = None,
+    ) -> str:
+        if step is None:
+            return f"{fallback_label}: no step details available"
+
+        detail_keys = [
+            "phase",
+            "message",
+            "reason",
+            "podName",
+            "pod_name",
+            "displayName",
+            "name",
+            "finishedAt",
+            "startedAt",
+        ]
+        lines = [fallback_label]
+        for key in detail_keys:
+            value = None
+            if isinstance(step, dict):
+                value = step.get(key)
+            else:
+                value = getattr(step, key, None)
+            if value not in (None, ""):
+                lines.append(f"  {key}: {value}")
+
+        if main_log_path:
+            if isinstance(main_log_path, list):
+                main_log_path = ", ".join(str(item) for item in main_log_path)
+            lines.append(f"  main_logs: {main_log_path}")
+        elif main_log_error:
+            lines.append(f"  main_logs: unavailable ({main_log_error})")
+
+        if diagnostic_artifacts:
+            artifact_text = ", ".join(str(item) for item in diagnostic_artifacts)
+            lines.append(f"  failed_artifacts: {artifact_text}")
+
+        if isinstance(step, dict):
+            try:
+                lines.append("  raw_step: " + json.dumps(step, default=str, sort_keys=True))
+            except TypeError:
+                lines.append(f"  raw_step: {step!r}")
+        else:
+            lines.append(f"  raw_step: {step!r}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _safe_get(obj, key, default=None):
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
+    @classmethod
+    def _step_artifacts(cls, step):
+        outputs = cls._safe_get(step, "outputs")
+        if outputs is None:
+            return {}
+        artifacts = cls._safe_get(outputs, "artifacts", {})
+        return artifacts or {}
+
+    @staticmethod
+    def _sanitize_log_name(name: str) -> str:
+        name = re.sub(r'[^a-zA-Z0-9_.-]', '-', str(name)).strip("-")
+        return name or "failed-step"
+
+    @staticmethod
+    def _artifact_by_name(artifacts, *names):
+        for name in names:
+            try:
+                artifact = artifacts.get(name)
+            except AttributeError:
+                try:
+                    artifact = artifacts[name]
+                except (KeyError, TypeError):
+                    artifact = None
+            if artifact is not None:
+                return artifact
+        return None
+
+    def _main_logs_artifact(self, step):
+        artifacts = self._step_artifacts(step)
+        return self._artifact_by_name(artifacts, "main-logs", "main_logs")
+
+    @classmethod
+    def _step_id(cls, step):
+        return cls._safe_get(step, "id")
+
+    @classmethod
+    def _steps_by_id(cls, step_info, step_ids):
+        if step_info is None:
+            return []
+        found = []
+        for step_id in step_ids:
+            if not step_id:
+                continue
+            try:
+                found.extend(step_info.get_step(id=step_id))
+            except Exception:
+                continue
+        return found
+
+    @classmethod
+    def _failed_child_ids_from_step(cls, step):
+        child_ids = []
+        message = cls._safe_get(step, "message", "")
+        if message:
+            child_ids.extend(re.findall(r"child '([^']+)' failed", str(message)))
+        outbound_nodes = cls._safe_get(step, "outboundNodes", [])
+        if isinstance(outbound_nodes, list):
+            child_ids.extend(outbound_nodes)
+        elif outbound_nodes:
+            child_ids.append(outbound_nodes)
+        return child_ids
+
+    def _child_steps_with_main_logs(self, step_info, parent_step):
+        if step_info is None or parent_step is None:
+            return []
+        parent_id = self._safe_get(parent_step, "id")
+        if not parent_id:
+            return []
+
+        related_steps = self._related_child_steps(step_info, parent_step)
+        candidates = []
+        for child in related_steps:
+            if self._main_logs_artifact(child) is None:
+                continue
+            phase = self._safe_get(child, "phase", "")
+            display_name = self._safe_get(child, "displayName", "")
+            candidates.append((phase, display_name, child))
+
+        def candidate_key(item):
+            phase, display_name, _ = item
+            failed_rank = 0 if phase in {"Failed", "Error"} else 1
+            display_name = str(display_name).lower()
+            op_rank = 0 if display_name in {"relaxmake", "propsmake", "propspost"} else 1
+            return failed_rank, op_rank, display_name
+
+        return [child for _, _, child in sorted(candidates, key=candidate_key)]
+
+    def _related_child_steps(self, step_info, parent_step):
+        related_steps = []
+        try:
+            related_steps.extend(
+                step_info.get_step(
+                    parent_id=self._safe_get(parent_step, "id"),
+                    sort_by_generation=True,
+                )
+            )
+        except Exception:
+            pass
+
+        related_steps.extend(
+            self._steps_by_id(step_info, self._failed_child_ids_from_step(parent_step))
+        )
+
+        seen = set()
+        queue = list(related_steps)
+        while queue:
+            current = queue.pop(0)
+            current_id = self._step_id(current)
+            if not current_id or current_id in seen:
+                continue
+            seen.add(current_id)
+            try:
+                nested_steps = step_info.get_step(
+                    parent_id=current_id,
+                    sort_by_generation=True,
+                )
+            except Exception:
+                nested_steps = []
+            related_steps.extend(nested_steps)
+            queue.extend(nested_steps)
+
+        return related_steps
+
+    def _download_step_main_logs(self, step, step_label: str, step_info=None):
+        artifact = self._main_logs_artifact(step)
+        log_label = step_label
+        if artifact is None:
+            child_steps = self._child_steps_with_main_logs(step_info, step)
+            if child_steps:
+                child_step = child_steps[0]
+                artifact = self._main_logs_artifact(child_step)
+                child_name = self._safe_get(child_step, "displayName", "child-step")
+                log_label = os.path.join(step_label, str(child_name))
+
+        if artifact is None:
+            return None, "main-logs artifact not found on failed step or its child steps"
+
+        log_dir = os.path.join(
+            self.download_path or os.getcwd(),
+            "main-logs",
+            *[self._sanitize_log_name(item) for item in log_label.split(os.sep)],
+        )
+        os.makedirs(log_dir, exist_ok=True)
+        try:
+            return self._download_artifact_with_retry(artifact=artifact, path=log_dir), None
+        except Exception as exc:
+            return None, str(exc)
+
+    def _download_step_diagnostic_artifacts(self, step, step_label: str, step_info=None):
+        if not (self.debug_mode or dflow.config.get("mode") == "debug"):
+            return []
+        diagnostic_names = {
+            "backward_dir",
+            "retrieve_path",
+            "output_all",
+            "output_work_path",
+            "task_paths",
+        }
+        steps = [step]
+        steps.extend(self._related_child_steps(step_info, step))
+        downloaded = []
+        seen = set()
+        for item in steps:
+            display_name = self._safe_get(item, "displayName", "step")
+            artifacts = self._step_artifacts(item)
+            for name, artifact in artifacts.items():
+                if name.startswith("dflow_") or name == "main-logs":
+                    continue
+                if name not in diagnostic_names:
+                    continue
+                key = (self._step_id(item), name)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out_dir = os.path.join(
+                    self.download_path or os.getcwd(),
+                    "failed-artifacts",
+                    self._sanitize_log_name(step_label),
+                    self._sanitize_log_name(display_name),
+                    self._sanitize_log_name(name),
+                )
+                os.makedirs(out_dir, exist_ok=True)
+                try:
+                    path = self._download_artifact_with_retry(artifact=artifact, path=out_dir)
+                    downloaded.append(path)
+                except Exception as exc:
+                    downloaded.append(f"{display_name}/{name}: unavailable ({exc})")
+        return downloaded
+
+    def _terminate_workflow_after_relax_failure(self):
+        try:
+            self.workflow.terminate()
+            return "workflow terminated to stop pending/running property calculations"
+        except Exception as exc:
+            message = str(exc)
+            if "cannot shutdown a completed workflow" in message:
+                return "workflow already completed before automatic termination; root cause is the failed relaxation step above"
+            return f"failed to terminate workflow automatically: {exc}"
+
+    def _raise_if_failed(self, failed_entries, workflow_kind: str):
+        if failed_entries:
+            details = "\n\n".join(failed_entries)
+            raise RuntimeError(
+                f"{workflow_kind} failed with {len(failed_entries)} failed step(s):\n{details}"
+            )
+
     def _monitor_relax(self):
         print('Waiting for relaxation result...')
+        failed_detail = None
         while True:
             time.sleep(4)
             step_info = self.workflow.query()
             wf_status = self.workflow.query_status()
             if wf_status == 'Failed':
+                if failed_detail is not None:
+                    raise RuntimeError(
+                        f"Workflow failed (ID: {self.workflow.id}, UID: {self.workflow.uid})\n"
+                        f"{failed_detail}"
+                    )
                 raise RuntimeError(f'Workflow failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
             try:
                 relax_post = step_info.get_step(name='relaxation-cal')[0]
@@ -101,11 +424,24 @@ class FlowGenerator:
             if relax_post['phase'] == 'Succeeded':
                 print(f'Relaxation finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
                 print('Retrieving completed tasks to local...')
-                download_artifact(
+                self._download_artifact_with_retry(
                     artifact=relax_post.outputs.artifacts['retrieve_path'],
                     path=self.download_path
                 )
                 break
+            if relax_post['phase'] == 'Failed':
+                main_log_path, main_log_error = self._download_step_main_logs(
+                    relax_post,
+                    "relaxation-cal",
+                    step_info=step_info,
+                )
+                failed_detail = self._format_step_failure(
+                    relax_post,
+                    f"Relaxation step failed (ID: {self.workflow.id}, UID: {self.workflow.uid})",
+                    main_log_path=main_log_path,
+                    main_log_error=main_log_error,
+                )
+                raise RuntimeError(failed_detail)
 
     def _monitor_props(
             self,
@@ -113,6 +449,7 @@ class FlowGenerator:
     ):
         subprops_left = subprops_key_list.copy()
         subprops_failed_list = []
+        failed_details = []
         print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
         while True:
             time.sleep(4)
@@ -125,7 +462,7 @@ class FlowGenerator:
                 if step['phase'] == 'Succeeded':
                     print(f'Sub-workflow {kk} finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
                     print('Retrieving completed tasks to local...')
-                    download_artifact(
+                    self._download_artifact_with_retry(
                         artifact=step.outputs.artifacts['retrieve_path'],
                         path=self.download_path
                     )
@@ -135,19 +472,320 @@ class FlowGenerator:
                 elif step['phase'] == 'Failed':
                     print(f'Sub-workflow {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
                     subprops_failed_list.append(kk)
+                    main_log_path, main_log_error = self._download_step_main_logs(
+                        step,
+                        kk,
+                        step_info=step_info,
+                    )
+                    diagnostic_artifacts = self._download_step_diagnostic_artifacts(
+                        step,
+                        kk,
+                        step_info=step_info,
+                    )
+                    failed_details.append(
+                        self._format_step_failure(
+                            step,
+                            f"Sub-property {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})",
+                            main_log_path=main_log_path,
+                            main_log_error=main_log_error,
+                            diagnostic_artifacts=diagnostic_artifacts,
+                        )
+                    )
                     subprops_left.remove(kk)
                     if subprops_left:
                         print(f'Waiting for sub-property results ({len(subprops_left)} left)...')
             if not subprops_left:
                 print(f'Workflow finished with {len(subprops_failed_list)} sub-property failed '
                       f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                self._raise_if_failed(failed_details, "Property workflow")
                 break
+
+    def _set_relax_flows(
+            self,
+            input_work_dir: dflow.common.S3Artifact,
+            relax_parameter: dict
+    ) -> [List[Step], List[str]]:
+        """
+        Build per-structure relaxation subflows so finished structures
+        can be posted and retrieved without waiting for others.
+        """
+        confs = relax_parameter["structures"]
+        conf_dirs = []
+        for conf in confs:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
+        conf_dirs.sort()
+
+        # reuse a single RelaxationFlow template to keep manifest size small
+        relaxation_template = RelaxationFlow(
+            name='relaxation-flow',
+            make_op=self.relax_make_op,
+            run_op=self.run_op,
+            post_op=self.relax_post_op,
+            make_image=self.make_image,
+            run_image=self.run_image,
+            post_image=self.post_image,
+            run_command=self.run_command,
+            calculator=self.calculator,
+            group_size=self.group_size,
+            pool_size=self.pool_size,
+            executor=self.executor,
+            upload_python_packages=self.upload_python_packages
+        )
+
+        relax_list = []
+        relax_key_list = []
+        for ii in conf_dirs:
+            sub_relax_param = copy.deepcopy(relax_parameter)
+            sub_relax_param["structures"] = [ii]
+            clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', ii).lower()
+            subflow_key = f'relaxcal-{clean_subflow_id}'
+            relax_key_list.append(subflow_key)
+            relax_list.append(
+                Step(
+                    name=f'Relaxation-cal-{clean_subflow_id}',
+                    template=relaxation_template,
+                    artifacts={
+                        "input_work_path": input_work_dir
+                    },
+                    parameters={
+                        "flow_id": ii,
+                        "parameter": sub_relax_param
+                    },
+                    key=subflow_key
+                )
+            )
+        return relax_list, relax_key_list
+
+    def _set_relax_tasks(
+            self,
+            input_work_dir: dflow.common.S3Artifact,
+            relax_parameter: dict
+    ) -> [List[Task], List[str]]:
+        """
+        Task-based version for DAG entry so that Argo schedules per-structure
+        relaxations independently and exposes their artifacts to downstream
+        property tasks without a global barrier.
+        """
+        if relax_parameter.get("relaxation", {}).get("req_calc", True) is False:
+            return [], []
+
+        confs = relax_parameter["structures"]
+        conf_dirs = []
+        for conf in confs:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
+        conf_dirs.sort()
+
+        relaxation_template = RelaxationFlow(
+            name='relaxation-flow',
+            make_op=self.relax_make_op,
+            run_op=self.run_op,
+            post_op=self.relax_post_op,
+            make_image=self.make_image,
+            run_image=self.run_image,
+            post_image=self.post_image,
+            run_command=self.run_command,
+            calculator=self.calculator,
+            group_size=self.group_size,
+            pool_size=self.pool_size,
+            executor=self.executor,
+            upload_python_packages=self.upload_python_packages
+        )
+
+        task_list = []
+        task_key_list = []
+        skip_finished = set(relax_parameter.get("skip_finished_structures", []))
+        for ii in conf_dirs:
+            sub_relax_param = copy.deepcopy(relax_parameter)
+            sub_relax_param["structures"] = [ii]
+            clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', ii).lower()
+            subflow_key = f'relaxcal-{clean_subflow_id}'
+            if ii in skip_finished:
+                print(f"Skip relaxation for {ii} (marked finished; rerun_finished=False)")
+                continue
+            task_key_list.append(subflow_key)
+            task_list.append(
+                Task(
+                    name=f'Relaxation-cal-{clean_subflow_id}',
+                    template=relaxation_template,
+                    artifacts={
+                        "input_work_path": input_work_dir
+                    },
+                    parameters={
+                        "flow_id": ii,
+                        "parameter": sub_relax_param
+                    },
+                    key=subflow_key
+                )
+            )
+        return task_list, task_key_list
+
+    def _monitor_relax_flows(self, relax_key_list: List[str]):
+        relax_left = relax_key_list.copy()
+        relax_failed_list = []
+        failed_details = []
+        print(f'Waiting for relaxation results ({len(relax_left)} left)...')
+        last_count = len(relax_left)
+        last_log_ts = time.time()
+        while True:
+            time.sleep(4)
+            step_info = self.workflow.query()
+            wf_status = self.workflow.query_status()
+            if wf_status == 'Failed' and not relax_left:
+                break
+            for kk in relax_left.copy():
+                try:
+                    step = step_info.get_step(key=kk)[0]
+                except IndexError:
+                    continue
+                if step['phase'] == 'Succeeded':
+                    print(f'Sub relaxation {kk} finished (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    print('Retrieving completed tasks to local...')
+                    self._download_artifact_with_retry(
+                        artifact=step.outputs.artifacts['retrieve_path'],
+                        path=self.download_path
+                    )
+                    relax_left.remove(kk)
+                    if relax_left:
+                        print(f'Waiting for relaxation results ({len(relax_left)} left)...')
+                elif step['phase'] == 'Failed':
+                    print(f'Sub relaxation {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                    relax_failed_list.append(kk)
+                    main_log_path, main_log_error = self._download_step_main_logs(
+                        step,
+                        kk,
+                        step_info=step_info,
+                    )
+                    failed_details.append(
+                        self._format_step_failure(
+                            step,
+                            f"Sub relaxation {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})",
+                            main_log_path=main_log_path,
+                            main_log_error=main_log_error,
+                        )
+                    )
+                    relax_left.remove(kk)
+            if not relax_left:
+                print(f'Workflow finished with {len(relax_failed_list)} sub-relaxation failed '
+                      f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
+                self._raise_if_failed(failed_details, "Relaxation workflow")
+                break
+            # throttled waiting log
+            if len(relax_left) != last_count or time.time() - last_log_ts > 30:
+                print(f'Waiting for relaxation results ({len(relax_left)} left)...')
+                last_count = len(relax_left)
+                last_log_ts = time.time()
+
+    def _monitor_joint_flows(self,
+                             relax_key_list: List[str],
+                             subprops_key_list: List[str]):
+        """
+        Monitor relaxation and property subflows together, downloading each
+        structure's results as soon as its property step finishes. This avoids
+        waiting for all relaxations before observing property completion.
+        """
+        relax_left = relax_key_list.copy()
+        relax_failed = []
+        relax_failed_details = []
+        props_left = subprops_key_list.copy()
+        props_failed = []
+        props_failed_details = []
+        print(f'Waiting for relax/prop results (relax {len(relax_left)}, props {len(props_left)})...')
+        last_counts = (len(relax_left), len(props_left))
+        last_log_ts = time.time()
+        while relax_left or props_left:
+            time.sleep(4)
+            step_info = self.workflow.query()
+
+            # relax steps
+            for kk in relax_left.copy():
+                try:
+                    step = step_info.get_step(key=kk)[0]
+                except IndexError:
+                    continue
+                if step['phase'] == 'Succeeded':
+                    print(f'Sub relaxation {kk} finished')
+                    print('Retrieving completed tasks to local...')
+                    retrieve = step.get('outputs', {}).get('artifacts', {}).get('retrieve_path', None)
+                    if retrieve:
+                        self._download_artifact_with_retry(artifact=retrieve, path=self.download_path)
+                    relax_left.remove(kk)
+                elif step['phase'] == 'Failed':
+                    print(f'Sub relaxation {kk} failed')
+                    relax_failed.append(kk)
+                    main_log_path, main_log_error = self._download_step_main_logs(
+                        step,
+                        kk,
+                        step_info=step_info,
+                    )
+                    terminate_message = self._terminate_workflow_after_relax_failure()
+                    failure_detail = self._format_step_failure(
+                        step,
+                        f"Sub relaxation {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})",
+                        main_log_path=main_log_path,
+                        main_log_error=main_log_error,
+                    )
+                    relax_failed_details.append(f"{failure_detail}\n  action: {terminate_message}")
+                    relax_left.remove(kk)
+                    self._raise_if_failed(relax_failed_details, "Joint workflow")
+
+            # property steps
+            for kk in props_left.copy():
+                try:
+                    step = step_info.get_step(key=kk)[0]
+                except IndexError:
+                    continue
+                if step['phase'] == 'Succeeded':
+                    print(f'Sub property {kk} finished')
+                    print('Retrieving completed tasks to local...')
+                    retrieve = step.get('outputs', {}).get('artifacts', {}).get('retrieve_path', None)
+                    if retrieve:
+                        self._download_artifact_with_retry(artifact=retrieve, path=self.download_path)
+                    props_left.remove(kk)
+                elif step['phase'] == 'Failed':
+                    print(f'Sub property {kk} failed')
+                    props_failed.append(kk)
+                    main_log_path, main_log_error = self._download_step_main_logs(
+                        step,
+                        kk,
+                        step_info=step_info,
+                    )
+                    diagnostic_artifacts = self._download_step_diagnostic_artifacts(
+                        step,
+                        kk,
+                        step_info=step_info,
+                    )
+                    props_failed_details.append(
+                        self._format_step_failure(
+                            step,
+                            f"Sub property {kk} failed (ID: {self.workflow.id}, UID: {self.workflow.uid})",
+                            main_log_path=main_log_path,
+                            main_log_error=main_log_error,
+                            diagnostic_artifacts=diagnostic_artifacts,
+                        )
+                    )
+                    props_left.remove(kk)
+
+            if relax_left or props_left:
+                counts = (len(relax_left), len(props_left))
+                if counts != last_counts or time.time() - last_log_ts > 30:
+                    print(f'Waiting... (relax {counts[0]}, props {counts[1]})')
+                    last_counts = counts
+                    last_log_ts = time.time()
+
+        print(f'Joint monitoring done: {len(relax_failed)} relax failed, {len(props_failed)} property failed '
+              f'(ID: {self.workflow.id}, UID: {self.workflow.uid})')
+        self._raise_if_failed(relax_failed_details + props_failed_details, "Joint workflow")
 
     def dump_flow_id(self):
         log_file = os.path.join(self.download_path, '.workflow.log')
         with open(log_file, 'a') as f:
             timestamp = datetime.datetime.now().isoformat()
-            f.write(f'{self.workflow.id}\tsubmit\t{timestamp}\t{self.download_path}\n')
+            workflow_uid = getattr(self.workflow, "uid", "") or ""
+            f.write(
+                f'{self.workflow.id}\tsubmit\t{timestamp}\t{self.download_path}\t{workflow_uid}\n'
+            )
 
     def _set_relax_flow(
             self,
@@ -189,21 +827,7 @@ class FlowGenerator:
             props_parameter: dict
     ) -> [List[Step], List[str]]:
 
-        simplePropertySteps = SimplePropertySteps(
-            name='property-flow',
-            make_op=self.props_make_op,
-            run_op=self.run_op,
-            post_op=self.props_post_op,
-            make_image=self.make_image,
-            run_image=self.run_image,
-            post_image=self.post_image,
-            run_command=self.run_command,
-            calculator=self.calculator,
-            group_size=self.group_size,
-            pool_size=self.pool_size,
-            executor=self.executor,
-            upload_python_packages=self.upload_python_packages
-        )
+        simplePropertySteps = None
 
         confs = props_parameter["structures"]
         interaction = props_parameter["interaction"]
@@ -214,6 +838,10 @@ class FlowGenerator:
         path_to_prop_list = []
         prop_param_list = []
         do_refine_list = []
+        skip_props = set()
+        for item in props_parameter.get("skip_finished_properties", []):
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                skip_props.add((item[0], item[1]))
         for conf in confs:
             conf_dirs.extend(glob.glob(conf))
         conf_dirs = list(set(conf_dirs))
@@ -225,6 +853,10 @@ class FlowGenerator:
                     continue
                 property_type = jj["type"]
                 path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                prop_dir_name = property_type + "_" + suffix
+                if (ii, prop_dir_name) in skip_props:
+                    print(f"Skip property {prop_dir_name} for {ii} (marked finished; rerun_finished=False)")
+                    continue
                 path_to_prop_list.append(path_to_prop)
                 if os.path.exists(path_to_prop):
                     shutil.rmtree(path_to_prop)
@@ -240,6 +872,22 @@ class FlowGenerator:
             clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', flow_id_list[ii]).lower()
             subflow_key = f'propertycal-{clean_subflow_id}'
             subprops_key_list.append(subflow_key)
+            if simplePropertySteps is None:
+                simplePropertySteps = SimplePropertySteps(
+                    name='property-flow',
+                    make_op=self.props_make_op,
+                    run_op=self.run_op,
+                    post_op=self.props_post_op,
+                    make_image=self.make_image,
+                    run_image=self.run_image,
+                    post_image=self.post_image,
+                    run_command=self.run_command,
+                    calculator=self.calculator,
+                    group_size=self.group_size,
+                    pool_size=self.pool_size,
+                    executor=self.executor,
+                    upload_python_packages=self.upload_python_packages
+                )
             subprops_list.append(
                 Step(
                     name=f'Subprop-cal-{clean_subflow_id}',
@@ -253,6 +901,127 @@ class FlowGenerator:
                         "prop_param": prop_param_list[ii],
                         "inter_param": interaction,
                         "do_refine": do_refine_list[ii]
+                    },
+                    key=subflow_key
+                )
+            )
+
+        return subprops_list, subprops_key_list
+
+    def _set_props_tasks(
+            self,
+            relax_tasks: List[Task],
+            props_parameter: dict,
+            base_work_artifact,
+            pre_relaxed: List[str]
+    ) -> [List[Task], List[str]]:
+        """
+        Task-based property subflows keyed to corresponding relax tasks for DAG scheduling.
+        """
+        simplePropertySteps = None
+
+        confs = props_parameter["structures"]
+        interaction = props_parameter["interaction"]
+        properties = props_parameter["properties"]
+
+        conf_dirs = []
+        flow_id_list = []
+        path_to_prop_list = []
+        prop_param_list = []
+        do_refine_list = []
+        conf_for_prop = []
+        for conf in confs:
+            conf_dirs.extend(glob.glob(conf))
+        conf_dirs = list(set(conf_dirs))
+        conf_dirs.sort()
+
+        # map conf to relax task
+        relax_map = {}
+        for task in relax_tasks:
+            flow_id = task.inputs.parameters.get("flow_id", None)
+            if flow_id is not None:
+                flow_id = getattr(flow_id, "value", flow_id)
+            else:
+                flow_id = task.name
+            relax_map[flow_id] = task
+
+        for ii in conf_dirs:
+            for jj in properties:
+                do_refine, suffix = handle_prop_suffix(jj)
+                if not suffix:
+                    continue
+                property_type = jj["type"]
+                path_to_prop = os.path.join(ii, property_type + "_" + suffix)
+                path_to_prop_list.append(path_to_prop)
+                if os.path.exists(path_to_prop):
+                    shutil.rmtree(path_to_prop)
+                prop_param_list.append(jj)
+                do_refine_list.append(do_refine)
+                flow_id_list.append(ii + '-' + property_type + '-' + suffix)
+                conf_for_prop.append(ii)
+
+        subprops_list = []
+        subprops_key_list = []
+        pre_relaxed_set = set(pre_relaxed or [])
+        skip_props = set()
+        for item in props_parameter.get("skip_finished_properties", []):
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                skip_props.add((item[0], item[1]))
+
+        for ii, path_to_prop, prop_param, do_refine, flow_id in zip(
+                conf_for_prop, path_to_prop_list, prop_param_list, do_refine_list, flow_id_list):
+            clean_subflow_id = re.sub(r'[^a-zA-Z0-9-]', '-', flow_id).lower()
+            subflow_key = f'propertycal-{clean_subflow_id}'
+
+            # choose artifact source: from corresponding relax task if exists; otherwise from base upload (pre-relaxed)
+            if ii in relax_map:
+                input_artifact = relax_map[ii].outputs.artifacts["output_all"]
+            elif ii in pre_relaxed_set:
+                # pre-relaxed data exists in uploaded workspace
+                input_artifact = base_work_artifact
+            else:
+                raise RuntimeError(
+                    f"No relaxation task or pre-relaxed result is available for {ii}; "
+                    "cannot create joint property task."
+                )
+
+            # skip property if already finished and rerun_finished=False
+            prop_dir_name = os.path.basename(path_to_prop)
+            if (ii, prop_dir_name) in skip_props:
+                # don't create task; also remove from monitor list by not adding key
+                print(f"Skip property {prop_dir_name} for {ii} (marked finished; rerun_finished=False)")
+                continue
+
+            subprops_key_list.append(subflow_key)
+            if simplePropertySteps is None:
+                simplePropertySteps = SimplePropertySteps(
+                    name='property-flow',
+                    make_op=self.props_make_op,
+                    run_op=self.run_op,
+                    post_op=self.props_post_op,
+                    make_image=self.make_image,
+                    run_image=self.run_image,
+                    post_image=self.post_image,
+                    run_command=self.run_command,
+                    calculator=self.calculator,
+                    group_size=self.group_size,
+                    pool_size=self.pool_size,
+                    executor=self.executor,
+                    upload_python_packages=self.upload_python_packages
+                )
+            subprops_list.append(
+                Task(
+                    name=f'Subprop-cal-{clean_subflow_id}',
+                    template=simplePropertySteps,
+                    artifacts={
+                        "input_work_path": input_artifact
+                    },
+                    parameters={
+                        "flow_id": flow_id,
+                        "path_to_prop": path_to_prop,
+                        "prop_param": prop_param,
+                        "inter_param": interaction,
+                        "do_refine": do_refine
                     },
                     key=subflow_key
                 )
@@ -276,16 +1045,16 @@ class FlowGenerator:
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
         flow_name += '-relax'
         self.workflow = Workflow(name=flow_name, labels=labels)
-        relaxation = self._set_relax_flow(
+        relaxation_list, relax_key_list = self._set_relax_flows(
             input_work_dir=upload_artifact(upload_path),
             relax_parameter=relax_parameter
         )
-        self.workflow.add(relaxation)
+        self.workflow.add(relaxation_list)
         self.workflow.submit()
         self.dump_flow_id()
         if not submit_only:
-            # Wait for and retrieve relaxation
-            self._monitor_relax()
+            # Wait for and retrieve relaxation subflows
+            self._monitor_relax_flows(relax_key_list)
 
         return self.workflow.id
 
@@ -336,22 +1105,36 @@ class FlowGenerator:
         flow_name = name if name else self.regulate_name(os.path.basename(download_path))
         flow_name += '-joint'
         self.workflow = Workflow(name=flow_name, labels=labels)
-        relaxation = self._set_relax_flow(
-            input_work_dir=upload_artifact(upload_path),
+        base_artifact = upload_artifact(upload_path)
+
+        # per-structure relaxation subflows as DAG tasks
+        relaxation_tasks, relax_key_list = self._set_relax_tasks(
+            input_work_dir=base_artifact,
             relax_parameter=self.relax_param
         )
-        subprops_list, subprops_key_list = self._set_props_flow(
-            input_work_dir=relaxation.outputs.artifacts["output_all"],
-            props_parameter=self.props_param
+
+        # per-structure property tasks depending on corresponding relaxation task
+        subprops_list, subprops_key_list = self._set_props_tasks(
+            relax_tasks=relaxation_tasks,
+            props_parameter=self.props_param,
+            base_work_artifact=base_artifact,
+            pre_relaxed=self.props_param.get("pre_relaxed_structures", [])
         )
-        self.workflow.add(relaxation)
-        self.workflow.add(subprops_list)
+
+        if not relaxation_tasks and not subprops_list:
+            raise RuntimeError(
+                "No joint workflow tasks to submit. All requested relaxations and "
+                "properties appear to be finished, or no structures matched the "
+                "submitted patterns."
+            )
+        if relaxation_tasks:
+            self.workflow.add(relaxation_tasks)
+        if subprops_list:
+            self.workflow.add(subprops_list)
         self.workflow.submit()
         self.dump_flow_id()
         if not submit_only:
-            # Wait for and retrieve relaxation
-            self._monitor_relax()
-            # Wait for and retrieve sub-property flows
-            self._monitor_props(subprops_key_list)
+            # Wait for and retrieve relaxation subflows
+            self._monitor_joint_flows(relax_key_list, subprops_key_list)
 
         return self.workflow.id
