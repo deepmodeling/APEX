@@ -779,7 +779,7 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
         ret += "unfix tg\n"
 
         # Optional hold at target_temp
-    ret += "if \"${hold_step} > 0\" then \"fix 1 all nvt temp ${target_temp} ${target_temp} %d\" \"run ${hold_step}\" \"unfix 1\"\n" % tdamp
+    ret += f'if "${{hold_step}} > 0" then "fix 1 all nvt temp ${{target_temp}} ${{target_temp}} {tdamp}" "run ${{hold_step}}" "unfix 1"\n'
 
     # Cool to end_temp
     if thermostat == "langevin":

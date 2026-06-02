@@ -9,6 +9,7 @@ import json
 from unittest.mock import patch
 
 import dpdata
+import pytest
 import yaml
 
 from monty.serialization import dumpfn, loadfn
@@ -17,6 +18,38 @@ from apex.core.calculator.Lammps import Lammps
 from apex.core.lib.mfp_eosfit import fit_birch_murnaghan
 from apex.core.property.Gruneisen import Gruneisen
 from apex.core.property.Phonon import Phonon
+
+
+def valid_gruneisen_params(**overrides):
+    params = {
+        "type": "gruneisen",
+        "volume_strains": [-0.02, 0.0, 0.02],
+        "temperatures": [10, 50, 100],
+    }
+    params.update(overrides)
+    return params
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"temperatures": []}, "temperatures must contain"),
+        ({"alpha_mode": "bad"}, "alpha_mode"),
+        ({"bulk_modulus_source": "input"}, "bulk_modulus_source"),
+        ({"eos_model": "murnaghan"}, "eos_model"),
+        ({"approach": "bad"}, "approach"),
+        ({"cal_setting": {"relax_pos": False}}, "relax_pos"),
+        ({"cal_setting": {"relax_shape": True}}, "relax_shape"),
+        ({"cal_setting": {"relax_vol": True}}, "relax_vol"),
+        ({"volume_strains": [0.0, -0.02, 0.02]}, "strictly increasing"),
+        ({"volume_strains": [-0.02, 0.0, 0.0, 0.02]}, "duplicates"),
+        ({"temperatures": [50, 10]}, "temperatures must be strictly increasing"),
+        ({"volume_strains": [-0.02, 0.0, 0.03]}, "symmetric"),
+    ],
+)
+def test_gruneisen_validation_rejects_low_cost_invalid_options(overrides, message):
+    with pytest.raises(ValueError, match=message):
+        Gruneisen(valid_gruneisen_params(**overrides))
 
 
 class TestGruneisen(unittest.TestCase):
