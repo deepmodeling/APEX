@@ -446,6 +446,15 @@ class Lammps(Task):
                 fp.write(fc)
 
     def compute(self, output_dir):
+        task_json = os.path.join(output_dir, "task.json")
+        try:
+            task_param = loadfn(task_json) if os.path.isfile(task_json) else {}
+        except Exception:
+            task_param = {}
+        task_type = task_param.get("type", task_param.get("cal_type"))
+        if task_type in ["annealing", "Annealing"]:
+            return None
+
         log_lammps = os.path.join(output_dir, "log.lammps")
         dump_lammps = os.path.join(output_dir, "dump.relax")
         if not os.path.isfile(log_lammps) or not os.path.isfile(dump_lammps):
@@ -724,12 +733,15 @@ class Lammps(Task):
                 "log.lammps",
                 "outlog",
                 *debug_files,
-                "dump.anneal_ramp",
-                "dump.anneal_cool",
-                "heating_interval.dat",
-                "cooling_interval.dat",
-                "rdf_ramp.dat",
-                "rdf_cool.dat",
+                "dump.init.*",
+                "dump.eq_*",
+                "dump.T_ramp_*",
+                "dump.T_decline_*",
+                "dump.final_eq_*",
+                "heating_interval_*.dat",
+                "cooling_interval_*.dat",
+                "rdf.*.txt",
+                "msd.*.txt",
                 "restart.*",
             ]
         elif property_type == "finite_t_elastic":

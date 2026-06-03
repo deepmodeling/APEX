@@ -1087,6 +1087,11 @@ def _download_failure_artifacts_for_step(wf_info, root_step, key, work_dir):
     return downloaded
 
 
+def _is_workflow_failure_summary(exc: Exception) -> bool:
+    text = str(exc)
+    return " failed with " in text and " failed step(s):" in text
+
+
 def main():
     # logging
     logging.basicConfig(level=logging.INFO)
@@ -1094,16 +1099,21 @@ def main():
     parser, args = parse_args()
     if args.cmd == 'submit':
         header()
-        submit_from_args(
-            parameters=args.parameter,
-            config_file=args.config,
-            work_dirs=args.work,
-            indicated_flow_type=args.flow,
-            flow_name=args.name,
-            submit_only=args.submit_only,
-            is_debug=args.debug,
-            labels=args.label,
-        )
+        try:
+            submit_from_args(
+                parameters=args.parameter,
+                config_file=args.config,
+                work_dirs=args.work,
+                indicated_flow_type=args.flow,
+                flow_name=args.name,
+                submit_only=args.submit_only,
+                is_debug=args.debug,
+                labels=args.label,
+            )
+        except RuntimeError as exc:
+            if _is_workflow_failure_summary(exc):
+                raise SystemExit(str(exc)) from None
+            raise
     elif args.cmd == "list":
             config_dflow(args.config)
             if args.label is not None:

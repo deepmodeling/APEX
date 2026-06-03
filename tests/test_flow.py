@@ -148,11 +148,23 @@ def test_flow_static_helpers_and_failure_formatting():
     assert "phase: Failed" in formatted
     assert "main_logs: log-a, log-b" in formatted
     assert "failed_artifacts: debug-artifact" in formatted
-    assert "raw_step:" in formatted
+    assert "raw_step:" not in formatted
 
     assert flow.FlowGenerator._failed_child_ids_from_step(
         {"message": "child 'a' failed", "outboundNodes": ["b"]}
     ) == ["a", "b"]
+
+
+def test_format_step_failure_can_include_raw_step_when_requested(monkeypatch):
+    monkeypatch.setenv("APEX_SHOW_RAW_STEP", "1")
+
+    formatted = flow.FlowGenerator._format_step_failure(
+        {"phase": "Failed", "displayName": "PropsMake", "inputs": {"large": "payload"}},
+        "fallback",
+    )
+
+    assert "raw_step:" in formatted
+    assert "large" in formatted
 
 
 def test_download_artifact_with_retry_retries_transient_and_stops_on_missing(monkeypatch):
@@ -214,6 +226,92 @@ def test_step_artifact_lookup_and_main_log_download_from_child(tmp_path, monkeyp
     no_path, no_error = generator._download_step_main_logs({"outputs": {"artifacts": {}}}, "missing")
     assert no_path is None
     assert "main-logs artifact not found" in no_error
+
+
+def test_main_log_download_uses_target_dir_when_download_returns_none(tmp_path, monkeypatch):
+    generator = make_generator(debug_mode=True)
+    generator.download_path = str(tmp_path)
+    step = {
+        "id": "failed",
+        "displayName": "PropsMake",
+        "outputs": {"artifacts": {"main-logs": "main-log-artifact"}},
+    }
+
+    def fake_download(artifact, path, retries=3, delay=10):
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, "main.log"), "w", encoding="utf-8") as fp:
+            fp.write("ValueError: bad annealing temperature\n")
+        return None
+
+    monkeypatch.setattr(flow.FlowGenerator, "_download_artifact_with_retry", staticmethod(fake_download))
+
+    path, error = generator._download_step_main_logs(step, "prop-key")
+    formatted = flow.FlowGenerator._format_step_failure(
+        {"phase": "Failed", "displayName": "PropsMake"},
+        "property failed",
+        main_log_path=path,
+        main_log_error=error,
+    )
+
+    assert error is None
+    assert path.endswith(os.path.join("main-logs", "prop-key"))
+    assert "cause: ValueError: bad annealing temperature" in formatted
+    assert "main_logs_excerpt:" in formatted
+
+
+def test_format_step_failure_includes_traceback_excerpt(tmp_path):
+    log_dir = tmp_path / "main-logs"
+    log_dir.mkdir()
+    (log_dir / "main.log").write_text(
+        "setup line\n"
+        "Traceback (most recent call last):\n"
+        "  File \"/work/apex/core/property/Phonon.py\", line 360, in make_confs\n"
+        "    raise RuntimeError('phonopy failed')\n"
+        "RuntimeError: phonopy failed\n",
+        encoding="utf-8",
+    )
+
+    formatted = flow.FlowGenerator._format_step_failure(
+        {"phase": "Failed", "displayName": "PropsMake"},
+        "property failed",
+        main_log_path=str(log_dir),
+    )
+
+    assert "main_logs_excerpt:" in formatted
+    assert "cause: RuntimeError: phonopy failed" in formatted
+    assert "Traceback (most recent call last):" in formatted
+    assert "apex/core/property/Phonon.py" in formatted
+    assert "RuntimeError: phonopy failed" in formatted
+
+
+def test_format_step_failure_includes_lammps_diagnostic_excerpt(tmp_path):
+    task_dir = tmp_path / "failed-artifacts" / "prop-key" / "RunLAMMPS" / "backward_dir" / "task.000000"
+    task_dir.mkdir(parents=True)
+    (task_dir / "apex_task_status.json").write_text(
+        '{\n'
+        '    "state": "failed",\n'
+        '    "reason": "command_not_found",\n'
+        '    "exit_code": 127\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    (task_dir / ".debug.log").write_text(
+        "# APEX LAMMPS debug log\n"
+        "## Command\n"
+        "lmp -in in.lammps\n",
+        encoding="utf-8",
+    )
+
+    formatted = flow.FlowGenerator._format_step_failure(
+        {"phase": "Failed", "displayName": "PropsPost"},
+        "property failed",
+        diagnostic_artifacts=[str(tmp_path / "failed-artifacts")],
+    )
+
+    assert "failed_artifacts_excerpt:" in formatted
+    assert "apex_task_status.json" in formatted
+    assert '"reason": "command_not_found"' in formatted
+    assert "lmp -in in.lammps" in formatted
 
 
 def test_diagnostic_artifact_downloads_only_allowed_debug_artifacts(tmp_path, monkeypatch):
@@ -442,6 +540,19 @@ class TestFlowCoverage(unittest.TestCase):
     def test_flow_static_helpers_and_failure_formatting(self):
         test_flow_static_helpers_and_failure_formatting()
 
+    def test_format_step_failure_can_include_raw_step_when_requested(self):
+        self.run_with_monkeypatch(
+            test_format_step_failure_can_include_raw_step_when_requested
+        )
+
+    def test_format_step_failure_includes_traceback_excerpt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_format_step_failure_includes_traceback_excerpt(Path(tmp))
+
+    def test_format_step_failure_includes_lammps_diagnostic_excerpt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_format_step_failure_includes_lammps_diagnostic_excerpt(Path(tmp))
+
     def test_download_artifact_with_retry_retries_transient_and_stops_on_missing(self):
         self.run_with_monkeypatch(
             test_download_artifact_with_retry_retries_transient_and_stops_on_missing
@@ -450,6 +561,11 @@ class TestFlowCoverage(unittest.TestCase):
     def test_step_artifact_lookup_and_main_log_download_from_child(self):
         self.run_with_tmp_and_monkeypatch(
             test_step_artifact_lookup_and_main_log_download_from_child
+        )
+
+    def test_main_log_download_uses_target_dir_when_download_returns_none(self):
+        self.run_with_tmp_and_monkeypatch(
+            test_main_log_download_uses_target_dir_when_download_returns_none
         )
 
     def test_diagnostic_artifact_downloads_only_allowed_debug_artifacts(self):
