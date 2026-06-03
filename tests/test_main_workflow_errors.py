@@ -70,6 +70,18 @@ class WorkflowQueryErrorTest(unittest.TestCase):
         finally:
             apex_main.config["mode"] = old_mode
 
+    def test_workflow_failure_summary_is_cli_concise_error(self):
+        self.assertTrue(
+            apex_main._is_workflow_failure_summary(
+                RuntimeError("Joint workflow failed with 1 failed step(s):\ndetail")
+            )
+        )
+        self.assertFalse(
+            apex_main._is_workflow_failure_summary(
+                RuntimeError("local parameter parsing failed")
+            )
+        )
+
     def test_formats_dflow_workflow_not_found_error(self):
         message = apex_main._format_workflow_query_error(
             "guipro-joint-svgzz",

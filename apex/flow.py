@@ -151,13 +151,12 @@ class FlowGenerator:
             return f"{fallback_label}: no step details available"
 
         detail_keys = [
+            "id",
+            "key",
             "phase",
             "message",
             "reason",
-            "podName",
-            "pod_name",
             "displayName",
-            "name",
             "finishedAt",
             "startedAt",
         ]
@@ -178,6 +177,9 @@ class FlowGenerator:
             lines.append(f"  main_logs: {main_log_path}")
             log_excerpt = FlowGenerator._failure_log_excerpt(log_paths)
             if log_excerpt:
+                cause = FlowGenerator._failure_cause_from_excerpt(log_excerpt)
+                if cause:
+                    lines.append(f"  cause: {cause}")
                 lines.append("  main_logs_excerpt:")
                 lines.extend(f"    {line}" for line in log_excerpt.splitlines())
         elif main_log_error:
@@ -188,16 +190,20 @@ class FlowGenerator:
             lines.append(f"  failed_artifacts: {artifact_text}")
             artifact_excerpt = FlowGenerator._failure_log_excerpt(diagnostic_artifacts)
             if artifact_excerpt:
+                cause = FlowGenerator._failure_cause_from_excerpt(artifact_excerpt)
+                if cause:
+                    lines.append(f"  cause: {cause}")
                 lines.append("  failed_artifacts_excerpt:")
                 lines.extend(f"    {line}" for line in artifact_excerpt.splitlines())
 
-        if isinstance(step, dict):
-            try:
-                lines.append("  raw_step: " + json.dumps(step, default=str, sort_keys=True))
-            except TypeError:
+        if os.environ.get("APEX_SHOW_RAW_STEP", "").lower() in {"1", "true", "yes"}:
+            if isinstance(step, dict):
+                try:
+                    lines.append("  raw_step: " + json.dumps(step, default=str, sort_keys=True))
+                except TypeError:
+                    lines.append(f"  raw_step: {step!r}")
+            else:
                 lines.append(f"  raw_step: {step!r}")
-        else:
-            lines.append(f"  raw_step: {step!r}")
         return "\n".join(lines)
 
     @staticmethod
@@ -225,6 +231,21 @@ class FlowGenerator:
         if len(result) > max_chars:
             result = "<truncated>\n" + result[-max_chars:]
         return result
+
+    @staticmethod
+    def _failure_cause_from_excerpt(excerpt: str) -> str:
+        if not excerpt:
+            return ""
+        lines = [line.strip() for line in excerpt.splitlines() if line.strip()]
+        exception_re = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_.]*)(?:Error|Exception|Warning): .+")
+        for line in reversed(lines):
+            if exception_re.match(line):
+                return line
+        markers = ("ERROR", "Error", "error", "Failed", "failed")
+        for line in reversed(lines):
+            if any(marker in line for marker in markers):
+                return line
+        return lines[-1] if lines else ""
 
     @staticmethod
     def _failure_log_candidates(raw_path) -> List[str]:
@@ -442,7 +463,8 @@ class FlowGenerator:
         )
         os.makedirs(log_dir, exist_ok=True)
         try:
-            return self._download_artifact_with_retry(artifact=artifact, path=log_dir), None
+            downloaded_path = self._download_artifact_with_retry(artifact=artifact, path=log_dir)
+            return downloaded_path or log_dir, None
         except Exception as exc:
             return None, str(exc)
 
