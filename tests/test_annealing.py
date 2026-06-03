@@ -5,10 +5,13 @@ import unittest
 from pathlib import Path
 
 import pytest
-from monty.serialization import loadfn
+from monty.serialization import dumpfn, loadfn
 
+from apex.archive import ResultStorage
 from apex.core.calculator.lib import lammps_utils
 from apex.core.property.Annealing import Annealing
+from apex.reporter.DashReportApp import DashReportApp, return_prop_class, return_prop_type
+from apex.reporter.property_report import AnnealingReport
 
 
 TEST_CONTCAR = os.path.join(
@@ -257,9 +260,172 @@ def test_annealing_compute_lower_returns_task_notes(tmp_path):
         {},
     )
 
-    assert ptr_data == str(tmp_path) + "\n"
-    assert res_data["task.000000"]["task"] == "task.000000"
-    assert "inspect log.lammps" in res_data["task.000001"]["note"]
+    assert ptr_data.startswith(str(tmp_path) + "\n")
+    assert "task.000000: rdf=[], msd=[], volume_temperature=[]" in ptr_data
+    assert res_data["property"] == "annealing"
+    assert res_data["tasks"]["task.000000"]["task"] == "task.000000"
+    assert res_data["tasks"]["task.000001"]["summary"]["rdf_stages"] == []
+    assert (tmp_path / "result.json").is_file()
+
+
+def write_annealing_analysis_files(task_dir: Path):
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / "Annealing.json").write_text(
+        '{"start_temp": 300, "target_temp": 1500, "end_temp": 300}',
+        encoding="utf-8",
+    )
+    (task_dir / "rdf.T_ramp_300K_1500K.txt").write_text(
+        "# Time-averaged data for fix rdf_ramp\n"
+        "# TimeStep Number-of-rows\n"
+        "# Row c_myRDF[1] c_myRDF[2] c_myRDF[3]\n"
+        "0 2\n"
+        "1 0.1 1.0 0.2\n"
+        "2 0.2 2.0 0.4\n"
+        "100 2\n"
+        "1 0.1 1.5 0.3\n"
+        "2 0.2 2.5 0.5\n",
+        encoding="utf-8",
+    )
+    (task_dir / "msd.T_ramp_300K_1500K.txt").write_text(
+        "# Time-averaged data for fix msd_ramp\n"
+        "# TimeStep Number-of-rows\n"
+        "# Row c_myMSD_ramp\n"
+        "0 4\n"
+        "1 0.0\n"
+        "2 0.0\n"
+        "3 0.0\n"
+        "4 0.0\n"
+        "200 4\n"
+        "1 0.1\n"
+        "2 0.2\n"
+        "3 0.3\n"
+        "4 0.6\n",
+        encoding="utf-8",
+    )
+    (task_dir / "heating_interval_2000.dat").write_text(
+        "# Time-averaged data for fix heat_log\n"
+        "# TimeStep v_N v_Temp v_Vatom v_pote v_Etotal v_Press\n"
+        "2000 128 400 15.5 -1 -2 10\n"
+        "4000 128 800 16.0 -1 -2 20\n",
+        encoding="utf-8",
+    )
+    (task_dir / "cooling_interval_2000.dat").write_text(
+        "# Time-averaged data for fix cool_log\n"
+        "# TimeStep v_N v_Temp v_Vatom v_pote v_Etotal v_Press\n"
+        "2000 128 1200 16.5 -1 -2 30\n"
+        "4000 128 600 15.8 -1 -2 40\n",
+        encoding="utf-8",
+    )
+
+
+def test_annealing_compute_lower_extracts_rdf_msd_and_volume_temperature(tmp_path):
+    task_dir = tmp_path / "task.000000"
+    write_annealing_analysis_files(task_dir)
+    prop = Annealing({"type": "annealing"})
+
+    res_data, ptr_data = prop._compute_lower(
+        str(tmp_path / "result.json"),
+        [str(task_dir)],
+        {},
+    )
+
+    task = res_data["tasks"]["task.000000"]
+    assert "T_ramp_300K_1500K" in task["rdf"]
+    assert task["rdf"]["T_ramp_300K_1500K"]["radius"] == [0.1, 0.2]
+    assert task["rdf"]["T_ramp_300K_1500K"]["g_r"] == [1.5, 2.5]
+    assert task["msd"]["T_ramp_300K_1500K"]["msd_total"] == [0.0, 0.6]
+    assert task["volume_temperature"]["heating"]["temperature"] == [400.0, 800.0]
+    assert task["volume_temperature"]["heating"]["total_volume"] == [1984.0, 2048.0]
+    assert "volume_temperature=['cooling', 'heating']" in ptr_data
+    assert loadfn(tmp_path / "result.json")["tasks"]["task.000000"]["summary"]["rdf_points"] == {
+        "T_ramp_300K_1500K": 2
+    }
+
+
+def test_annealing_report_registered_and_builds_graph_table(tmp_path):
+    task_dir = tmp_path / "task.000000"
+    write_annealing_analysis_files(task_dir)
+    prop = Annealing({"type": "annealing"})
+    res_data, _ptr_data = prop._compute_lower(
+        str(tmp_path / "result.json"),
+        [str(task_dir)],
+        {},
+    )
+
+    assert return_prop_type("annealing_00") == "annealing"
+    assert return_prop_class("annealing") is AnnealingReport
+    traces, layout = AnnealingReport.plotly_graph(res_data, "work")
+    table, df = AnnealingReport.dash_table(res_data)
+
+    assert len(traces) == 4
+    assert layout.title.text == "Annealing RDF, MSD, and Volume-Temperature Response"
+    assert "RDF points" in df.columns
+    assert set(df["Stage"]) == {"T_ramp_300K_1500K", "cooling", "heating"}
+    assert table.data
+
+
+def test_annealing_archive_sync_props_extracts_result(tmp_path):
+    prop_dir = tmp_path / "confs" / "mo-bcc" / "annealing_00"
+    prop_dir.mkdir(parents=True)
+    result_payload = {
+        "property": "annealing",
+        "tasks": {
+            "task.000000": {
+                "summary": {
+                    "rdf_stages": ["eq_300K"],
+                    "msd_stages": ["eq_300K"],
+                    "volume_temperature_stages": ["heating"],
+                }
+            }
+        },
+    }
+    param_payload = {"type": "annealing"}
+    dumpfn(result_payload, prop_dir / "result.json")
+    dumpfn(param_payload, prop_dir / "param.json")
+
+    storage = ResultStorage(tmp_path)
+    storage.sync_props(
+        {
+            "structures": ["confs/*"],
+            "interaction": {"type": "deepmd"},
+            "properties": [{"type": "annealing"}],
+        }
+    )
+
+    archived = storage.result_data["confs/mo-bcc"]["annealing_00"]
+    assert archived["parameter"] == param_payload
+    assert archived["result"]["tasks"]["task.000000"]["summary"]["rdf_stages"] == ["eq_300K"]
+
+
+def test_annealing_dash_report_app_builds_graph_and_table(tmp_path):
+    task_dir = tmp_path / "task.000000"
+    write_annealing_analysis_files(task_dir)
+    res_data, _ptr_data = Annealing({"type": "annealing"})._compute_lower(
+        str(tmp_path / "result.json"),
+        [str(task_dir)],
+        {},
+    )
+    app = DashReportApp(
+        {
+            "work": {
+                "conf": {
+                    "annealing_00": {
+                        "result": res_data,
+                    }
+                }
+            }
+        }
+    )
+
+    figure = app.update_graph("annealing_00", "conf")
+    table_container = app.update_table("annealing_00", "conf")
+    table_div = table_container.children[0]
+    table = table_div.children[2]
+
+    assert len(figure.data) == 4
+    assert figure.layout.title.text == "Annealing RDF, MSD, and Volume-Temperature Response"
+    assert table.id == {"type": "table", "index": 0}
+    assert "RDF points" in app.csv_copy(1, table.data)
 
 
 def test_annealing_lammps_input_contains_all_md_stages_and_outputs():
@@ -340,6 +506,22 @@ class TestAnnealingCoverage(unittest.TestCase):
     def test_annealing_compute_lower_returns_task_notes(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_annealing_compute_lower_returns_task_notes(Path(tmp))
+
+    def test_annealing_compute_lower_extracts_rdf_msd_and_volume_temperature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_compute_lower_extracts_rdf_msd_and_volume_temperature(Path(tmp))
+
+    def test_annealing_report_registered_and_builds_graph_table(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_report_registered_and_builds_graph_table(Path(tmp))
+
+    def test_annealing_archive_sync_props_extracts_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_archive_sync_props_extracts_result(Path(tmp))
+
+    def test_annealing_dash_report_app_builds_graph_and_table(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_dash_report_app_builds_graph_and_table(Path(tmp))
 
     def test_annealing_lammps_input_contains_all_md_stages_and_outputs(self):
         test_annealing_lammps_input_contains_all_md_stages_and_outputs()

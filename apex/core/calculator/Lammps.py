@@ -446,6 +446,15 @@ class Lammps(Task):
                 fp.write(fc)
 
     def compute(self, output_dir):
+        task_json = os.path.join(output_dir, "task.json")
+        try:
+            task_param = loadfn(task_json) if os.path.isfile(task_json) else {}
+        except Exception:
+            task_param = {}
+        task_type = task_param.get("type", task_param.get("cal_type"))
+        if task_type in ["annealing", "Annealing"]:
+            return None
+
         log_lammps = os.path.join(output_dir, "log.lammps")
         dump_lammps = os.path.join(output_dir, "dump.relax")
         if not os.path.isfile(log_lammps) or not os.path.isfile(dump_lammps):

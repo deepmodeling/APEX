@@ -433,6 +433,117 @@ class FiniteTelasticReport(PropertyReport):
         return build_table(df, cell_style={"width": "120px"}), df
 
 
+class AnnealingReport(PropertyReport):
+    """Report annealing RDF, MSD, and temperature-volume response."""
+
+    @staticmethod
+    def _iter_tasks(res_data: dict):
+        tasks = res_data.get("tasks", {})
+        if tasks:
+            return sorted(tasks.items())
+        return []
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        traces = []
+        color = kwargs.get("color")
+        for task_name, task_data in AnnealingReport._iter_tasks(res_data):
+            for stage, rdf_data in sorted(task_data.get("rdf", {}).items()):
+                radius = rdf_data.get("radius", [])
+                g_r = rdf_data.get("g_r", [])
+                if not radius or not g_r:
+                    continue
+                traces.append(
+                    go.Scatter(
+                        name=f"{name} {task_name} RDF {stage}",
+                        x=radius,
+                        y=g_r,
+                        mode="lines",
+                        xaxis="x",
+                        yaxis="y",
+                        line=dict(color=color) if color else None,
+                    )
+                )
+
+            for stage, msd_data in sorted(task_data.get("msd", {}).items()):
+                timesteps = msd_data.get("timestep", [])
+                total = msd_data.get("msd_total", [])
+                if not timesteps or not total:
+                    continue
+                traces.append(
+                    go.Scatter(
+                        name=f"{name} {task_name} MSD {stage}",
+                        x=timesteps,
+                        y=total,
+                        mode="lines",
+                        xaxis="x2",
+                        yaxis="y2",
+                    )
+                )
+
+            for stage, vt_data in sorted(task_data.get("volume_temperature", {}).items()):
+                temps = vt_data.get("temperature", [])
+                volume = vt_data.get("volume_per_atom", [])
+                if not temps or not volume:
+                    continue
+                traces.append(
+                    go.Scatter(
+                        name=f"{name} {task_name} {stage} V(T)",
+                        x=temps,
+                        y=volume,
+                        mode="lines+markers",
+                        xaxis="x3",
+                        yaxis="y3",
+                    )
+                )
+
+        layout = go.Layout(
+            title="Annealing RDF, MSD, and Volume-Temperature Response",
+            showlegend=True,
+            xaxis=dict(title="r (Å)", domain=[0.0, 1.0], anchor="y"),
+            yaxis=dict(title="g(r)", domain=[0.70, 1.0], anchor="x"),
+            xaxis2=dict(title="Timestep", domain=[0.0, 1.0], anchor="y2"),
+            yaxis2=dict(title="MSD (Å²)", domain=[0.36, 0.64], anchor="x2"),
+            xaxis3=dict(title="Temperature (K)", domain=[0.0, 1.0], anchor="y3"),
+            yaxis3=dict(title="Volume/atom (Å³)", domain=[0.0, 0.30], anchor="x3"),
+            height=850,
+        )
+        return traces, layout
+
+    @staticmethod
+    def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
+        rows = []
+        for task_name, task_data in AnnealingReport._iter_tasks(res_data):
+            summary = task_data.get("summary", {})
+            for stage in sorted(set(
+                    list(task_data.get("rdf", {}).keys())
+                    + list(task_data.get("msd", {}).keys())
+                    + list(task_data.get("volume_temperature", {}).keys())
+            )):
+                rdf_points = summary.get("rdf_points", {}).get(stage, 0)
+                msd_points = summary.get("msd_points", {}).get(stage, 0)
+                volume_points = summary.get("volume_temperature_points", {}).get(stage, 0)
+                volume_data = task_data.get("volume_temperature", {}).get(stage, {})
+                temps = volume_data.get("temperature", [])
+                volumes = volume_data.get("volume_per_atom", [])
+                row = {
+                    "Task": task_name,
+                    "Stage": stage,
+                    "RDF points": rdf_points,
+                    "MSD timesteps": msd_points,
+                    "V(T) points": volume_points,
+                }
+                if temps:
+                    row["T min (K)"] = round(float(min(temps)), decimal)
+                    row["T max (K)"] = round(float(max(temps)), decimal)
+                if volumes:
+                    row["V/atom min (Å³)"] = round(float(min(volumes)), decimal)
+                    row["V/atom max (Å³)"] = round(float(max(volumes)), decimal)
+                rows.append(row)
+        df = pd.DataFrame(rows)
+        return build_table(df, cell_style={"width": "130px"}), df
+
+
 class ElasticReport(PropertyReport):
     @staticmethod
     def plotly_graph(res_data: dict, name: str, **kwargs):

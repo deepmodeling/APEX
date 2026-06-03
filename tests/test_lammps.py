@@ -3,7 +3,9 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import unittest
+import warnings
 
 import dpdata
 import numpy as np
@@ -128,3 +130,14 @@ class TestLammps(unittest.TestCase):
         ]
         self.assertEqual(self.Lammps.backward_files(), backward_files)
 
+    def test_compute_skips_annealing_without_relax_dump_warning(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dumpfn({"type": "annealing"}, os.path.join(tmpdir, "task.json"))
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                result = self.Lammps.compute(tmpdir)
+
+        self.assertIsNone(result)
+        self.assertFalse(
+            any("dump.relax" in str(item.message) for item in caught)
+        )

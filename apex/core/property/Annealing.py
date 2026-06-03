@@ -1,8 +1,9 @@
+import glob
 import os
 import logging
 from typing import List, Dict, Any
 
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 
 from apex.core.property.Property import Property
@@ -328,13 +329,271 @@ class Annealing(Property):
         pass
 
     def _compute_lower(self, output_file, all_tasks, all_res):
-        # Minimal aggregator: return basic info per task; users inspect dumps/logs
-        res_data = {}
-        ptr_data = os.path.dirname(output_file) + "\n"
-        for t in all_tasks:
-            name = os.path.basename(t)
-            res_data[name] = {
-                "task": name,
-                "note": "annealing run; inspect log.lammps and dump files",
-            }
+        res_data = {
+            "property": "annealing",
+            "tasks": {},
+        }
+        ptr_lines = [os.path.dirname(output_file)]
+        for task_dir in all_tasks:
+            name = os.path.basename(task_dir)
+            task_result = self._collect_task_result(task_dir)
+            res_data["tasks"][name] = task_result
+            ptr_lines.append(self._task_summary_line(name, task_result))
+        ptr_data = "\n".join(ptr_lines) + "\n"
+        dumpfn(res_data, output_file, indent=4)
         return res_data, ptr_data
+
+    @classmethod
+    def _collect_task_result(cls, task_dir: str) -> Dict[str, Any]:
+        task_path = os.path.abspath(task_dir)
+        metadata_path = os.path.join(task_path, "Annealing.json")
+        status_path = os.path.join(task_path, "apex_task_status.json")
+        result = {
+            "task": os.path.basename(task_path),
+            "path": task_path,
+            "metadata": cls._safe_load_json(metadata_path),
+            "status": cls._safe_load_json(status_path),
+            "rdf": cls._collect_rdf(task_path),
+            "msd": cls._collect_msd(task_path),
+            "volume_temperature": cls._collect_volume_temperature(task_path),
+        }
+        result["summary"] = cls._build_summary(result)
+        return result
+
+    @staticmethod
+    def _safe_load_json(path: str):
+        try:
+            if os.path.isfile(path):
+                return loadfn(path)
+        except Exception as exc:
+            return {"error": f"failed to read {os.path.basename(path)}: {exc}"}
+        return {}
+
+    @classmethod
+    def _collect_rdf(cls, task_path: str) -> Dict[str, Any]:
+        stages = {}
+        for path in sorted(glob.glob(os.path.join(task_path, "rdf.*.txt"))):
+            stage = cls._stage_from_analysis_file(path, prefix="rdf", suffix=".txt")
+            parsed = cls._parse_rdf_file(path)
+            if parsed:
+                stages[stage] = parsed
+        return stages
+
+    @classmethod
+    def _collect_msd(cls, task_path: str) -> Dict[str, Any]:
+        stages = {}
+        for path in sorted(glob.glob(os.path.join(task_path, "msd.*.txt"))):
+            stage = cls._stage_from_analysis_file(path, prefix="msd", suffix=".txt")
+            parsed = cls._parse_msd_file(path)
+            if parsed:
+                stages[stage] = parsed
+        return stages
+
+    @classmethod
+    def _collect_volume_temperature(cls, task_path: str) -> Dict[str, Any]:
+        stages = {}
+        for path in sorted(glob.glob(os.path.join(task_path, "heating_interval_*.dat"))):
+            parsed = cls._parse_thermo_interval_file(path)
+            if parsed:
+                stages["heating"] = parsed
+        for path in sorted(glob.glob(os.path.join(task_path, "cooling_interval_*.dat"))):
+            parsed = cls._parse_thermo_interval_file(path)
+            if parsed:
+                stages["cooling"] = parsed
+        return stages
+
+    @staticmethod
+    def _stage_from_analysis_file(path: str, prefix: str, suffix: str) -> str:
+        name = os.path.basename(path)
+        if name.startswith(prefix + "."):
+            name = name[len(prefix) + 1:]
+        if suffix and name.endswith(suffix):
+            name = name[:-len(suffix)]
+        return name
+
+    @staticmethod
+    def _numeric_tokens(line: str) -> List[float]:
+        values = []
+        for token in line.split():
+            try:
+                values.append(float(token))
+            except ValueError:
+                return []
+        return values
+
+    @classmethod
+    def _parse_ave_time_blocks(cls, path: str):
+        column_names = []
+        blocks = []
+        try:
+            with open(path, "r", errors="replace") as fp:
+                lines = fp.readlines()
+        except OSError:
+            return column_names, blocks
+
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx].strip()
+            if not line:
+                idx += 1
+                continue
+            if line.startswith("#"):
+                if line.startswith("# Row "):
+                    column_names = line[2:].split()[1:]
+                idx += 1
+                continue
+
+            header = line.split()
+            if len(header) != 2:
+                idx += 1
+                continue
+            try:
+                timestep = int(float(header[0]))
+                nrows = int(float(header[1]))
+            except ValueError:
+                idx += 1
+                continue
+
+            rows = []
+            for raw_row in lines[idx + 1: idx + 1 + nrows]:
+                values = cls._numeric_tokens(raw_row.strip())
+                if values:
+                    rows.append(values)
+            if rows:
+                blocks.append({"timestep": timestep, "rows": rows})
+            idx += 1 + nrows
+        return column_names, blocks
+
+    @classmethod
+    def _parse_rdf_file(cls, path: str) -> Dict[str, Any]:
+        column_names, blocks = cls._parse_ave_time_blocks(path)
+        if not blocks:
+            return {}
+        last_block = blocks[-1]
+        rows = [
+            row[1:] if column_names and len(row) == len(column_names) + 1 else row
+            for row in last_block["rows"]
+        ]
+        columns = {}
+        ncols = max(len(row) for row in rows)
+        if len(column_names) < ncols:
+            column_names = column_names + [f"column_{idx}" for idx in range(len(column_names), ncols)]
+        for idx in range(ncols):
+            columns[column_names[idx]] = [row[idx] for row in rows if len(row) > idx]
+
+        radius = columns.get("c_myRDF[1]", columns.get("column_1", []))
+        g_r = columns.get("c_myRDF[2]", columns.get("column_2", []))
+        coordination = columns.get("c_myRDF[3]", columns.get("column_3", []))
+        return {
+            "source": os.path.basename(path),
+            "timestep": last_block["timestep"],
+            "nblocks": len(blocks),
+            "columns": columns,
+            "radius": radius,
+            "g_r": g_r,
+            "coordination": coordination,
+        }
+
+    @classmethod
+    def _parse_msd_file(cls, path: str) -> Dict[str, Any]:
+        _column_names, blocks = cls._parse_ave_time_blocks(path)
+        if not blocks:
+            return {}
+        timesteps = []
+        msd_x = []
+        msd_y = []
+        msd_z = []
+        msd_total = []
+        for block in blocks:
+            values = [row[1] if len(row) > 1 else row[0] for row in block["rows"]]
+            if len(values) < 4:
+                continue
+            timesteps.append(block["timestep"])
+            msd_x.append(values[0])
+            msd_y.append(values[1])
+            msd_z.append(values[2])
+            msd_total.append(values[3])
+        return {
+            "source": os.path.basename(path),
+            "timestep": timesteps,
+            "msd_x": msd_x,
+            "msd_y": msd_y,
+            "msd_z": msd_z,
+            "msd_total": msd_total,
+        }
+
+    @classmethod
+    def _parse_thermo_interval_file(cls, path: str) -> Dict[str, Any]:
+        header = []
+        rows = []
+        try:
+            with open(path, "r", errors="replace") as fp:
+                for raw_line in fp:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("#"):
+                        if line.startswith("# TimeStep"):
+                            header = line[2:].split()
+                        continue
+                    values = cls._numeric_tokens(line)
+                    if values:
+                        rows.append(values)
+        except OSError:
+            return {}
+        if not header or not rows:
+            return {}
+
+        columns = {}
+        for idx, name in enumerate(header):
+            columns[name] = [row[idx] for row in rows if len(row) > idx]
+
+        atom_count = columns.get("v_N", [])
+        volume_per_atom = columns.get("v_Vatom", [])
+        total_volume = [
+            n * v
+            for n, v in zip(atom_count, volume_per_atom)
+        ]
+        return {
+            "source": os.path.basename(path),
+            "timestep": columns.get("TimeStep", []),
+            "temperature": columns.get("v_Temp", []),
+            "volume_per_atom": volume_per_atom,
+            "total_volume": total_volume,
+            "potential_energy": columns.get("v_pote", []),
+            "total_energy": columns.get("v_Etotal", []),
+            "pressure": columns.get("v_Press", []),
+        }
+
+    @staticmethod
+    def _build_summary(task_result: Dict[str, Any]) -> Dict[str, Any]:
+        rdf_points = {
+            stage: len(data.get("radius", []))
+            for stage, data in task_result.get("rdf", {}).items()
+        }
+        msd_points = {
+            stage: len(data.get("timestep", []))
+            for stage, data in task_result.get("msd", {}).items()
+        }
+        volume_points = {
+            stage: len(data.get("temperature", []))
+            for stage, data in task_result.get("volume_temperature", {}).items()
+        }
+        return {
+            "rdf_stages": sorted(task_result.get("rdf", {}).keys()),
+            "msd_stages": sorted(task_result.get("msd", {}).keys()),
+            "volume_temperature_stages": sorted(task_result.get("volume_temperature", {}).keys()),
+            "rdf_points": rdf_points,
+            "msd_points": msd_points,
+            "volume_temperature_points": volume_points,
+        }
+
+    @staticmethod
+    def _task_summary_line(name: str, task_result: Dict[str, Any]) -> str:
+        summary = task_result.get("summary", {})
+        return (
+            f"{name}: "
+            f"rdf={summary.get('rdf_stages', [])}, "
+            f"msd={summary.get('msd_stages', [])}, "
+            f"volume_temperature={summary.get('volume_temperature_stages', [])}"
+        )
