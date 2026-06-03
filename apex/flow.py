@@ -151,13 +151,12 @@ class FlowGenerator:
             return f"{fallback_label}: no step details available"
 
         detail_keys = [
+            "id",
+            "key",
             "phase",
             "message",
             "reason",
-            "podName",
-            "pod_name",
             "displayName",
-            "name",
             "finishedAt",
             "startedAt",
         ]
@@ -172,24 +171,147 @@ class FlowGenerator:
                 lines.append(f"  {key}: {value}")
 
         if main_log_path:
+            log_paths = main_log_path
             if isinstance(main_log_path, list):
                 main_log_path = ", ".join(str(item) for item in main_log_path)
             lines.append(f"  main_logs: {main_log_path}")
+            log_excerpt = FlowGenerator._failure_log_excerpt(log_paths)
+            if log_excerpt:
+                cause = FlowGenerator._failure_cause_from_excerpt(log_excerpt)
+                if cause:
+                    lines.append(f"  cause: {cause}")
+                lines.append("  main_logs_excerpt:")
+                lines.extend(f"    {line}" for line in log_excerpt.splitlines())
         elif main_log_error:
             lines.append(f"  main_logs: unavailable ({main_log_error})")
 
         if diagnostic_artifacts:
             artifact_text = ", ".join(str(item) for item in diagnostic_artifacts)
             lines.append(f"  failed_artifacts: {artifact_text}")
+            artifact_excerpt = FlowGenerator._failure_log_excerpt(diagnostic_artifacts)
+            if artifact_excerpt:
+                cause = FlowGenerator._failure_cause_from_excerpt(artifact_excerpt)
+                if cause:
+                    lines.append(f"  cause: {cause}")
+                lines.append("  failed_artifacts_excerpt:")
+                lines.extend(f"    {line}" for line in artifact_excerpt.splitlines())
 
-        if isinstance(step, dict):
-            try:
-                lines.append("  raw_step: " + json.dumps(step, default=str, sort_keys=True))
-            except TypeError:
+        if os.environ.get("APEX_SHOW_RAW_STEP", "").lower() in {"1", "true", "yes"}:
+            if isinstance(step, dict):
+                try:
+                    lines.append("  raw_step: " + json.dumps(step, default=str, sort_keys=True))
+                except TypeError:
+                    lines.append(f"  raw_step: {step!r}")
+            else:
                 lines.append(f"  raw_step: {step!r}")
-        else:
-            lines.append(f"  raw_step: {step!r}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _failure_log_excerpt(paths, max_lines: int = 80, max_chars: int = 12000) -> str:
+        if paths is None:
+            return ""
+        if isinstance(paths, (str, os.PathLike)):
+            path_list = [paths]
+        else:
+            path_list = list(paths)
+
+        chunks = []
+        for raw_path in path_list:
+            for path in FlowGenerator._failure_log_candidates(raw_path):
+                text = FlowGenerator._read_failure_log_tail(path, max_lines=max_lines)
+                if not text:
+                    continue
+                rel_path = os.path.relpath(path, os.getcwd())
+                chunks.append(f"--- {rel_path} ---\n{text}")
+                if sum(len(chunk) for chunk in chunks) >= max_chars:
+                    break
+            if sum(len(chunk) for chunk in chunks) >= max_chars:
+                break
+        result = "\n".join(chunks)
+        if len(result) > max_chars:
+            result = "<truncated>\n" + result[-max_chars:]
+        return result
+
+    @staticmethod
+    def _failure_cause_from_excerpt(excerpt: str) -> str:
+        if not excerpt:
+            return ""
+        lines = [line.strip() for line in excerpt.splitlines() if line.strip()]
+        exception_re = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_.]*)(?:Error|Exception|Warning): .+")
+        for line in reversed(lines):
+            if exception_re.match(line):
+                return line
+        markers = ("ERROR", "Error", "error", "Failed", "failed")
+        for line in reversed(lines):
+            if any(marker in line for marker in markers):
+                return line
+        return lines[-1] if lines else ""
+
+    @staticmethod
+    def _failure_log_candidates(raw_path) -> List[str]:
+        if isinstance(raw_path, list):
+            candidates = []
+            for item in raw_path:
+                candidates.extend(FlowGenerator._failure_log_candidates(item))
+            return candidates
+
+        path = os.fspath(raw_path)
+        if not os.path.exists(path):
+            return []
+        if os.path.isfile(path):
+            return [path]
+
+        preferred_names = {
+            "main.log",
+            "executor.log",
+            "stderr",
+            "stdout",
+            ".debug.log",
+            ".debug.stderr",
+            ".debug.stdout",
+            "apex_task_status.json",
+            "failed_lammps_tasks.json",
+            "errlog",
+            "outlog",
+            "log.lammps",
+            "run.log",
+        }
+        preferred_suffixes = (".log", ".out", ".err")
+        candidates = []
+        for root, _dirs, files in os.walk(path):
+            for name in files:
+                file_path = os.path.join(root, name)
+                if name in preferred_names or name.endswith(preferred_suffixes):
+                    candidates.append(file_path)
+        candidates.sort(key=lambda item: (
+            os.path.basename(item) not in preferred_names,
+            item.count(os.sep),
+            item,
+        ))
+        return candidates[:12]
+
+    @staticmethod
+    def _read_failure_log_tail(path: str, max_lines: int = 80) -> str:
+        try:
+            with open(path, "r", errors="replace") as fp:
+                lines = fp.readlines()
+        except Exception as exc:
+            return f"<unable to read {path}: {exc}>"
+        cleaned = [line.rstrip("\n") for line in lines if line.strip()]
+        if not cleaned:
+            return ""
+
+        traceback_start = None
+        for index, line in enumerate(cleaned):
+            if line.startswith("Traceback (most recent call last):"):
+                traceback_start = index
+        if traceback_start is not None:
+            selected = cleaned[traceback_start:]
+        else:
+            selected = cleaned[-max_lines:]
+        if len(selected) > max_lines:
+            selected = selected[-max_lines:]
+        return "\n".join(selected)
 
     @staticmethod
     def _safe_get(obj, key, default=None):
@@ -341,7 +463,8 @@ class FlowGenerator:
         )
         os.makedirs(log_dir, exist_ok=True)
         try:
-            return self._download_artifact_with_retry(artifact=artifact, path=log_dir), None
+            downloaded_path = self._download_artifact_with_retry(artifact=artifact, path=log_dir)
+            return downloaded_path or log_dir, None
         except Exception as exc:
             return None, str(exc)
 

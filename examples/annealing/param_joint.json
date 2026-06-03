@@ -1,0 +1,45 @@
+{
+    "structures": ["confs/*"],
+    "interaction": {
+        "type": "deepmd",
+        "model": "frozen_model.pb",
+        "type_map": {
+            "Mo": 0
+        }
+    },
+    "relaxation": {
+        "cal_type": "relaxation",
+        "req_recal": false,
+        "cal_setting": {
+            "etol": 0,
+            "ftol": 1e-10,
+            "maxiter": 5000,
+            "maxeval": 500000
+        }
+    },
+    "properties": [
+        {
+            "type": "annealing",
+            "supercell_size": [4, 4, 4],
+            "cal_setting": {
+                "start_temp": 300,
+                "target_temp": 1500,
+                "end_temp": 300,
+                "equi_step": 10000,
+                "ramp_step": 20000,
+                "hold_step": 10000,
+                "cool_step": 20000,
+                "thermostat": "nose_hoover",
+                "ensemble": "npt",
+                "tdamp": 0.1,
+                "pdamp": 1.0,
+                "velocity_seed": 12345,
+                "dump_step": 1000,
+                "timestep": 0.002,
+                "rdf_bins": 200,
+                "rdf_cutoff": 5.0,
+                "rdf_interval": 100
+            }
+        }
+    ]
+}

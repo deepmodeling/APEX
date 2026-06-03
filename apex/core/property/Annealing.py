@@ -1,12 +1,21 @@
+import glob
 import os
 import logging
 from typing import List, Dict, Any
 
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 
 from apex.core.property.Property import Property
 from apex.core.calculator.lib import vasp_utils
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 class Annealing(Property):
@@ -22,32 +31,64 @@ class Annealing(Property):
 
         # MD controls (independent knobs only)
         cal = parameter.setdefault("cal_setting", {})
-        # required temps
-        self.start_temp = float(cal.get("start_temp", 300))
-        _tgt = cal.get("target_temp", 800)
+        # Schedule defaults mirror annealing/spec.
+        self.start_temp = float(cal.get("start_temp", 4))
+        _tgt = cal.get("target_temp", cal.get("temp", 300))
         self.target_temp = float(_tgt if not isinstance(_tgt, list) else _tgt[0])
-        self.end_temp = float(cal.get("end_temp", 300))
-        # required steps
-        self.equi_step = int(cal.get("equi_step", 10000))
-        # Allow specifying ramp/cool by rate (K/step); derive steps per task if provided
-        self.ramp_rate = cal.pop("ramp_rate", None)
-        self.cool_rate = cal.pop("cool_rate", None)
-        self.ramp_step = int(cal.get("ramp_step", 20000))
-        self.hold_step = int(cal.get("hold_step", 0))
-        self.cool_step = int(cal.get("cool_step", 20000))
+        self.end_temp = float(cal.get("end_temp", 4))
+        self._has_ramp_rate = "temp_ramp_rate" in cal or "ramp_rate" in cal
+        self._has_cool_rate = "cool_rate" in cal
+        self.temp_ramp_rate = cal.get("temp_ramp_rate", cal.get("ramp_rate", 1000))
+        self.cool_rate = cal.get("cool_rate", self.temp_ramp_rate)
+        self.equi_step = int(cal.get("equi_step", cal.get("init_thermo_equil_step", 20000)))
+        self.init_lgv_thermo_equil_step = int(cal.get("init_lgv_thermo_equil_step", 20000))
+        self.init_thermo_equil_step = int(cal.get("init_thermo_equil_step", self.equi_step))
+        self.final_thermo_equil_step = int(cal.get("final_thermo_equil_step", cal.get("hold_step", 20000)))
+        # Explicit step counts override rate-derived counts when provided.
+        self.ramp_step = int(cal.get("ramp_step", cal.get("temp_ramp_step", 0)))
+        self.cool_step = int(cal.get("cool_step", cal.get("temp_decline_step", 0)))
+        self.hold_step = int(cal.get("hold_step", self.final_thermo_equil_step))
         # options
         self.thermostat = cal.get("thermostat", "nose_hoover")
         self.ensemble = cal.get("ensemble", "npt")
-        self.tdamp = cal.get("tdamp", 100)
-        self.pdamp = cal.get("pdamp", 1000)
-        self.velocity_seed = cal.get("velocity_seed", 12345)
-        self.dump_step = int(cal.get("dump_step", 1000))
-        # timestep (ps, units metal); default 0.002 ps (2 fs)
-        self.timestep = float(cal.get("timestep", 0.002))
+        self.timestep = float(cal.get("timestep", 0.001))
+        self.tdamp_factor = cal.get("tdamp_factor", 100)
+        self.pdamp_factor = cal.get("pdamp_factor", 1000)
+        self.tdamp = cal.get("tdamp")
+        self.pdamp = cal.get("pdamp")
+        self.velocity_seed = cal.get("velocity_seed", cal.get("init_v_seed", 123457))
+        self.lgv_seed = cal.get("lgv_seed", self.velocity_seed)
+        self.req_lgv_damping = _as_bool(cal.get("req_lgv_damping", False))
+        self.req_opti_init_structure = _as_bool(cal.get("req_opti_init_structure", True))
+        self.req_write_restart = _as_bool(cal.get("req_write_restart", True))
+        self.req_dump_init_atom = _as_bool(cal.get("req_dump_init_atom", True))
+        self.req_dump_ave_atom = _as_bool(cal.get("req_dump_ave_atom", False))
+        self.dump_step = int(cal.get("dump_step", cal.get("dump_interval", 2000)))
+        self.dump_interval = int(cal.get("dump_interval", self.dump_step))
+        self.thermo_interval = int(cal.get("thermo_interval", 2000))
+        self.restart_interval = int(cal.get("restart_interval", 20000))
+        self.ave_atom_sample_feq = int(cal.get("ave_atom_sample_feq", 1))
+        self.ave_atom_num_sample = int(cal.get("ave_atom_num_sample", self.dump_interval))
+        self.ave_atom_sample_length = int(cal.get(
+            "ave_atom_sample_length",
+            self.ave_atom_sample_feq * self.ave_atom_num_sample,
+        ))
+        self.init_opt_loop_size = int(cal.get("init_opt_loop_size", 10))
+        self.init_fmax_tol = cal.get("init_fmax_tol", 1.0e-8)
+        self.init_stress_tol = cal.get("init_stress_tol", 1.0e-2)
         # RDF settings
-        self.rdf_bins = int(cal.get("rdf_bins", 200))
-        self.rdf_cutoff = float(cal.get("rdf_cutoff", 10.0))
-        self.rdf_interval = int(cal.get("rdf_interval", 100))
+        self.req_compute_rdf = _as_bool(cal.get("req_compute_rdf", True))
+        self.rdf_bins = int(cal.get("rdf_bins", 100))
+        self.rdf_cutoff = float(cal.get("rdf_cutoff", 6.0))
+        self.rdf_nevery = int(cal.get("rdf_nevery", cal.get("rdf_interval", 100)))
+        self.rdf_nrepeat = int(cal.get("rdf_nrepeat", 1))
+        self.rdf_nfreq = int(cal.get("rdf_nfreq", cal.get("rdf_interval", 200)))
+        self.rdf_interval = int(cal.get("rdf_interval", self.rdf_nfreq))
+        # MSD settings
+        self.req_compute_msd = _as_bool(cal.get("req_compute_msd", True))
+        self.msd_nevery = int(cal.get("msd_nevery", 100))
+        self.msd_nrepeat = int(cal.get("msd_nrepeat", 1))
+        self.msd_nfreq = int(cal.get("msd_nfreq", 200))
 
     def task_type(self):
         return self.parameter["type"]
@@ -59,23 +100,57 @@ class Annealing(Property):
             {
                 "start_temp": self.start_temp,
                 "target_temp": self.target_temp,
+                "temp": self.target_temp,
                 "end_temp": self.end_temp,
+                "temp_ramp_rate": self.temp_ramp_rate,
                 "equi_step": self.equi_step,
+                "init_lgv_thermo_equil_step": self.init_lgv_thermo_equil_step,
+                "init_thermo_equil_step": self.init_thermo_equil_step,
+                "final_thermo_equil_step": self.final_thermo_equil_step,
                 "ramp_step": self.ramp_step,
+                "temp_ramp_step": self.ramp_step,
                 "hold_step": self.hold_step,
                 "cool_step": self.cool_step,
+                "temp_decline_step": self.cool_step,
                 "thermostat": self.thermostat,
                 "ensemble": self.ensemble,
-                "tdamp": self.tdamp,
-                "pdamp": self.pdamp,
+                "tdamp_factor": self.tdamp_factor,
+                "pdamp_factor": self.pdamp_factor,
                 "velocity_seed": self.velocity_seed,
+                "lgv_seed": self.lgv_seed,
+                "req_lgv_damping": self.req_lgv_damping,
+                "req_opti_init_structure": self.req_opti_init_structure,
+                "req_write_restart": self.req_write_restart,
+                "req_dump_init_atom": self.req_dump_init_atom,
+                "req_dump_ave_atom": self.req_dump_ave_atom,
                 "dump_step": self.dump_step,
+                "dump_interval": self.dump_interval,
+                "thermo_interval": self.thermo_interval,
+                "restart_interval": self.restart_interval,
+                "ave_atom_sample_feq": self.ave_atom_sample_feq,
+                "ave_atom_num_sample": self.ave_atom_num_sample,
+                "ave_atom_sample_length": self.ave_atom_sample_length,
+                "init_opt_loop_size": self.init_opt_loop_size,
+                "init_fmax_tol": self.init_fmax_tol,
+                "init_stress_tol": self.init_stress_tol,
                 "timestep": self.timestep,
+                "req_compute_rdf": self.req_compute_rdf,
                 "rdf_bins": self.rdf_bins,
                 "rdf_cutoff": self.rdf_cutoff,
                 "rdf_interval": self.rdf_interval,
+                "rdf_nevery": self.rdf_nevery,
+                "rdf_nrepeat": self.rdf_nrepeat,
+                "rdf_nfreq": self.rdf_nfreq,
+                "req_compute_msd": self.req_compute_msd,
+                "msd_nevery": self.msd_nevery,
+                "msd_nrepeat": self.msd_nrepeat,
+                "msd_nfreq": self.msd_nfreq,
             }
         )
+        if self.tdamp is not None:
+            cal["tdamp"] = self.tdamp
+        if self.pdamp is not None:
+            cal["pdamp"] = self.pdamp
         self.parameter["supercell_size"] = self.supercell_size
         if self.supercell_length is not None:
             self.parameter["supercell_length"] = self.supercell_length
@@ -95,7 +170,10 @@ class Annealing(Property):
 
         task_list: List[str] = []
         # One task per target_temp (allow list), else single
-        targets = self.parameter.get("cal_setting", {}).get("target_temp", self.target_temp)
+        targets = self.parameter.get("cal_setting", {}).get(
+            "target_temp",
+            self.parameter.get("cal_setting", {}).get("temp", self.target_temp),
+        )
         if not isinstance(targets, list):
             targets = [targets]
 
@@ -127,7 +205,9 @@ class Annealing(Property):
             anneal_task = {
                 "start_temp": self.start_temp,
                 "target_temp": float(tgt),
+                "temp": float(tgt),
                 "end_temp": self.end_temp,
+                "temp_ramp_rate": self.temp_ramp_rate,
                 "supercell_size": self.supercell_size,
             }
             dumpfn(anneal_task, os.path.join(task_dir, "Annealing.json"), indent=4)
@@ -140,36 +220,100 @@ class Annealing(Property):
             var.append(f"variable nz equal {self.supercell_size[2]}")
             var.append(f"variable start_temp equal {self.start_temp:.2f}")
             var.append(f"variable target_temp equal {float(tgt):.2f}")
+            var.append(f"variable temp equal {float(tgt):.2f}")
             var.append(f"variable end_temp equal {self.end_temp:.2f}")
+            var.append(f"variable temp_ramp_rate equal {self.temp_ramp_rate}")
             var.append(f"variable equi_step equal {self.equi_step}")
             # derive ramp/cool steps if rates are provided (K/step); else use defaults
             import math
-            if self.ramp_rate is not None:
+            if self._has_ramp_rate and self.temp_ramp_rate is not None:
                 try:
                     # convert K/ns -> steps using timestep (ps): dt_ns = dt_ps/1000
-                    rstep = max(1, int(math.ceil(abs(float(tgt) - self.start_temp) * 1000.0 / (float(self.ramp_rate) * self.timestep))))
+                    rstep = max(1, int(math.ceil(abs(float(tgt) - self.start_temp) * 1000.0 / (float(self.temp_ramp_rate) * self.timestep))))
+                except Exception:
+                    rstep = self.ramp_step
+            elif self.ramp_step > 0:
+                rstep = self.ramp_step
+            elif self.temp_ramp_rate is not None:
+                try:
+                    rstep = max(1, int(math.ceil(abs(float(tgt) - self.start_temp) * 1000.0 / (float(self.temp_ramp_rate) * self.timestep))))
                 except Exception:
                     rstep = self.ramp_step
             else:
                 rstep = self.ramp_step
-            if self.cool_rate is not None:
+            if (self._has_cool_rate or self._has_ramp_rate) and self.cool_rate is not None:
                 try:
                     cr = self.cool_rate[idx] if isinstance(self.cool_rate, (list, tuple)) else float(self.cool_rate)
                     cstep = max(1, int(math.ceil(abs(float(tgt) - self.end_temp) * 1000.0 / (float(cr) * self.timestep))))
                 except Exception:
                     cstep = self.cool_step
+            elif self.cool_step > 0:
+                cstep = self.cool_step
+            elif self.cool_rate is not None:
+                try:
+                    cstep = max(1, int(math.ceil(abs(float(tgt) - self.end_temp) * 1000.0 / (float(self.cool_rate) * self.timestep))))
+                except Exception:
+                    cstep = self.cool_step
             else:
                 cstep = self.cool_step
             var.append(f"variable ramp_step equal {rstep}")
+            var.append(f"variable temp_ramp_step equal {rstep}")
+            var.append(f"variable temp_ramp_remain_step equal {rstep}")
             var.append(f"variable hold_step equal {self.hold_step}")
             var.append(f"variable cool_step equal {cstep}")
+            var.append(f"variable temp_decline_step equal {cstep}")
+            var.append(f"variable temp_decline_remain_step equal {cstep}")
+            var.append(f"variable init_lgv_thermo_equil_step equal {self.init_lgv_thermo_equil_step}")
+            var.append(f"variable init_thermo_equil_step equal {self.init_thermo_equil_step}")
+            var.append(f"variable final_thermo_equil_step equal {self.final_thermo_equil_step}")
+            var.append(f"variable final_thermo_equil_remain_step equal {self.final_thermo_equil_step}")
             var.append(f"variable timestep equal {self.timestep}")
+            var.append(f"variable thermo_interval equal {self.thermo_interval}")
+            var.append(f"variable dump_interval equal {self.dump_interval}")
+            var.append(f"variable restart_interval equal {self.restart_interval}")
+            var.append(f"variable req_lgv_damping equal {str(self.req_lgv_damping).lower()}")
+            var.append(f"variable req_opti_init_structure equal {str(self.req_opti_init_structure).lower()}")
+            var.append(f"variable req_write_restart equal {str(self.req_write_restart).lower()}")
+            var.append(f"variable req_dump_init_atom equal {str(self.req_dump_init_atom).lower()}")
+            var.append(f"variable req_dump_ave_atom equal {str(self.req_dump_ave_atom).lower()}")
+            var.append(f"variable ave_atom_sample_feq equal {self.ave_atom_sample_feq}")
+            var.append(f"variable ave_atom_num_sample equal {self.ave_atom_num_sample}")
+            var.append(f"variable ave_atom_sample_length equal {self.ave_atom_sample_length}")
+            var.append(f"variable init_opt_loop_size equal {self.init_opt_loop_size}")
+            var.append(f"variable init_fmax_tol equal {self.init_fmax_tol}")
+            var.append(f"variable init_stress_tol equal {self.init_stress_tol}")
+            var.append(f"variable req_compute_rdf equal {str(self.req_compute_rdf).lower()}")
             var.append(f"variable rdf_bins equal {self.rdf_bins}")
             var.append(f"variable rdf_cutoff equal {self.rdf_cutoff}")
             var.append(f"variable rdf_interval equal {self.rdf_interval}")
-            var.append(f"variable tdamp equal {self.tdamp}")
-            var.append(f"variable pdamp equal {self.pdamp}")
+            var.append(f"variable rdf_nevery equal {self.rdf_nevery}")
+            var.append(f"variable rdf_nrepeat equal {self.rdf_nrepeat}")
+            var.append(f"variable rdf_nfreq equal {self.rdf_nfreq}")
+            var.append("variable rdf_file_eq string rdf.eq_${start_temp}K.txt")
+            var.append("variable rdf_file_ramp string rdf.T_ramp_${start_temp}K_${temp}K.txt")
+            var.append("variable rdf_file_decline string rdf.T_decline_${temp}K_${end_temp}K.txt")
+            var.append("variable rdf_file_final_eq string rdf.final_eq_${end_temp}K.txt")
+            var.append(f"variable req_compute_msd equal {str(self.req_compute_msd).lower()}")
+            var.append(f"variable msd_nevery equal {self.msd_nevery}")
+            var.append(f"variable msd_nrepeat equal {self.msd_nrepeat}")
+            var.append(f"variable msd_nfreq equal {self.msd_nfreq}")
+            var.append("variable msd_file_eq string msd.eq_${start_temp}K.txt")
+            var.append("variable msd_file_ramp string msd.T_ramp_${start_temp}K_${temp}K.txt")
+            var.append("variable msd_file_decline string msd.T_decline_${temp}K_${end_temp}K.txt")
+            var.append("variable msd_file_final_eq string msd.final_eq_${end_temp}K.txt")
+            var.append(f"variable tdamp_factor equal {self.tdamp_factor}")
+            var.append(f"variable pdamp_factor equal {self.pdamp_factor}")
+            if self.tdamp is not None:
+                var.append(f"variable tdamp equal {self.tdamp}")
+            else:
+                var.append("variable tdamp equal v_tdamp_factor*${timestep}")
+            if self.pdamp is not None:
+                var.append(f"variable pdamp equal {self.pdamp}")
+            else:
+                var.append("variable pdamp equal v_pdamp_factor*${timestep}")
             var.append(f"variable velocity_seed equal {int(self.velocity_seed)}")
+            var.append(f"variable init_v_seed equal {int(self.velocity_seed)}")
+            var.append(f"variable lgv_seed equal {int(self.lgv_seed)}")
             var.append(f"variable dump_step equal {self.dump_step}")
             var.append(f"variable thermostat string {self.thermostat}")
             var.append(f"variable ensemble string {self.ensemble}")
@@ -185,13 +329,271 @@ class Annealing(Property):
         pass
 
     def _compute_lower(self, output_file, all_tasks, all_res):
-        # Minimal aggregator: return basic info per task; users inspect dumps/logs
-        res_data = {}
-        ptr_data = os.path.dirname(output_file) + "\n"
-        for t in all_tasks:
-            name = os.path.basename(t)
-            res_data[name] = {
-                "task": name,
-                "note": "annealing run; inspect log.lammps and dump files",
-            }
+        res_data = {
+            "property": "annealing",
+            "tasks": {},
+        }
+        ptr_lines = [os.path.dirname(output_file)]
+        for task_dir in all_tasks:
+            name = os.path.basename(task_dir)
+            task_result = self._collect_task_result(task_dir)
+            res_data["tasks"][name] = task_result
+            ptr_lines.append(self._task_summary_line(name, task_result))
+        ptr_data = "\n".join(ptr_lines) + "\n"
+        dumpfn(res_data, output_file, indent=4)
         return res_data, ptr_data
+
+    @classmethod
+    def _collect_task_result(cls, task_dir: str) -> Dict[str, Any]:
+        task_path = os.path.abspath(task_dir)
+        metadata_path = os.path.join(task_path, "Annealing.json")
+        status_path = os.path.join(task_path, "apex_task_status.json")
+        result = {
+            "task": os.path.basename(task_path),
+            "path": task_path,
+            "metadata": cls._safe_load_json(metadata_path),
+            "status": cls._safe_load_json(status_path),
+            "rdf": cls._collect_rdf(task_path),
+            "msd": cls._collect_msd(task_path),
+            "volume_temperature": cls._collect_volume_temperature(task_path),
+        }
+        result["summary"] = cls._build_summary(result)
+        return result
+
+    @staticmethod
+    def _safe_load_json(path: str):
+        try:
+            if os.path.isfile(path):
+                return loadfn(path)
+        except Exception as exc:
+            return {"error": f"failed to read {os.path.basename(path)}: {exc}"}
+        return {}
+
+    @classmethod
+    def _collect_rdf(cls, task_path: str) -> Dict[str, Any]:
+        stages = {}
+        for path in sorted(glob.glob(os.path.join(task_path, "rdf.*.txt"))):
+            stage = cls._stage_from_analysis_file(path, prefix="rdf", suffix=".txt")
+            parsed = cls._parse_rdf_file(path)
+            if parsed:
+                stages[stage] = parsed
+        return stages
+
+    @classmethod
+    def _collect_msd(cls, task_path: str) -> Dict[str, Any]:
+        stages = {}
+        for path in sorted(glob.glob(os.path.join(task_path, "msd.*.txt"))):
+            stage = cls._stage_from_analysis_file(path, prefix="msd", suffix=".txt")
+            parsed = cls._parse_msd_file(path)
+            if parsed:
+                stages[stage] = parsed
+        return stages
+
+    @classmethod
+    def _collect_volume_temperature(cls, task_path: str) -> Dict[str, Any]:
+        stages = {}
+        for path in sorted(glob.glob(os.path.join(task_path, "heating_interval_*.dat"))):
+            parsed = cls._parse_thermo_interval_file(path)
+            if parsed:
+                stages["heating"] = parsed
+        for path in sorted(glob.glob(os.path.join(task_path, "cooling_interval_*.dat"))):
+            parsed = cls._parse_thermo_interval_file(path)
+            if parsed:
+                stages["cooling"] = parsed
+        return stages
+
+    @staticmethod
+    def _stage_from_analysis_file(path: str, prefix: str, suffix: str) -> str:
+        name = os.path.basename(path)
+        if name.startswith(prefix + "."):
+            name = name[len(prefix) + 1:]
+        if suffix and name.endswith(suffix):
+            name = name[:-len(suffix)]
+        return name
+
+    @staticmethod
+    def _numeric_tokens(line: str) -> List[float]:
+        values = []
+        for token in line.split():
+            try:
+                values.append(float(token))
+            except ValueError:
+                return []
+        return values
+
+    @classmethod
+    def _parse_ave_time_blocks(cls, path: str):
+        column_names = []
+        blocks = []
+        try:
+            with open(path, "r", errors="replace") as fp:
+                lines = fp.readlines()
+        except OSError:
+            return column_names, blocks
+
+        idx = 0
+        while idx < len(lines):
+            line = lines[idx].strip()
+            if not line:
+                idx += 1
+                continue
+            if line.startswith("#"):
+                if line.startswith("# Row "):
+                    column_names = line[2:].split()[1:]
+                idx += 1
+                continue
+
+            header = line.split()
+            if len(header) != 2:
+                idx += 1
+                continue
+            try:
+                timestep = int(float(header[0]))
+                nrows = int(float(header[1]))
+            except ValueError:
+                idx += 1
+                continue
+
+            rows = []
+            for raw_row in lines[idx + 1: idx + 1 + nrows]:
+                values = cls._numeric_tokens(raw_row.strip())
+                if values:
+                    rows.append(values)
+            if rows:
+                blocks.append({"timestep": timestep, "rows": rows})
+            idx += 1 + nrows
+        return column_names, blocks
+
+    @classmethod
+    def _parse_rdf_file(cls, path: str) -> Dict[str, Any]:
+        column_names, blocks = cls._parse_ave_time_blocks(path)
+        if not blocks:
+            return {}
+        last_block = blocks[-1]
+        rows = [
+            row[1:] if column_names and len(row) == len(column_names) + 1 else row
+            for row in last_block["rows"]
+        ]
+        columns = {}
+        ncols = max(len(row) for row in rows)
+        if len(column_names) < ncols:
+            column_names = column_names + [f"column_{idx}" for idx in range(len(column_names), ncols)]
+        for idx in range(ncols):
+            columns[column_names[idx]] = [row[idx] for row in rows if len(row) > idx]
+
+        radius = columns.get("c_myRDF[1]", columns.get("column_1", []))
+        g_r = columns.get("c_myRDF[2]", columns.get("column_2", []))
+        coordination = columns.get("c_myRDF[3]", columns.get("column_3", []))
+        return {
+            "source": os.path.basename(path),
+            "timestep": last_block["timestep"],
+            "nblocks": len(blocks),
+            "columns": columns,
+            "radius": radius,
+            "g_r": g_r,
+            "coordination": coordination,
+        }
+
+    @classmethod
+    def _parse_msd_file(cls, path: str) -> Dict[str, Any]:
+        _column_names, blocks = cls._parse_ave_time_blocks(path)
+        if not blocks:
+            return {}
+        timesteps = []
+        msd_x = []
+        msd_y = []
+        msd_z = []
+        msd_total = []
+        for block in blocks:
+            values = [row[1] if len(row) > 1 else row[0] for row in block["rows"]]
+            if len(values) < 4:
+                continue
+            timesteps.append(block["timestep"])
+            msd_x.append(values[0])
+            msd_y.append(values[1])
+            msd_z.append(values[2])
+            msd_total.append(values[3])
+        return {
+            "source": os.path.basename(path),
+            "timestep": timesteps,
+            "msd_x": msd_x,
+            "msd_y": msd_y,
+            "msd_z": msd_z,
+            "msd_total": msd_total,
+        }
+
+    @classmethod
+    def _parse_thermo_interval_file(cls, path: str) -> Dict[str, Any]:
+        header = []
+        rows = []
+        try:
+            with open(path, "r", errors="replace") as fp:
+                for raw_line in fp:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("#"):
+                        if line.startswith("# TimeStep"):
+                            header = line[2:].split()
+                        continue
+                    values = cls._numeric_tokens(line)
+                    if values:
+                        rows.append(values)
+        except OSError:
+            return {}
+        if not header or not rows:
+            return {}
+
+        columns = {}
+        for idx, name in enumerate(header):
+            columns[name] = [row[idx] for row in rows if len(row) > idx]
+
+        atom_count = columns.get("v_N", [])
+        volume_per_atom = columns.get("v_Vatom", [])
+        total_volume = [
+            n * v
+            for n, v in zip(atom_count, volume_per_atom)
+        ]
+        return {
+            "source": os.path.basename(path),
+            "timestep": columns.get("TimeStep", []),
+            "temperature": columns.get("v_Temp", []),
+            "volume_per_atom": volume_per_atom,
+            "total_volume": total_volume,
+            "potential_energy": columns.get("v_pote", []),
+            "total_energy": columns.get("v_Etotal", []),
+            "pressure": columns.get("v_Press", []),
+        }
+
+    @staticmethod
+    def _build_summary(task_result: Dict[str, Any]) -> Dict[str, Any]:
+        rdf_points = {
+            stage: len(data.get("radius", []))
+            for stage, data in task_result.get("rdf", {}).items()
+        }
+        msd_points = {
+            stage: len(data.get("timestep", []))
+            for stage, data in task_result.get("msd", {}).items()
+        }
+        volume_points = {
+            stage: len(data.get("temperature", []))
+            for stage, data in task_result.get("volume_temperature", {}).items()
+        }
+        return {
+            "rdf_stages": sorted(task_result.get("rdf", {}).keys()),
+            "msd_stages": sorted(task_result.get("msd", {}).keys()),
+            "volume_temperature_stages": sorted(task_result.get("volume_temperature", {}).keys()),
+            "rdf_points": rdf_points,
+            "msd_points": msd_points,
+            "volume_temperature_points": volume_points,
+        }
+
+    @staticmethod
+    def _task_summary_line(name: str, task_result: Dict[str, Any]) -> str:
+        summary = task_result.get("summary", {})
+        return (
+            f"{name}: "
+            f"rdf={summary.get('rdf_stages', [])}, "
+            f"msd={summary.get('msd_stages', [])}, "
+            f"volume_temperature={summary.get('volume_temperature_stages', [])}"
+        )

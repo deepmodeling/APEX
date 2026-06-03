@@ -44,6 +44,8 @@ def return_prop_class(prop_type: str):
         return FiniteTlattReport
     elif prop_type == 'finite_t_elastic':
         return FiniteTelasticReport
+    elif prop_type == 'annealing':
+        return AnnealingReport
 
 
 def return_prop_type(prop: str):
