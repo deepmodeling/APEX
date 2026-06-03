@@ -690,7 +690,7 @@ def make_lammps_press_relax(
     return ret
 
 def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
-    """LAMMPS input for annealing: equilibrate -> heat (ramp) -> optional hold -> cool.
+    """LAMMPS input for annealing using the same stage controls as annealing/.
 
     Uses variables provided by `variable_Annealing.in` in the task directory.
     - thermostat: nose_hoover | langevin
@@ -698,12 +698,77 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     """
 
     type_map_list = element_list(type_map)
-    dump_step = int(cal_setting.get("dump_step", 1000))
-    tdamp = cal_setting.get("tdamp", 100)
-    pdamp = cal_setting.get("pdamp", 1000)
+    dump_interval = int(cal_setting.get("dump_interval", cal_setting.get("dump_step", 2000)))
+    thermo_interval = int(cal_setting.get("thermo_interval", 2000))
+    restart_interval = int(cal_setting.get("restart_interval", 20000))
+    tdamp = cal_setting.get("tdamp", "${tdamp}")
+    pdamp = cal_setting.get("pdamp", "${pdamp}")
     thermostat = cal_setting.get("thermostat", "nose_hoover")
     ensemble = cal_setting.get("ensemble", "npt")
-    vseed = int(cal_setting.get("velocity_seed", 12345))
+    vseed = int(cal_setting.get("velocity_seed", cal_setting.get("init_v_seed", 123457)))
+    lgv_seed = int(cal_setting.get("lgv_seed", vseed))
+    req_lgv_damping = cal_setting.get("req_lgv_damping", False)
+    req_compute_rdf = cal_setting.get("req_compute_rdf", True)
+    req_compute_msd = cal_setting.get("req_compute_msd", True)
+    req_write_restart = cal_setting.get("req_write_restart", True)
+    req_dump_init_atom = cal_setting.get("req_dump_init_atom", True)
+    req_dump_ave_atom = cal_setting.get("req_dump_ave_atom", False)
+    rdf_nevery = int(cal_setting.get("rdf_nevery", cal_setting.get("rdf_interval", 100)))
+    rdf_nrepeat = int(cal_setting.get("rdf_nrepeat", 1))
+    rdf_nfreq = int(cal_setting.get("rdf_nfreq", cal_setting.get("rdf_interval", 200)))
+    msd_nevery = int(cal_setting.get("msd_nevery", 100))
+    msd_nrepeat = int(cal_setting.get("msd_nrepeat", 1))
+    msd_nfreq = int(cal_setting.get("msd_nfreq", 200))
+
+    def _truthy(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _thermo_fix(name, t_start, t_stop):
+        if thermostat == "langevin":
+            if ensemble == "nve":
+                fix = f"fix {name}_int all nve\n"
+            else:
+                fix = f"fix {name}_int all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
+            fix += f"fix {name}_lgv all langevin {t_start} {t_stop} {tdamp} {lgv_seed}\n"
+            return fix
+        if ensemble == "nvt":
+            return f"fix {name}_nh all nvt temp {t_start} {t_stop} {tdamp}\n"
+        return (
+            f"fix {name}_nh all npt temp {t_start} {t_stop} {tdamp} "
+            f"x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
+        )
+
+    def _unfix_thermo(name):
+        if thermostat == "langevin":
+            return f"unfix {name}_lgv\nunfix {name}_int\n"
+        return f"unfix {name}_nh\n"
+
+    def _stage_analysis(stage, rdf_file, msd_file):
+        ret = ""
+        if _truthy(req_compute_rdf):
+            ret += (
+                f"fix rdf_{stage} all ave/time {rdf_nevery} {rdf_nrepeat} {rdf_nfreq} "
+                f"c_myRDF[*] file {rdf_file} mode vector\n"
+            )
+        if _truthy(req_compute_msd):
+            ret += f"compute myMSD_{stage} all msd com yes\n"
+            ret += (
+                f"fix msd_{stage} all ave/time {msd_nevery} {msd_nrepeat} {msd_nfreq} "
+                f"c_myMSD_{stage} file {msd_file} mode vector\n"
+            )
+        return ret
+
+    def _unfix_stage_analysis(stage):
+        ret = ""
+        if _truthy(req_compute_rdf):
+            ret += f"unfix rdf_{stage}\n"
+        if _truthy(req_compute_msd):
+            ret += f"unfix msd_{stage}\nuncompute myMSD_{stage}\n"
+        return ret
 
     ret = ""
     ret += "include  variable_Annealing.in\n"
@@ -720,8 +785,9 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     ret += "neigh_modify    every 1 delay 0 check no\n"
     ret += interaction(param)
     ret += "compute         mype all pe\n"
-    ret += "thermo          100\n"
-    ret += ("thermo_style    custom step temp pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n")
+    ret += f"thermo          {thermo_interval}\n"
+    ret += ("thermo_style    custom step temp atoms epair pe ke etotal press vol pxx pyy pzz pxy pxz pyz lx ly lz xlo xhi ylo yhi zlo zhi fnorm fmax\n")
+    ret += "thermo_modify   lost error flush yes format 4 %.8f\n"
     ret += "timestep ${timestep}\n"
     ret += "variable        N equal count(all)\n"
     ret += "variable        V equal vol\n"
@@ -731,80 +797,99 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     ret += "variable        Etotal equal etotal\n"
     ret += "variable        Press equal press\n"
     ret += "variable        stepVal equal step\n"
-    ret += "compute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}\n"
+    if _truthy(req_compute_rdf):
+        ret += "variable        rdf_comm_cutoff equal ${rdf_cutoff}+2.0\n"
+        ret += "comm_modify    cutoff ${rdf_comm_cutoff}\n"
+        ret += "compute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}\n"
+
+    if _truthy(req_dump_init_atom):
+        ret += "dump init_dump all atom 1 dump.init.*\n"
+        ret += "run 0\n"
+        ret += "undump init_dump\n"
 
     # Initialize velocities and equilibrate at start_temp
     ret += f"velocity all create ${{start_temp}} {vseed} mom yes rot yes dist gaussian\n"
 
-    if thermostat == "langevin":
-        # Langevin + barostat (nph) or without (nve)
-        if ensemble == "nve":
-            ret += "fix 1 all nve\n"
-        else:
-            ret += f"fix 1 all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
-        ret += f"fix tg all langevin ${{start_temp}} ${{start_temp}} {tdamp} {vseed}\n"
-    else:
-        # Nose-Hoover NPT or NVT
-        if ensemble == "nvt":
-            ret += f"fix 1 all nvt temp ${{start_temp}} ${{start_temp}} {tdamp}\n"
-        else:
-            ret += f"fix 1 all npt temp ${{start_temp}} ${{start_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
+    if _truthy(req_lgv_damping):
+        ret += "fix eq_lgv_int all nve\n"
+        ret += f"fix eq_lgv all langevin ${{start_temp}} ${{start_temp}} {tdamp} {lgv_seed}\n"
+        ret += f"dump eq_lgv_dump all atom {dump_interval} dump.eq_lgv_${{start_temp}}K.*\n"
+        if _truthy(req_write_restart):
+            ret += f"restart {restart_interval} restart.eq_lgv.*\n"
+        ret += "run ${init_lgv_thermo_equil_step}\n"
+        ret += "restart 0\n"
+        ret += "undump eq_lgv_dump\n"
+        ret += "unfix eq_lgv\n"
+        ret += "unfix eq_lgv_int\n"
+        ret += "write_restart restart.eq_lgv_final\n"
 
-    ret += "run ${equi_step}\n"
-    ret += "unfix 1\n"
-    if thermostat == "langevin":
-        ret += "unfix tg\n"
+    ret += _stage_analysis("eq", "rdf.eq_${start_temp}K.txt", "msd.eq_${start_temp}K.txt")
+    ret += _thermo_fix("eq", "${start_temp}", "${start_temp}")
+    ret += f"dump eq_nh_dump all atom {dump_interval} dump.eq_nh_${{start_temp}}K.*\n"
+    if _truthy(req_dump_ave_atom):
+        ret += "compute atom_u_pos all property/atom xu yu zu\n"
+        ret += "fix ave_atom_u_pos all ave/atom ${ave_atom_sample_feq} ${ave_atom_sample_length} ${dump_interval} c_atom_u_pos[*]\n"
+        ret += f"dump eq_nh_ave_dump all custom {dump_interval} dump.eq_nh_${{start_temp}}K_ave.* id type f_ave_atom_u_pos[1] f_ave_atom_u_pos[2] f_ave_atom_u_pos[3]\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.eq_nh.*\n"
+    ret += "run ${init_thermo_equil_step}\n"
+    ret += "restart 0\n"
+    ret += "undump eq_nh_dump\n"
+    if _truthy(req_dump_ave_atom):
+        ret += "undump eq_nh_ave_dump\nunfix ave_atom_u_pos\nuncompute atom_u_pos\n"
+    ret += _unfix_thermo("eq")
+    ret += _unfix_stage_analysis("eq")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.eq_final\n"
 
     # Temperature ramp to target_temp
-    if thermostat == "langevin":
-        if ensemble == "nve":
-            ret += "fix 1 all nve\n"
-        else:
-            ret += f"fix 1 all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
-        ret += f"fix tg all langevin ${{start_temp}} ${{target_temp}} {tdamp} {vseed}\n"
-    else:
-        if ensemble == "nvt":
-            ret += f"fix 1 all nvt temp ${{start_temp}} ${{target_temp}} {tdamp}\n"
-        else:
-            ret += f"fix 1 all npt temp ${{start_temp}} ${{target_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
-    ret += f"dump            1 all custom  {dump_step} dump.anneal_ramp id type xs ys zs fx fy fz\n"
-    ret += "fix rdf_ramp all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] file rdf_ramp.dat mode vector\n"
-    ret += "fix heat_log all ave/time ${rdf_interval} 1 ${rdf_interval} v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press file heating_interval.dat\n"
-    ret += "run ${ramp_step}\n"
+    ret += _stage_analysis("ramp", "rdf.T_ramp_${start_temp}K_${temp}K.txt", "msd.T_ramp_${start_temp}K_${temp}K.txt")
+    ret += _thermo_fix("ramp", "${start_temp}", "${temp}")
+    ret += f"dump T_ramp_nh_dump all atom {dump_interval} dump.T_ramp_nh_${{start_temp}}K_${{temp}}K.*\n"
+    ret += "fix heat_log all ave/time 1 100 ${thermo_interval} v_N v_Temp v_Vatom v_pote v_Etotal v_Press file heating_interval_${thermo_interval}.dat\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.T_ramp_nh.*\n"
+    ret += "run ${temp_ramp_remain_step}\n"
+    ret += "restart 0\n"
     ret += "unfix heat_log\n"
-    ret += "unfix rdf_ramp\n"
-    ret += "undump 1\n"
-    ret += "unfix 1\n"
-    if thermostat == "langevin":
-        ret += "unfix tg\n"
-
-        # Optional hold at target_temp
-    ret += f'if "${{hold_step}} > 0" then "fix 1 all nvt temp ${{target_temp}} ${{target_temp}} {tdamp}" "run ${{hold_step}}" "unfix 1"\n'
+    ret += "undump T_ramp_nh_dump\n"
+    ret += _unfix_thermo("ramp")
+    ret += _unfix_stage_analysis("ramp")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.T_ramp_nh_final\n"
 
     # Cool to end_temp
-    if thermostat == "langevin":
-        if ensemble == "nve":
-            ret += "fix 1 all nve\n"
-        else:
-            ret += f"fix 1 all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
-        ret += f"fix tg all langevin ${{target_temp}} ${{end_temp}} {tdamp} {vseed}\n"
-    else:
-        if ensemble == "nvt":
-            ret += f"fix 1 all nvt temp ${{target_temp}} ${{end_temp}} {tdamp}\n"
-        else:
-            ret += f"fix 1 all npt temp ${{target_temp}} ${{end_temp}} {tdamp} x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
-    ret += f"dump            2 all custom  {dump_step} dump.anneal_cool id type xs ys zs fx fy fz\n"
-    ret += "fix rdf_cool all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] file rdf_cool.dat mode vector\n"
-    ret += "fix cool_log all ave/time ${rdf_interval} 1 ${rdf_interval} v_stepVal v_N v_Temp v_Vatom v_pote v_Etotal v_Press file cooling_interval.dat\n"
-    ret += "run ${cool_step}\n"
+    ret += _stage_analysis("decline", "rdf.T_decline_${temp}K_${end_temp}K.txt", "msd.T_decline_${temp}K_${end_temp}K.txt")
+    ret += _thermo_fix("decline", "${temp}", "${end_temp}")
+    ret += f"dump T_decline_nh_dump all atom {dump_interval} dump.T_decline_nh_${{temp}}K_${{end_temp}}K.*\n"
+    ret += "fix cool_log all ave/time 1 100 ${thermo_interval} v_N v_Temp v_Vatom v_pote v_Etotal v_Press file cooling_interval_${thermo_interval}.dat\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.T_decline_nh.*\n"
+    ret += "run ${temp_decline_remain_step}\n"
+    ret += "restart 0\n"
     ret += "unfix cool_log\n"
-    ret += "unfix rdf_cool\n"
-    ret += "undump 2\n"
-    ret += "unfix 1\n"
-    if thermostat == "langevin":
-        ret += "unfix tg\n"
+    ret += "undump T_decline_nh_dump\n"
+    ret += _unfix_thermo("decline")
+    ret += _unfix_stage_analysis("decline")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.T_decline_final\n"
 
-    ret += 'print "All done"\n'
+    ret += 'if "${final_thermo_equil_step} <= 0" then "jump SELF end_of_run"\n'
+    ret += _stage_analysis("final_eq", "rdf.final_eq_${end_temp}K.txt", "msd.final_eq_${end_temp}K.txt")
+    ret += _thermo_fix("final_eq", "${end_temp}", "${end_temp}")
+    ret += f"dump final_eq_nh_dump all atom {dump_interval} dump.final_eq_nh_${{end_temp}}K.*\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.final_eq_nh.*\n"
+    ret += "run ${final_thermo_equil_remain_step}\n"
+    ret += "restart 0\n"
+    ret += "undump final_eq_nh_dump\n"
+    ret += _unfix_thermo("final_eq")
+    ret += _unfix_stage_analysis("final_eq")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.final_eq_final\n"
+
+    ret += 'print "__end_of_lmp_annealing_calculation__"\n'
+    ret += 'label end_of_run\n'
     return ret
 
 """

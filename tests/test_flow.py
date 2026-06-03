@@ -216,6 +216,60 @@ def test_step_artifact_lookup_and_main_log_download_from_child(tmp_path, monkeyp
     assert "main-logs artifact not found" in no_error
 
 
+def test_format_step_failure_includes_traceback_excerpt(tmp_path):
+    log_dir = tmp_path / "main-logs"
+    log_dir.mkdir()
+    (log_dir / "main.log").write_text(
+        "setup line\n"
+        "Traceback (most recent call last):\n"
+        "  File \"/work/apex/core/property/Phonon.py\", line 360, in make_confs\n"
+        "    raise RuntimeError('phonopy failed')\n"
+        "RuntimeError: phonopy failed\n",
+        encoding="utf-8",
+    )
+
+    formatted = flow.FlowGenerator._format_step_failure(
+        {"phase": "Failed", "displayName": "PropsMake"},
+        "property failed",
+        main_log_path=str(log_dir),
+    )
+
+    assert "main_logs_excerpt:" in formatted
+    assert "Traceback (most recent call last):" in formatted
+    assert "apex/core/property/Phonon.py" in formatted
+    assert "RuntimeError: phonopy failed" in formatted
+
+
+def test_format_step_failure_includes_lammps_diagnostic_excerpt(tmp_path):
+    task_dir = tmp_path / "failed-artifacts" / "prop-key" / "RunLAMMPS" / "backward_dir" / "task.000000"
+    task_dir.mkdir(parents=True)
+    (task_dir / "apex_task_status.json").write_text(
+        '{\n'
+        '    "state": "failed",\n'
+        '    "reason": "command_not_found",\n'
+        '    "exit_code": 127\n'
+        '}\n',
+        encoding="utf-8",
+    )
+    (task_dir / ".debug.log").write_text(
+        "# APEX LAMMPS debug log\n"
+        "## Command\n"
+        "lmp -in in.lammps\n",
+        encoding="utf-8",
+    )
+
+    formatted = flow.FlowGenerator._format_step_failure(
+        {"phase": "Failed", "displayName": "PropsPost"},
+        "property failed",
+        diagnostic_artifacts=[str(tmp_path / "failed-artifacts")],
+    )
+
+    assert "failed_artifacts_excerpt:" in formatted
+    assert "apex_task_status.json" in formatted
+    assert '"reason": "command_not_found"' in formatted
+    assert "lmp -in in.lammps" in formatted
+
+
 def test_diagnostic_artifact_downloads_only_allowed_debug_artifacts(tmp_path, monkeypatch):
     generator = make_generator(debug_mode=True)
     generator.download_path = str(tmp_path)

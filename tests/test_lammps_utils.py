@@ -375,7 +375,8 @@ def test_make_lammps_finite_t_elastic_invalid_role_raises(tmp_path):
 
 def make_annealing_input(cal_setting):
     defaults = {
-        "dump_step": 500,
+        "dump_interval": 500,
+        "thermo_interval": 250,
         "tdamp": "tdamp_var",
         "pdamp": "pdamp_var",
         "velocity_seed": 24680,
@@ -395,27 +396,29 @@ def assert_common_annealing_script(script):
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script
+    assert "variable        rdf_comm_cutoff equal ${rdf_cutoff}+2.0" in script
+    assert "comm_modify    cutoff ${rdf_comm_cutoff}" in script
     assert "compute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}" in script
-    assert "run ${equi_step}" in script
-    assert "run ${ramp_step}" in script
-    assert "run ${cool_step}" in script
+    assert "run ${init_thermo_equil_step}" in script
+    assert "run ${temp_ramp_remain_step}" in script
+    assert "run ${temp_decline_remain_step}" in script
+    assert "run ${final_thermo_equil_remain_step}" in script
+    assert "dump eq_nh_dump all atom 500 dump.eq_nh_${start_temp}K.*" in script
+    assert "dump T_ramp_nh_dump all atom 500 dump.T_ramp_nh_${start_temp}K_${temp}K.*" in script
+    assert "dump T_decline_nh_dump all atom 500 dump.T_decline_nh_${temp}K_${end_temp}K.*" in script
+    assert "dump final_eq_nh_dump all atom 500 dump.final_eq_nh_${end_temp}K.*" in script
     assert (
-        'if "${hold_step} > 0" then "fix 1 all nvt temp ${target_temp} '
-        '${target_temp} tdamp_var" "run ${hold_step}" "unfix 1"'
-    ) in script
-    assert "dump            1 all custom  500 dump.anneal_ramp id type xs ys zs fx fy fz" in script
-    assert "dump            2 all custom  500 dump.anneal_cool id type xs ys zs fx fy fz" in script
-    assert (
-        "fix rdf_ramp all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] "
-        "file rdf_ramp.dat mode vector"
+        "fix rdf_ramp all ave/time 100 1 200 c_myRDF[*] "
+        "file rdf.T_ramp_${start_temp}K_${temp}K.txt mode vector"
     ) in script
     assert (
-        "fix rdf_cool all ave/time ${rdf_interval} 1 ${rdf_interval} c_myRDF[*] "
-        "file rdf_cool.dat mode vector"
+        "fix rdf_decline all ave/time 100 1 200 c_myRDF[*] "
+        "file rdf.T_decline_${temp}K_${end_temp}K.txt mode vector"
     ) in script
-    assert "file heating_interval.dat" in script
-    assert "file cooling_interval.dat" in script
-    assert 'print "All done"' in script
+    assert "fix msd_final_eq all ave/time 100 1 200 c_myMSD_final_eq file msd.final_eq_${end_temp}K.txt mode vector" in script
+    assert "file heating_interval_${thermo_interval}.dat" in script
+    assert "file cooling_interval_${thermo_interval}.dat" in script
+    assert 'print "__end_of_lmp_annealing_calculation__"' in script
 
 
 def test_make_lammps_annealing_default_nose_hoover_npt():
@@ -424,53 +427,56 @@ def test_make_lammps_annealing_default_nose_hoover_npt():
     assert_common_annealing_script(script)
     assert "velocity all create ${start_temp} 24680 mom yes rot yes dist gaussian" in script
     assert (
-        "fix 1 all npt temp ${start_temp} ${start_temp} tdamp_var "
+        "fix eq_nh all npt temp ${start_temp} ${start_temp} tdamp_var "
         "x 0.0 0.0 pdamp_var y 0.0 0.0 pdamp_var z 0.0 0.0 pdamp_var"
     ) in script
     assert (
-        "fix 1 all npt temp ${start_temp} ${target_temp} tdamp_var "
+        "fix ramp_nh all npt temp ${start_temp} ${temp} tdamp_var "
         "x 0.0 0.0 pdamp_var y 0.0 0.0 pdamp_var z 0.0 0.0 pdamp_var"
     ) in script
     assert (
-        "fix 1 all npt temp ${target_temp} ${end_temp} tdamp_var "
+        "fix decline_nh all npt temp ${temp} ${end_temp} tdamp_var "
         "x 0.0 0.0 pdamp_var y 0.0 0.0 pdamp_var z 0.0 0.0 pdamp_var"
     ) in script
-    assert "fix tg all langevin" not in script
+    assert "fix final_eq_nh all npt temp ${end_temp} ${end_temp} tdamp_var" in script
+    assert "_lgv all langevin" not in script
 
 
 def test_make_lammps_annealing_nose_hoover_nvt():
     script = make_annealing_input({"ensemble": "nvt"})
 
     assert_common_annealing_script(script)
-    assert "fix 1 all nvt temp ${start_temp} ${start_temp} tdamp_var" in script
-    assert "fix 1 all nvt temp ${start_temp} ${target_temp} tdamp_var" in script
-    assert "fix 1 all nvt temp ${target_temp} ${end_temp} tdamp_var" in script
-    assert "fix 1 all npt temp" not in script
-    assert "fix tg all langevin" not in script
+    assert "fix eq_nh all nvt temp ${start_temp} ${start_temp} tdamp_var" in script
+    assert "fix ramp_nh all nvt temp ${start_temp} ${temp} tdamp_var" in script
+    assert "fix decline_nh all nvt temp ${temp} ${end_temp} tdamp_var" in script
+    assert "fix final_eq_nh all nvt temp ${end_temp} ${end_temp} tdamp_var" in script
+    assert "all npt temp" not in script
+    assert "_lgv all langevin" not in script
 
 
 def test_make_lammps_annealing_langevin_nph():
     script = make_annealing_input({"thermostat": "langevin", "ensemble": "nph"})
 
     assert_common_annealing_script(script)
-    assert script.count("fix 1 all nph aniso 0.0 0.0 pdamp_var drag 1.0") == 3
-    assert "fix tg all langevin ${start_temp} ${start_temp} tdamp_var 24680" in script
-    assert "fix tg all langevin ${start_temp} ${target_temp} tdamp_var 24680" in script
-    assert "fix tg all langevin ${target_temp} ${end_temp} tdamp_var 24680" in script
-    assert script.count("unfix tg") == 3
-    assert "fix 1 all npt temp" not in script
+    assert script.count("all nph aniso 0.0 0.0 pdamp_var drag 1.0") == 4
+    assert "fix eq_lgv all langevin ${start_temp} ${start_temp} tdamp_var 24680" in script
+    assert "fix ramp_lgv all langevin ${start_temp} ${temp} tdamp_var 24680" in script
+    assert "fix decline_lgv all langevin ${temp} ${end_temp} tdamp_var 24680" in script
+    assert "fix final_eq_lgv all langevin ${end_temp} ${end_temp} tdamp_var 24680" in script
+    assert script.count("_lgv") >= 4
+    assert "all npt temp" not in script
 
 
 def test_make_lammps_annealing_langevin_nve():
     script = make_annealing_input({"thermostat": "langevin", "ensemble": "nve"})
 
     assert_common_annealing_script(script)
-    assert script.count("fix 1 all nve") == 3
-    assert "fix 1 all nph" not in script
-    assert "fix tg all langevin ${start_temp} ${start_temp} tdamp_var 24680" in script
-    assert "fix tg all langevin ${start_temp} ${target_temp} tdamp_var 24680" in script
-    assert "fix tg all langevin ${target_temp} ${end_temp} tdamp_var 24680" in script
-    assert script.count("unfix tg") == 3
+    assert script.count("all nve") == 4
+    assert "all nph" not in script
+    assert "fix eq_lgv all langevin ${start_temp} ${start_temp} tdamp_var 24680" in script
+    assert "fix ramp_lgv all langevin ${start_temp} ${temp} tdamp_var 24680" in script
+    assert "fix decline_lgv all langevin ${temp} ${end_temp} tdamp_var 24680" in script
+    assert "fix final_eq_lgv all langevin ${end_temp} ${end_temp} tdamp_var 24680" in script
 
 
 class TestLammpsUtils(unittest.TestCase):

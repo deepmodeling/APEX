@@ -33,21 +33,27 @@ def test_annealing_default_parameter_parsing():
     prop = Annealing({"type": "annealing"})
 
     assert prop.task_type() == "annealing"
-    assert prop.start_temp == 300.0
-    assert prop.target_temp == 800.0
-    assert prop.end_temp == 300.0
-    assert prop.equi_step == 10000
-    assert prop.ramp_step == 20000
-    assert prop.hold_step == 0
-    assert prop.cool_step == 20000
+    assert prop.start_temp == 4.0
+    assert prop.target_temp == 300.0
+    assert prop.end_temp == 4.0
+    assert prop.temp_ramp_rate == 1000
+    assert prop.equi_step == 20000
+    assert prop.init_thermo_equil_step == 20000
+    assert prop.final_thermo_equil_step == 20000
+    assert prop.ramp_step == 0
+    assert prop.hold_step == 20000
+    assert prop.cool_step == 0
     assert prop.thermostat == "nose_hoover"
     assert prop.ensemble == "npt"
     assert prop.supercell_size == [2, 2, 2]
 
     task_param = prop.task_param()
     assert task_param["cal_type"] == "annealing"
-    assert task_param["cal_setting"]["rdf_bins"] == 200
-    assert task_param["cal_setting"]["timestep"] == 0.002
+    assert task_param["cal_setting"]["rdf_bins"] == 100
+    assert task_param["cal_setting"]["rdf_cutoff"] == 6.0
+    assert task_param["cal_setting"]["req_compute_rdf"] is True
+    assert task_param["cal_setting"]["req_compute_msd"] is True
+    assert task_param["cal_setting"]["timestep"] == 0.001
 
 
 def test_annealing_custom_cal_setting_override():
@@ -127,12 +133,12 @@ def test_annealing_make_confs_writes_task_files_and_variables(tmp_path):
 
     first_meta = loadfn(first_task / "Annealing.json")
     second_meta = loadfn(second_task / "Annealing.json")
-    assert first_meta == {
-        "start_temp": 300.0,
-        "target_temp": 700.0,
-        "end_temp": 400.0,
-        "supercell_size": [2, 3, 4],
-    }
+    assert first_meta["start_temp"] == 300.0
+    assert first_meta["target_temp"] == 700.0
+    assert first_meta["temp"] == 700.0
+    assert first_meta["end_temp"] == 400.0
+    assert first_meta["temp_ramp_rate"] == 1000
+    assert first_meta["supercell_size"] == [2, 3, 4]
     assert second_meta["target_temp"] == 900.0
 
     variable_text = (first_task / "variable_Annealing.in").read_text()
@@ -141,14 +147,23 @@ def test_annealing_make_confs_writes_task_files_and_variables(tmp_path):
     assert "variable nz equal 4" in variable_text
     assert "variable start_temp equal 300.00" in variable_text
     assert "variable target_temp equal 700.00" in variable_text
+    assert "variable temp equal 700.00" in variable_text
     assert "variable end_temp equal 400.00" in variable_text
+    assert "variable temp_ramp_rate equal 1000" in variable_text
     assert "variable equi_step equal 10" in variable_text
     assert "variable ramp_step equal 20" in variable_text
+    assert "variable temp_ramp_step equal 20" in variable_text
     assert "variable hold_step equal 30" in variable_text
     assert "variable cool_step equal 40" in variable_text
+    assert "variable temp_decline_step equal 40" in variable_text
+    assert "variable init_thermo_equil_step equal 10" in variable_text
+    assert "variable final_thermo_equil_step equal 30" in variable_text
     assert "variable rdf_bins equal 64" in variable_text
     assert "variable rdf_cutoff equal 8.0" in variable_text
     assert "variable rdf_interval equal 5" in variable_text
+    assert "variable rdf_nevery equal 5" in variable_text
+    assert "variable rdf_nfreq equal 5" in variable_text
+    assert "variable req_compute_msd equal true" in variable_text
     assert "variable tdamp equal 0.5" in variable_text
     assert "variable pdamp equal 5.0" in variable_text
     assert "variable velocity_seed equal 13579" in variable_text
@@ -278,23 +293,25 @@ def test_annealing_lammps_input_contains_all_md_stages_and_outputs():
         prop.task_param()["cal_setting"],
     )
 
-    assert "fix 1 all npt temp ${start_temp} ${start_temp} tdamp_var" in script
-    assert "fix 1 all npt temp ${start_temp} ${target_temp} tdamp_var" in script
-    assert (
-        'if "${hold_step} > 0" then "fix 1 all nvt temp ${target_temp} '
-        '${target_temp} tdamp_var" "run ${hold_step}" "unfix 1"'
-    ) in script
-    assert "fix 1 all npt temp ${target_temp} ${end_temp} tdamp_var" in script
-    assert "run ${equi_step}" in script
-    assert "run ${ramp_step}" in script
-    assert "run ${cool_step}" in script
+    assert "fix eq_nh all npt temp ${start_temp} ${start_temp} tdamp_var" in script
+    assert "fix ramp_nh all npt temp ${start_temp} ${temp} tdamp_var" in script
+    assert "fix decline_nh all npt temp ${temp} ${end_temp} tdamp_var" in script
+    assert "fix final_eq_nh all npt temp ${end_temp} ${end_temp} tdamp_var" in script
+    assert "run ${init_thermo_equil_step}" in script
+    assert "run ${temp_ramp_remain_step}" in script
+    assert "run ${temp_decline_remain_step}" in script
+    assert "run ${final_thermo_equil_remain_step}" in script
+    assert "variable        rdf_comm_cutoff equal ${rdf_cutoff}+2.0" in script
+    assert "comm_modify    cutoff ${rdf_comm_cutoff}" in script
     assert "compute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}" in script
-    assert "file rdf_ramp.dat mode vector" in script
-    assert "file rdf_cool.dat mode vector" in script
-    assert "file heating_interval.dat" in script
-    assert "file cooling_interval.dat" in script
-    assert "dump.anneal_ramp" in script
-    assert "dump.anneal_cool" in script
+    assert "file rdf.T_ramp_${start_temp}K_${temp}K.txt mode vector" in script
+    assert "file rdf.T_decline_${temp}K_${end_temp}K.txt mode vector" in script
+    assert "file rdf.final_eq_${end_temp}K.txt mode vector" in script
+    assert "file msd.T_ramp_${start_temp}K_${temp}K.txt mode vector" in script
+    assert "file heating_interval_${thermo_interval}.dat" in script
+    assert "file cooling_interval_${thermo_interval}.dat" in script
+    assert "dump.T_ramp_nh_${start_temp}K_${temp}K.*" in script
+    assert "dump.T_decline_nh_${temp}K_${end_temp}K.*" in script
 
 
 class TestAnnealingCoverage(unittest.TestCase):
