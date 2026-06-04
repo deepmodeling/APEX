@@ -57,6 +57,8 @@ jobs:
       url: https://pypi.org/project/apex-flow/
     permissions:
       id-token: write
+    env:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     steps:
       - name: Download distributions
         uses: actions/download-artifact@v4
@@ -64,11 +66,11 @@ jobs:
           name: python-package-distributions
           path: dist/
       - name: Publish package distributions to PyPI with Trusted Publishing
-        if: ${{ secrets.PYPI_API_TOKEN == '' }}
+        if: ${{ env.PYPI_API_TOKEN == '' }}
         uses: pypa/gh-action-pypi-publish@release/v1
       - name: Publish package distributions to PyPI with API token
-        if: ${{ secrets.PYPI_API_TOKEN != '' }}
+        if: ${{ env.PYPI_API_TOKEN != '' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          password: ${{ env.PYPI_API_TOKEN }}
