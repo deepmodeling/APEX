@@ -3,7 +3,7 @@
 </div>
 
 # APEX: Alloy Property EXplorer
-[![](https://img.shields.io/badge/release-1.2.1-blue.svg)](https://github.com/deepmodeling/APEX)
+[![](https://img.shields.io/pypi/v/apex-flow.svg)](https://pypi.org/project/apex-flow/)
 
 [1.3.0 Changelog](./CHANGELOG-1.3.0.md)
 
