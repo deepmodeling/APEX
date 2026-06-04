@@ -37,6 +37,7 @@ APEX currently offers calculation methods for the following alloy properties:
 * Grüneisen parameters and thermal expansion
 * Finite-temperature lattice parameters (FiniteTlatt)
 * Finite-temperature Elastic Constant (FiniteTelastic)
+* Annealing with RDF, MSD, and volume-temperature analysis
 
 ## What's Inside
 - [1. Installation](#1installation)
@@ -70,7 +71,8 @@ APEX currently offers calculation methods for the following alloy properties:
   - [4.11 Phonon Spectra](#411-phonon-spectra)
   - [4.12 Grüneisen Parameters and Thermal Expansion](#412-grüneisen-parameters-and-thermal-expansion)
   - [4.13 Finite-Temperature Lattice Parameters](#413-finite-temperature-lattice-parameters)
-  - [4.14 Finite-Temperature Elastic constant](#413-finite-temperature-elastic-constant)
+  - [4.14 Finite-Temperature Elastic constant](#414-finite-temperature-elastic-constant)
+  - [4.15 Annealing](#415-annealing)
 - [More Resources](#more-resources)
 
 ## 1.Installation
@@ -918,6 +920,83 @@ Example:
   }
 }
 ```
+
+### 4.15 Annealing
+
+APEX supports annealing simulations using molecular dynamics in LAMMPS.
+This workflow equilibrates the structure at a starting temperature, ramps to a target temperature, cools to an ending temperature, and performs final equilibration. Post-processing extracts radial distribution functions (RDF), mean squared displacement (MSD), and volume-temperature data from the heating and cooling stages for report visualization.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
+| `supercell_length` | Float | `None` | Optional target supercell length. When provided, APEX derives a near-cubic replication from the relaxed structure. |
+
+LAMMPS-specific calculation settings in `cal_setting`:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `start_temp` | Float | `4` | Starting temperature (K). |
+| `target_temp` | Float or Sequence[Float] | `300` | Peak annealing temperature (K). A sequence creates one annealing task per target temperature. |
+| `end_temp` | Float | `4` | Final cooling temperature (K). |
+| `temp_ramp_rate` | Float | `1000` | Heating rate used to derive `ramp_step` when explicit step counts are not provided. Alias: `ramp_rate`. |
+| `cool_rate` | Float | `temp_ramp_rate` | Cooling rate used to derive `cool_step` when explicit step counts are not provided. |
+| `equi_step` | Integer | `20000` | Initial equilibration steps at `start_temp`. |
+| `ramp_step` | Integer | rate-derived | Heating steps from `start_temp` to `target_temp`. Alias: `temp_ramp_step`. |
+| `hold_step` | Integer | `20000` | Final equilibration steps. |
+| `cool_step` | Integer | rate-derived | Cooling steps from `target_temp` to `end_temp`. Alias: `temp_decline_step`. |
+| `thermostat` | String | `"nose_hoover"` | Thermostat method: `"nose_hoover"` or `"langevin"`. |
+| `ensemble` | String | `"npt"` | Ensemble. For Nose-Hoover use `"npt"` or `"nvt"`; for Langevin use `"nph"` or `"nve"`. |
+| `timestep` | Float | `0.001` | MD timestep (ps). |
+| `tdamp` | Float | `None` | Thermostat damping parameter. If omitted, derived from `tdamp_factor * timestep`. |
+| `pdamp` | Float | `None` | Barostat damping parameter. If omitted, derived from `pdamp_factor * timestep`. |
+| `tdamp_factor` | Float | `100` | Factor used to derive `tdamp` when `tdamp` is omitted. |
+| `pdamp_factor` | Float | `1000` | Factor used to derive `pdamp` when `pdamp` is omitted. |
+| `velocity_seed` | Integer | `123457` | Random seed for initial velocities. Alias: `init_v_seed`. |
+| `dump_step` | Integer | `2000` | Atom dump output interval. Alias: `dump_interval`. |
+| `thermo_interval` | Integer | `2000` | Interval for heating/cooling thermo averages used in volume-temperature extraction. |
+| `restart_interval` | Integer | `20000` | Restart output interval. |
+| `req_compute_rdf` | Bool | `true` | Enable RDF calculation and extraction. |
+| `rdf_bins` | Integer | `100` | Number of RDF bins. |
+| `rdf_cutoff` | Float | `6.0` | RDF cutoff distance (Å). |
+| `rdf_interval` | Integer | `200` | RDF output interval. Also used as fallback for `rdf_nevery` and `rdf_nfreq`. |
+| `req_compute_msd` | Bool | `true` | Enable MSD calculation and extraction. |
+| `msd_nevery` | Integer | `100` | MSD sampling interval for `fix ave/time`. |
+| `msd_nrepeat` | Integer | `1` | Number of MSD samples per average. |
+| `msd_nfreq` | Integer | `200` | MSD output frequency. |
+
+Example:
+
+```json
+{
+  "type": "annealing",
+  "supercell_size": [4, 4, 4],
+  "cal_setting": {
+    "start_temp": 300,
+    "target_temp": 1500,
+    "end_temp": 300,
+    "equi_step": 10000,
+    "ramp_step": 20000,
+    "hold_step": 10000,
+    "cool_step": 20000,
+    "thermostat": "nose_hoover",
+    "ensemble": "npt",
+    "tdamp": 0.1,
+    "pdamp": 1.0,
+    "velocity_seed": 12345,
+    "dump_step": 1000,
+    "thermo_interval": 1000,
+    "timestep": 0.002,
+    "rdf_bins": 200,
+    "rdf_cutoff": 5.0,
+    "rdf_interval": 100,
+    "msd_nevery": 100,
+    "msd_nrepeat": 1,
+    "msd_nfreq": 200
+  }
+}
+```
+
+After `post_props` and `archive`, annealing results are written to `result.json` and `all_result.json`. The report page displays RDF, MSD, and volume per atom as a function of temperature for the available annealing stages.
 
 ## More Resources
 
