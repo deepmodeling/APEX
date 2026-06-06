@@ -1,6 +1,7 @@
 import dash
 from dash import dcc, html, State
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, MATCH
+from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import webbrowser
@@ -21,6 +22,8 @@ REF_MARKER_SIZE = 9
 def return_prop_class(prop_type: str):
     if prop_type == 'eos':
         return EOSReport
+    elif prop_type == 'cohesive':
+        return CohesiveReport
     elif prop_type == 'elastic':
         return ElasticReport
     elif prop_type == 'surface':
@@ -31,12 +34,28 @@ def return_prop_class(prop_type: str):
         return VacancyReport
     elif prop_type == 'gamma':
         return GammaReport
+    elif prop_type == 'gamma_surface':
+        return GammaSurfaceReport
     elif prop_type == 'phonon':
         return PhononReport
+    elif prop_type == 'decohesive':
+        return DecohesiveReport
+    elif prop_type == 'finite_t_latt':
+        return FiniteTlattReport
+    elif prop_type == 'finite_t_elastic':
+        return FiniteTelasticReport
+    elif prop_type == 'annealing':
+        return AnnealingReport
 
 
 def return_prop_type(prop: str):
     try:
+        if prop.startswith('gamma_surface'):
+            return 'gamma_surface'
+        if prop.startswith('finite_t_latt'):
+            return 'finite_t_latt'
+        if prop.startswith('finite_t_elastic'):
+            return 'finite_t_elastic'
         prop_type = prop.split('_')[0]
     except AttributeError:
         return None
@@ -64,9 +83,12 @@ def generate_test_datasets():
 
 
 class DashReportApp:
-    def __init__(self, datasets):
+    def __init__(self, datasets, open_browser: bool = False, host: str = "127.0.0.1", port: int = 8070):
         dbc_css = "https://cdn.jsdelivr.net/gh/AnnMarieW/dash-bootstrap-templates/dbc.min.css"
         self.datasets = datasets
+        self.open_browser = open_browser
+        self.host = host
+        self.port = port
         self.all_confs = set()
         self.all_props = set()
         self.app = dash.Dash(
@@ -100,6 +122,12 @@ class DashReportApp:
             Output('props-dropdown', 'options'),
             [Input('confs-radio', 'value')]
         )(self.update_dropdown_options)
+
+        self.app.callback(
+            Output({'type': 'clip', 'index': MATCH}, 'content'),
+            [Input({'type': 'clip', 'index': MATCH}, 'n_clicks'),
+             State({'type': 'table', 'index': MATCH}, 'data')]
+        )(self.csv_copy)
 
     @staticmethod
     def plotly_color_cycle():
@@ -206,6 +234,8 @@ class DashReportApp:
                     pass
                 else:
                     propCls = return_prop_class(prop_type)
+                    if propCls is None:
+                        continue
                     # trace_name = f"{w_conf} - {selected_confs} - {selected_prop}"
                     trace_name = w_conf
                     traces, layout = propCls.plotly_graph(
@@ -215,6 +245,9 @@ class DashReportApp:
                     # set color and width of reference lines
                     if prop_type != 'vacancy':
                         for trace in iter(traces):
+                            trace_type = getattr(trace, 'type', '')
+                            if trace_type == 'heatmap':
+                                continue
                             if trace_name.split('/')[-1] in ['DFT', 'REF']:
                                 trace.update({'line': {'color': 'black', 'width': REF_LINE_SIZE},
                                               'marker': {'color': 'black', 'size': REF_MARKER_SIZE}})
@@ -288,10 +321,10 @@ class DashReportApp:
         if prop_type == 'relaxation':
             for w_conf, dataset in self.datasets.items():
                 table_title = html.H3(f"{w_conf} - {selected_prop}")
-                clip_id = f"clip-{table_index}"
+                clip_id = {'type': 'clip', 'index': table_index}
                 clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": UI_FRONTSIZE})
                 table = RelaxationReport.dash_table(dataset)
-                table.id = f"table-{table_index}"
+                table.id = {'type': 'table', 'index': table_index}
                 tables.append(html.Div([table_title, clipboard, table],
                                        style={'width': '100%', 'display': 'inline-block'}))
                 table_index += 1
@@ -303,19 +336,27 @@ class DashReportApp:
                     pass
                 else:
                     propCls = return_prop_class(prop_type)
+                    if propCls is None:
+                        tables.append(
+                            html.Div(
+                                f"Unsupported report property type: {prop_type}",
+                                style={"fontSize": UI_FRONTSIZE},
+                            )
+                        )
+                        continue
                     table_title = html.H3(
                         f"{w_conf} - {selected_confs} - {selected_prop}",
                         style={"fontSize": UI_FRONTSIZE}
                     )
                     table, df = propCls.dash_table(data)
-                    table.id = f"table-{table_index}"
+                    table.id = {'type': 'table', 'index': table_index}
                     # add strips to table
                     table.style_data_conditional = [
                         {'if': {'row_index': 'odd'},
                             'backgroundColor': 'rgb(248, 248, 248)'}
                     ]
                     # add clipboards
-                    clip_id = f"clip-{table_index}"
+                    clip_id = {'type': 'clip', 'index': table_index}
                     clipboard = dcc.Clipboard(id=clip_id, style={"fontSize": UI_FRONTSIZE})
                     tables.append(
                         html.Div([table_title, clipboard, table],
@@ -323,35 +364,28 @@ class DashReportApp:
                     )
                     table_index += 1
 
-        self._generate_dynamic_callbacks(table_index)
-
         return html.Div(
             tables, style={'display': 'flex', 'flex-wrap': 'wrap'}
         )
 
     @staticmethod
-    def csv_copy(_, data):
+    def csv_copy(n_clicks, data):
+        if not n_clicks:
+            raise PreventUpdate
         dff = pd.DataFrame(data)
         return dff.to_csv(index=False)  # do not include row names
 
-    def _generate_dynamic_callbacks(self, count):
-        for index in range(count):
-            self.app.callback(Output(f'clip-{index}', 'content'),
-            [Input(f'clip-{index}', 'n_clicks'),
-             State(f'table-{index}', 'data')])(self.csv_copy)
-
     def run(self, **kwargs):
-        Timer(1.2, self.open_webpage).start()
-        print('Dash server running... (See the report at http://127.0.0.1:8050/)')
-        print('NOTE: If two Dash pages are automatically opened in your browser, you can close the first one.')
+        if self.open_browser:
+            Timer(1.2, self.open_webpage).start()
+        print(f'Dash server running... (See the report at http://{self.host}:{self.port}/)')
         print('NOTE: If the clipboard buttons do not function well, try to reload the page one time.')
         print('NOTE: Do not over-refresh the page as duplicate errors may occur. '
               'If did, stop the server and re-execute the apex report command.')
-        self.app.run(**kwargs)
+        self.app.run(host=self.host, port=self.port, **kwargs)
 
-    @staticmethod
-    def open_webpage():
-        webbrowser.open('http://127.0.0.1:8050/')
+    def open_webpage(self):
+        webbrowser.open(f'http://{self.host}:{self.port}/')
 
 
 if __name__ == "__main__":

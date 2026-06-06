@@ -1,6 +1,7 @@
 import os, glob, pathlib, shutil, subprocess
 from pathlib import Path
 from typing import List
+from monty.serialization import loadfn
 from dflow.python import (
     OP,
     OPIO,
@@ -9,9 +10,57 @@ from dflow.python import (
     upload_packages
 )
 from apex.core.calculator import LAMMPS_INTER_TYPE
-from apex.utils import recursive_search
+from apex.utils import recursive_search, apex_task_succeeded
 
 upload_packages.append(__file__)
+
+
+def _load_task_status(status_path: str):
+    if not os.path.isfile(status_path):
+        return None
+    try:
+        return loadfn(status_path)
+    except Exception as exc:
+        return {
+            "state": "failed",
+            "reason": "invalid_task_status",
+            "message": f"Could not parse apex_task_status.json: {exc}",
+            "exit_code": None,
+        }
+
+
+def _is_failed_task_status(status) -> bool:
+    if status is None:
+        return False
+    return status.get("state") != "succeeded" or status.get("exit_code") != 0
+
+
+def _check_relaxation_outputs(conf_dirs: List[str]) -> None:
+    failed = []
+    for conf_dir in conf_dirs:
+        task_dir = os.path.join(conf_dir, "relaxation", "relax_task")
+        status_path = os.path.join(task_dir, "apex_task_status.json")
+        contcar = os.path.join(task_dir, "CONTCAR")
+        result = os.path.join(task_dir, "result.json")
+        status = _load_task_status(status_path)
+        if _is_failed_task_status(status):
+            reason = status.get("reason", "unknown")
+            exit_code = status.get("exit_code")
+            failed.append(
+                f"{task_dir} (LAMMPS failed: state={status.get('state')}, "
+                f"reason={reason}, exit_code={exit_code}; see apex_task_status.json, "
+                ".debug.log, and log.lammps)"
+            )
+        elif not os.path.isfile(contcar):
+            failed.append(f"{task_dir} (missing CONTCAR)")
+        elif not os.path.isfile(result):
+            failed.append(f"{task_dir} (missing result.json)")
+    if failed:
+        raise RuntimeError(
+            "Relaxation failed or did not produce required output for task(s): "
+            + "; ".join(failed)
+            + ". Property steps require relaxation/relax_task/CONTCAR."
+        )
 
 
 class RelaxMake(OP):
@@ -63,9 +112,14 @@ class RelaxMake(OP):
 
         task_list = []
         task_list_str = []
+        rerun_finished = inter_parameter.get("rerun_finished", True)
         for ii in conf_dirs:
             conf_dir_global = os.path.join(work_d, ii)
-            task_list.append(os.path.join(conf_dir_global, 'relaxation/relax_task'))
+            task_dir = os.path.join(conf_dir_global, 'relaxation/relax_task')
+            if (not rerun_finished) and apex_task_succeeded(task_dir):
+                print(f"Skip running completed relaxation task {task_dir} (apex_task_status.json state=succeeded, rerun_finished=False)")
+                continue
+            task_list.append(task_dir)
             task_list_str.append(os.path.join(ii, 'relaxation'))
 
         all_jobs = task_list
@@ -140,6 +194,7 @@ class RelaxPost(OP):
                 conf_dirs.extend(glob.glob(conf))
             conf_dirs = list(set(conf_dirs))
             conf_dirs.sort()
+            _check_relaxation_outputs(conf_dirs)
 
             # remove potential files
             inter_files_name = []

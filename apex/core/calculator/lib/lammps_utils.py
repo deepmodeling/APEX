@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import re
 
@@ -436,6 +437,184 @@ def make_lammps_elastic(
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     return ret
 
+def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None):
+    type_map_list = element_list(type_map)
+    deepmd_version = param.get("deepmd_version", None)
+    dump_step = 100
+    tdamp = "${tdamp}"
+    pdamp = "${pdamp}"
+    thermostat = "nose_hoover"
+    ensemble = "isothermal"
+    velocity_seed = 12345
+    if cal_setting is not None:
+        dump_step = int(cal_setting.get("dump_step", dump_step))
+        tdamp = cal_setting.get("tdamp", tdamp)
+        pdamp = cal_setting.get("pdamp", pdamp)
+        thermostat = cal_setting.get("thermostat", thermostat)
+        ensemble = cal_setting.get("ensemble", ensemble)
+        velocity_seed = cal_setting.get("velocity_seed", velocity_seed)
+
+    ret = ""
+    ret += "include  variable_FiniteTlatt.in\n"
+    ret += "clear\n"
+    ret += "units 	metal\n"
+    ret += "dimension	3\n"
+    ret += "boundary	p p p\n"
+    ret += "atom_style	atomic\n"
+    ret += "box         tilt large\n"
+    ret += "read_data   %s\n" % conf
+    ret += "replicate   ${nx} ${ny} ${nz}\n"
+    for ii in range(len(type_map)):
+        ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
+    ret += "neigh_modify    every 1 delay 0 check no\n"
+    ret += interaction(param)
+    ret += "compute         mype all pe\n"
+    ret += "thermo          100\n"
+    ret += ("thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n")
+
+    ret += f"velocity all create ${{temperature}} {int(velocity_seed)} mom yes rot yes dist gaussian\n"
+
+    if ensemble == "adiabatic":
+        ret += f"fix 1 all nph aniso 1.0 1.0 {pdamp} drag 1.0\n"
+    elif thermostat == "langevin":
+        ret += f"fix 1 all nph aniso 1.0 1.0 {pdamp} drag 1.0\n"
+        ret += f"fix 5 all langevin ${{temperature}} ${{temperature}} {tdamp} {int(velocity_seed)}\n"
+    else:
+        ret += (
+            f"fix 1 all npt temp ${{temperature}} ${{temperature}} {tdamp} "
+            f"aniso 0.0 0.0 {pdamp}\n"
+        )
+
+    ret += "run ${equi_step}\n"
+    ret += "reset_timestep 0 \n"
+
+    # Sampling stage
+    ret += f"dump            1 all custom  {dump_step} dump.relax id type xs ys zs fx fy fz\n"
+    ret += "variable lx equal lx \n"
+    ret += "variable ly equal ly \n"
+    ret += "variable lz equal lz \n"
+    ret += "fix 2 all ave/time ${N_every} ${N_repeat} ${N_freq}  v_lx v_ly v_lz  ave running file average_box.txt\n"
+    ret += "run ${ave_step} \n"
+
+    # Final log summaries
+    ret += "variable        N equal count(all)\n"
+    ret += "variable        V equal vol\n"
+    ret += 'variable        E equal "c_mype"\n'
+    ret += "variable        tmplx equal lx\n"
+    ret += "variable        tmply equal ly\n"
+    ret += "variable        Pxx equal pxx\n"
+    ret += "variable        Pyy equal pyy\n"
+    ret += "variable        Pzz equal pzz\n"
+    ret += "variable        Pxy equal pxy\n"
+    ret += "variable        Pxz equal pxz\n"
+    ret += "variable        Pyz equal pyz\n"
+    ret += "variable        Epa equal ${E}/${N}\n"
+    ret += "variable        Vpa equal ${V}/${N}\n"
+    ret += "variable        AA equal (${tmplx}*${tmply})\n"
+    ret += 'print "All done"\n'
+    ret += 'print "Total number of atoms = ${N}"\n'
+    ret += 'print "Final energy per atoms = ${Epa}"\n'
+    ret += 'print "Final volume per atoms = ${Vpa}"\n'
+    ret += 'print "Final Base area = ${AA}"\n'
+    ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
+    ret += 'print "Final Length (box_x box_y box_z) = ${lx} ${ly} ${lz}"\n'
+    return ret
+
+def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir="."):
+    type_map_list = element_list(type_map)
+    metadata_path = os.path.join(task_dir, "FiniteTelastic.json")
+    with open(metadata_path, "r") as fp:
+        metadata = json.load(fp)
+
+    role = metadata["role"]
+    if role not in ["equi", "reference", "strained"]:
+        raise RuntimeError(f"unsupported FiniteTelastic role {role}")
+
+    def setup_from_data():
+        text = ""
+        text += "clear\n"
+        text += "include  variable_FiniteTelastic.in\n"
+        text += "units 	metal\n"
+        text += "dimension	3\n"
+        text += "boundary	p p p\n"
+        text += "atom_style	atomic\n"
+        if param["type"] == "mace":
+            text += "atom_modify map yes\n"
+            text += "newton on\n"
+        text += "box         tilt large\n"
+        text += "read_data   %s\n" % conf
+        text += "replicate   ${nx} ${ny} ${nz}\n"
+        return text
+
+    def setup_from_restart():
+        text = ""
+        text += "clear\n"
+        text += "include  variable_FiniteTelastic.in\n"
+        text += "units 	metal\n"
+        text += "dimension	3\n"
+        text += "boundary	p p p\n"
+        text += "atom_style	atomic\n"
+        if param["type"] == "mace":
+            text += "atom_modify map yes\n"
+            text += "newton on\n"
+        text += "box         tilt large\n"
+        text += "read_restart ${restart_source}\n"
+        return text
+
+    def force_field_setup():
+        text = ""
+        for ii in range(len(type_map)):
+            text += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
+        text += "neigh_modify    every 1 delay 0 check no\n"
+        text += interaction(param)
+        text += "compute         mype all pe\n"
+        text += "thermo          ${stress_output_every}\n"
+        text += (
+            "thermo_style    custom step pe pxx pyy pzz pxy pxz pyz lx ly lz vol c_mype\n"
+        )
+        text += "timestep        ${timestep}\n"
+        return text
+
+    ret = setup_from_data()
+    ret += force_field_setup()
+    ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
+    ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
+    if role == "equi":
+        ret += "include  output_FiniteTelastic.in\n"
+    ret += "fix             1 all npt temp ${temperature} ${temperature} ${tdamp} aniso 0.0 0.0 ${pdamp}\n"
+    ret += "run             ${equi_step}\n"
+    ret += "write_restart   ${equi_restart}\n"
+
+    if role in ["reference", "strained"]:
+        ret += setup_from_restart()
+        ret += force_field_setup()
+        ret += "change_box all triclinic\n"
+        ret += "velocity all create ${temperature} ${seed} mom yes rot yes dist gaussian\n"
+        ret += "include  deform_FiniteTelastic.in\n"
+        ret += "reset_timestep  0\n"
+        ret += "dump            1 all custom ${stress_output_every} dump.relax id type xs ys zs fx fy fz\n"
+        ret += "include  output_FiniteTelastic.in\n"
+        ret += "fix             1 all nve\n"
+        ret += "fix             2 all langevin ${temperature} ${temperature} ${tdamp} ${seed} zero yes\n"
+        ret += "run             ${response_step}\n"
+
+    ret += "variable        N equal count(all)\n"
+    ret += "variable        V equal vol\n"
+    ret += "variable        E equal \"c_mype\"\n"
+    ret += "variable        Pxx equal pxx\n"
+    ret += "variable        Pyy equal pyy\n"
+    ret += "variable        Pzz equal pzz\n"
+    ret += "variable        Pxy equal pxy\n"
+    ret += "variable        Pxz equal pxz\n"
+    ret += "variable        Pyz equal pyz\n"
+    ret += "variable        Epa equal ${E}/${N}\n"
+    ret += "variable        Vpa equal ${V}/${N}\n"
+    ret += "print \"All done\"\n"
+    ret += "print \"Total number of atoms = ${N}\"\n"
+    ret += "print \"Final energy per atoms = ${Epa}\"\n"
+    ret += "print \"Final volume per atoms = ${Vpa}\"\n"
+    ret += "print \"Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}\"\n"
+    return ret
 
 def make_lammps_press_relax(
     conf,
@@ -508,6 +687,209 @@ def make_lammps_press_relax(
     ret += 'print "Final energy per atoms = ${Epa} eV"\n'
     ret += 'print "Final volume per atoms = ${Vpa} A^3"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
+    return ret
+
+def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
+    """LAMMPS input for annealing using the same stage controls as annealing/.
+
+    Uses variables provided by `variable_Annealing.in` in the task directory.
+    - thermostat: nose_hoover | langevin
+    - ensemble: for nose_hoover: npt|nvt; for langevin: nph|nve (barostat on/off)
+    """
+
+    type_map_list = element_list(type_map)
+    dump_interval = int(cal_setting.get("dump_interval", cal_setting.get("dump_step", 2000)))
+    thermo_interval = int(cal_setting.get("thermo_interval", 2000))
+    restart_interval = int(cal_setting.get("restart_interval", 20000))
+    tdamp = cal_setting.get("tdamp", "${tdamp}")
+    pdamp = cal_setting.get("pdamp", "${pdamp}")
+    thermostat = cal_setting.get("thermostat", "nose_hoover")
+    ensemble = cal_setting.get("ensemble", "npt")
+    vseed = int(cal_setting.get("velocity_seed", cal_setting.get("init_v_seed", 123457)))
+    lgv_seed = int(cal_setting.get("lgv_seed", vseed))
+    req_lgv_damping = cal_setting.get("req_lgv_damping", False)
+    req_compute_rdf = cal_setting.get("req_compute_rdf", True)
+    req_compute_msd = cal_setting.get("req_compute_msd", True)
+    req_write_restart = cal_setting.get("req_write_restart", True)
+    req_dump_init_atom = cal_setting.get("req_dump_init_atom", True)
+    req_dump_ave_atom = cal_setting.get("req_dump_ave_atom", False)
+    rdf_nevery = int(cal_setting.get("rdf_nevery", cal_setting.get("rdf_interval", 100)))
+    rdf_nrepeat = int(cal_setting.get("rdf_nrepeat", 1))
+    rdf_nfreq = int(cal_setting.get("rdf_nfreq", cal_setting.get("rdf_interval", 200)))
+    msd_nevery = int(cal_setting.get("msd_nevery", 100))
+    msd_nrepeat = int(cal_setting.get("msd_nrepeat", 1))
+    msd_nfreq = int(cal_setting.get("msd_nfreq", 200))
+
+    def _truthy(value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    def _thermo_fix(name, t_start, t_stop):
+        if thermostat == "langevin":
+            if ensemble == "nve":
+                fix = f"fix {name}_int all nve\n"
+            else:
+                fix = f"fix {name}_int all nph aniso 0.0 0.0 {pdamp} drag 1.0\n"
+            fix += f"fix {name}_lgv all langevin {t_start} {t_stop} {tdamp} {lgv_seed}\n"
+            return fix
+        if ensemble == "nvt":
+            return f"fix {name}_nh all nvt temp {t_start} {t_stop} {tdamp}\n"
+        return (
+            f"fix {name}_nh all npt temp {t_start} {t_stop} {tdamp} "
+            f"x 0.0 0.0 {pdamp} y 0.0 0.0 {pdamp} z 0.0 0.0 {pdamp}\n"
+        )
+
+    def _unfix_thermo(name):
+        if thermostat == "langevin":
+            return f"unfix {name}_lgv\nunfix {name}_int\n"
+        return f"unfix {name}_nh\n"
+
+    def _stage_analysis(stage, rdf_file, msd_file):
+        ret = ""
+        if _truthy(req_compute_rdf):
+            ret += (
+                f"fix rdf_{stage} all ave/time {rdf_nevery} {rdf_nrepeat} {rdf_nfreq} "
+                f"c_myRDF[*] file {rdf_file} mode vector\n"
+            )
+        if _truthy(req_compute_msd):
+            ret += f"compute myMSD_{stage} all msd com yes\n"
+            ret += (
+                f"fix msd_{stage} all ave/time {msd_nevery} {msd_nrepeat} {msd_nfreq} "
+                f"c_myMSD_{stage} file {msd_file} mode vector\n"
+            )
+        return ret
+
+    def _unfix_stage_analysis(stage):
+        ret = ""
+        if _truthy(req_compute_rdf):
+            ret += f"unfix rdf_{stage}\n"
+        if _truthy(req_compute_msd):
+            ret += f"unfix msd_{stage}\nuncompute myMSD_{stage}\n"
+        return ret
+
+    ret = ""
+    ret += "include  variable_Annealing.in\n"
+    ret += "clear\n"
+    ret += "units \tmetal\n"
+    ret += "dimension\t3\n"
+    ret += "boundary\tp p p\n"
+    ret += "atom_style\tatomic\n"
+    ret += "box         tilt large\n"
+    ret += "read_data   %s\n" % conf
+    ret += "replicate   ${nx} ${ny} ${nz}\n"
+    for ii in range(len(type_map)):
+        ret += "mass            %d %.3f\n" % (ii + 1, Element(type_map_list[ii]).mass)
+    ret += "neigh_modify    every 1 delay 0 check no\n"
+    ret += interaction(param)
+    ret += "compute         mype all pe\n"
+    ret += f"thermo          {thermo_interval}\n"
+    ret += ("thermo_style    custom step temp atoms epair pe ke etotal press vol pxx pyy pzz pxy pxz pyz lx ly lz xlo xhi ylo yhi zlo zhi fnorm fmax\n")
+    ret += "thermo_modify   lost error flush yes format 4 %.8f\n"
+    ret += "timestep ${timestep}\n"
+    ret += "variable        N equal count(all)\n"
+    ret += "variable        V equal vol\n"
+    ret += "variable        Vatom equal v_V/count(all)\n"
+    ret += "variable        Temp equal temp\n"
+    ret += "variable        pote equal c_mype\n"
+    ret += "variable        Etotal equal etotal\n"
+    ret += "variable        Press equal press\n"
+    ret += "variable        stepVal equal step\n"
+    if _truthy(req_compute_rdf):
+        ret += "variable        rdf_comm_cutoff equal ${rdf_cutoff}+2.0\n"
+        ret += "comm_modify    cutoff ${rdf_comm_cutoff}\n"
+        ret += "compute         myRDF all rdf ${rdf_bins} cutoff ${rdf_cutoff}\n"
+
+    if _truthy(req_dump_init_atom):
+        ret += "dump init_dump all atom 1 dump.init.*\n"
+        ret += "run 0\n"
+        ret += "undump init_dump\n"
+
+    # Initialize velocities and equilibrate at start_temp
+    ret += f"velocity all create ${{start_temp}} {vseed} mom yes rot yes dist gaussian\n"
+
+    if _truthy(req_lgv_damping):
+        ret += "fix eq_lgv_int all nve\n"
+        ret += f"fix eq_lgv all langevin ${{start_temp}} ${{start_temp}} {tdamp} {lgv_seed}\n"
+        ret += f"dump eq_lgv_dump all atom {dump_interval} dump.eq_lgv_${{start_temp}}K.*\n"
+        if _truthy(req_write_restart):
+            ret += f"restart {restart_interval} restart.eq_lgv.*\n"
+        ret += "run ${init_lgv_thermo_equil_step}\n"
+        ret += "restart 0\n"
+        ret += "undump eq_lgv_dump\n"
+        ret += "unfix eq_lgv\n"
+        ret += "unfix eq_lgv_int\n"
+        ret += "write_restart restart.eq_lgv_final\n"
+
+    ret += _stage_analysis("eq", "rdf.eq_${start_temp}K.txt", "msd.eq_${start_temp}K.txt")
+    ret += _thermo_fix("eq", "${start_temp}", "${start_temp}")
+    ret += f"dump eq_nh_dump all atom {dump_interval} dump.eq_nh_${{start_temp}}K.*\n"
+    if _truthy(req_dump_ave_atom):
+        ret += "compute atom_u_pos all property/atom xu yu zu\n"
+        ret += "fix ave_atom_u_pos all ave/atom ${ave_atom_sample_feq} ${ave_atom_sample_length} ${dump_interval} c_atom_u_pos[*]\n"
+        ret += f"dump eq_nh_ave_dump all custom {dump_interval} dump.eq_nh_${{start_temp}}K_ave.* id type f_ave_atom_u_pos[1] f_ave_atom_u_pos[2] f_ave_atom_u_pos[3]\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.eq_nh.*\n"
+    ret += "run ${init_thermo_equil_step}\n"
+    ret += "restart 0\n"
+    ret += "undump eq_nh_dump\n"
+    if _truthy(req_dump_ave_atom):
+        ret += "undump eq_nh_ave_dump\nunfix ave_atom_u_pos\nuncompute atom_u_pos\n"
+    ret += _unfix_thermo("eq")
+    ret += _unfix_stage_analysis("eq")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.eq_final\n"
+
+    # Temperature ramp to target_temp
+    ret += _stage_analysis("ramp", "rdf.T_ramp_${start_temp}K_${temp}K.txt", "msd.T_ramp_${start_temp}K_${temp}K.txt")
+    ret += _thermo_fix("ramp", "${start_temp}", "${temp}")
+    ret += f"dump T_ramp_nh_dump all atom {dump_interval} dump.T_ramp_nh_${{start_temp}}K_${{temp}}K.*\n"
+    ret += "fix heat_log all ave/time 1 100 ${thermo_interval} v_N v_Temp v_Vatom v_pote v_Etotal v_Press file heating_interval_${thermo_interval}.dat\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.T_ramp_nh.*\n"
+    ret += "run ${temp_ramp_remain_step}\n"
+    ret += "restart 0\n"
+    ret += "unfix heat_log\n"
+    ret += "undump T_ramp_nh_dump\n"
+    ret += _unfix_thermo("ramp")
+    ret += _unfix_stage_analysis("ramp")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.T_ramp_nh_final\n"
+
+    # Cool to end_temp
+    ret += _stage_analysis("decline", "rdf.T_decline_${temp}K_${end_temp}K.txt", "msd.T_decline_${temp}K_${end_temp}K.txt")
+    ret += _thermo_fix("decline", "${temp}", "${end_temp}")
+    ret += f"dump T_decline_nh_dump all atom {dump_interval} dump.T_decline_nh_${{temp}}K_${{end_temp}}K.*\n"
+    ret += "fix cool_log all ave/time 1 100 ${thermo_interval} v_N v_Temp v_Vatom v_pote v_Etotal v_Press file cooling_interval_${thermo_interval}.dat\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.T_decline_nh.*\n"
+    ret += "run ${temp_decline_remain_step}\n"
+    ret += "restart 0\n"
+    ret += "unfix cool_log\n"
+    ret += "undump T_decline_nh_dump\n"
+    ret += _unfix_thermo("decline")
+    ret += _unfix_stage_analysis("decline")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.T_decline_final\n"
+
+    ret += 'if "${final_thermo_equil_step} <= 0" then "jump SELF end_of_run"\n'
+    ret += _stage_analysis("final_eq", "rdf.final_eq_${end_temp}K.txt", "msd.final_eq_${end_temp}K.txt")
+    ret += _thermo_fix("final_eq", "${end_temp}", "${end_temp}")
+    ret += f"dump final_eq_nh_dump all atom {dump_interval} dump.final_eq_nh_${{end_temp}}K.*\n"
+    if _truthy(req_write_restart):
+        ret += f"restart {restart_interval} restart.final_eq_nh.*\n"
+    ret += "run ${final_thermo_equil_remain_step}\n"
+    ret += "restart 0\n"
+    ret += "undump final_eq_nh_dump\n"
+    ret += _unfix_thermo("final_eq")
+    ret += _unfix_stage_analysis("final_eq")
+    ret += "reset_timestep 0\n"
+    ret += "write_restart restart.final_eq_final\n"
+
+    ret += 'print "__end_of_lmp_annealing_calculation__"\n'
+    ret += 'label end_of_run\n'
     return ret
 
 """
@@ -630,4 +1012,3 @@ def check_finished_new(fname, keyword):
 def check_finished(fname):
     with open(fname, "r") as fp:
         return "Total wall time:" in fp.read()
-

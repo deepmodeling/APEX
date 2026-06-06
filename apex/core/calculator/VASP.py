@@ -79,7 +79,7 @@ class VASP(Task):
         # revise INCAR based on the INCAR provided in the "interaction"
         else:
             approach = None
-            if prop_type == "phonon":
+            if prop_type in {"phonon", "gruneisen"}:
                 approach = task_param.get("approach")
                 logging.info(f"No specification of INCAR for {prop_type} calculation, will auto-generate")
                 if approach == "linear":
@@ -245,8 +245,7 @@ class VASP(Task):
             return ["INCAR", "POTCAR"]
 
     def backward_files(self, property_type="relaxation"):
-        if property_type == "phonon":
+        if property_type in {"phonon", "gruneisen"}:
             return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"]
         else:
             return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"]
-

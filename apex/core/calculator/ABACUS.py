@@ -159,9 +159,12 @@ class ABACUS(Task):
                     self.modify_input(incar, "calculation", "scf")
                 else:
                     raise RuntimeError("not supported calculation setting for ABACUS")
-
-            elif cal_type == "static":
+            elif cal_type == "static" and task_type != "phonon":
                 self.modify_input(incar, "calculation", "scf")
+            elif task_type == "phonon":
+                self.modify_input(incar, "calculation", "scf")
+                self.modify_input(incar, "cal_force", "1")
+                self.modify_input(incar, "cal_stress", "1")
 
             else:
                 raise RuntimeError("not supported calculation type for ABACUS")

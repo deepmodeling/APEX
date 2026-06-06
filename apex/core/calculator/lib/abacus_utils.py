@@ -253,6 +253,7 @@ def poscar2stru(poscar, inter_param, stru):
                             - deepks_desc:  a string of deepks descriptor file
     - stru:            output filename, usally is 'STRU'
     """
+    stru_path = os.path.abspath(stru)
     stru = dpdata.System(poscar, fmt="vasp/poscar")
     stru_data = stru.data
     atom_mass = []
@@ -292,9 +293,10 @@ def poscar2stru(poscar, inter_param, stru):
     if "deepks_desc" in inter_param:
         deepks_desc = "./pp_orb/%s\n" % inter_param["deepks_desc"]
 
+    os.makedirs(os.path.dirname(stru_path) or ".", exist_ok=True)
     stru.to(
         "stru",
-        "STRU",
+        stru_path,
         mass=atom_mass,
         pp_file=pseudo,
         numerical_orbital=orb,
@@ -535,4 +537,3 @@ def append_orb_file_to_stru(stru, orb: dict = None, prefix: str = ""):
 
         with open(stru, 'w') as fout:
             fout.write(all_string_new)
-

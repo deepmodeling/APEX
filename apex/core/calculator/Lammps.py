@@ -25,6 +25,111 @@ upload_packages.append(__file__)
 # LAMMPS_INTER_TYPE = ['deepmd', 'eam_alloy', 'meam', 'eam_fs', 'meam_spline', 'snap', 'gap', 'rann', 'mace']
 MULTI_MODELS_INTER_TYPE = ["meam", "snap", "gap"]
 
+def _render_finitetlatt_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.FiniteTlatt.lammps.input import (
+        render_finitetlatt_lammps_input,
+    )
+
+    return render_finitetlatt_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _render_gamma_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.Gamma.lammps.input import render_gamma_lammps_input
+
+    return render_gamma_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _render_elastic_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.Elastic.lammps.input import render_elastic_lammps_input
+
+    return render_elastic_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _render_phonon_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.Phonon.lammps.input import render_phonon_lammps_input
+
+    return render_phonon_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
+def _finitetlatt_file_manifest(model_files, default_manifest):
+    from apex.core.property.FiniteTlatt.lammps import get_lammps_file_manifest
+
+    return get_lammps_file_manifest(model_files, default_manifest)
+
+
+def _eos_file_manifest(model_files, default_manifest):
+    from apex.core.property.EOS.lammps import get_lammps_file_manifest
+
+    return get_lammps_file_manifest(model_files, default_manifest)
+
+
+def _phonon_file_manifest(model_files, default_manifest):
+    from apex.core.property.Phonon.lammps import get_lammps_file_manifest
+
+    return get_lammps_file_manifest(model_files, default_manifest)
+
+
+def _eos_runtime_policy(default_policy):
+    from apex.core.property.EOS.lammps import get_lammps_runtime_policy
+
+    return get_lammps_runtime_policy(default_policy)
+
+
+PROPERTY_LAMMPS_INPUT_RENDERERS = {
+    "elastic": _render_elastic_input,
+    "finite_t_latt": _render_finitetlatt_input,
+    "gamma": _render_gamma_input,
+    "gamma_surface": _render_gamma_input,
+    "phonon": _render_phonon_input,
+}
+
+PROPERTY_LAMMPS_FILE_MANIFESTS = {
+    "eos": _eos_file_manifest,
+    "finite_t_latt": _finitetlatt_file_manifest,
+    "phonon": _phonon_file_manifest,
+}
+
+PROPERTY_LAMMPS_RUNTIME_POLICIES = {
+    "eos": _eos_runtime_policy,
+}
+
+
+def _apply_gamma_fix_to_lammps_input(contents, add_fix):
+    fix_dict = {"true": "0", "false": "NULL"}
+    add_fix_str = (
+        "fix             1 all setforce"
+        + " "
+        + fix_dict[add_fix[0]]
+        + " "
+        + fix_dict[add_fix[1]]
+        + " "
+        + fix_dict[add_fix[2]]
+        + "\n"
+    )
+    lines = contents.splitlines(keepends=True)
+    lower_id = None
+    upper_id = None
+    for idx, line in enumerate(lines):
+        if "min_style       cg" in line:
+            lower_id = idx
+        elif line.split()[:4] == ["variable", "N", "equal", "count(all)"]:
+            upper_id = idx
+            break
+    if lower_id is None or upper_id is None:
+        return contents
+    del lines[lower_id + 1 : upper_id - 1]
+    lines.insert(lower_id + 1, add_fix_str)
+    return "".join(lines)
+
+
 class Lammps(Task):
     def __init__(self, inter_parameter, path_to_poscar):
         self.inter = inter_parameter
@@ -281,17 +386,50 @@ class Lammps(Task):
                 else:
                     raise RuntimeError("not supported calculation setting for LAMMPS")
 
+            elif task_type in ["annealing", "Annealing"]:
+                # MD annealing schedule: equilibrate -> ramp -> hold -> cool
+                fc = lammps_utils.make_lammps_annealing(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+
             elif cal_type == "static":
                 fc = lammps_utils.make_lammps_eval(
                     "conf.lmp", self.type_map, self.inter_func, self.model_param
+                )
+            elif cal_type == "npt+ave/time":
+                fc = lammps_utils.make_lammps_FiniteTlatt(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+            elif cal_type == "finite_t_elastic":
+                fc = lammps_utils.make_lammps_FiniteTelastic(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    output_dir,
                 )
 
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
 
+        if (
+            prop_type in {"gamma", "gamma_surface"}
+            and cal_type == "relaxation"
+            and "add_fix" in task_param
+        ):
+            fc = _apply_gamma_fix_to_lammps_input(fc, task_param["add_fix"])
+
         dumpfn(task_param, os.path.join(output_dir, "task.json"), indent=4)
 
-        in_lammps_not_link_list = ["eos"]
+        in_lammps_not_link_list = ["eos", "finite_t_elastic"]
         if task_type not in in_lammps_not_link_list:
             with open(os.path.join(output_dir, "../in.lammps"), "w") as fp:
                 fp.write(fc)
@@ -308,6 +446,15 @@ class Lammps(Task):
                 fp.write(fc)
 
     def compute(self, output_dir):
+        task_json = os.path.join(output_dir, "task.json")
+        try:
+            task_param = loadfn(task_json) if os.path.isfile(task_json) else {}
+        except Exception:
+            task_param = {}
+        task_type = task_param.get("type", task_param.get("cal_type"))
+        if task_type in ["annealing", "Annealing"]:
+            return None
+
         log_lammps = os.path.join(output_dir, "log.lammps")
         dump_lammps = os.path.join(output_dir, "dump.relax")
         if not os.path.isfile(log_lammps) or not os.path.isfile(dump_lammps):
@@ -529,26 +676,81 @@ class Lammps(Task):
         return result_dict
 
     def forward_files(self, property_type="relaxation"):
-        if self.inter_type in MULTI_MODELS_INTER_TYPE:
-            return ["conf.lmp", "in.lammps"] + list(map(os.path.basename, self.model))
+        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
+        if property_type == "finite_t_latt":
+            return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
+        elif property_type in ["annealing", "Annealing"]:
+            return ["in.lammps", "variable_Annealing.in"] + model_files
+        elif property_type == "finite_t_elastic":
+            return [
+                "conf.lmp",
+                "in.lammps",
+                "variable_FiniteTelastic.in",
+                "deform_FiniteTelastic.in",
+                "output_FiniteTelastic.in",
+                "FiniteTelastic.json",
+            ] + model_files
+        elif self.inter_type in MULTI_MODELS_INTER_TYPE:
+            return ["conf.lmp", "in.lammps"] + model_files
         else:
-            return ["conf.lmp", "in.lammps", os.path.basename(self.model)]
+            return ["conf.lmp", "in.lammps"] + model_files
 
     def forward_common_files(self, property_type="relaxation"):
+        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
         if property_type not in ["eos"]:
-            if self.inter_type in MULTI_MODELS_INTER_TYPE:
-                return ["in.lammps"] + list(map(os.path.basename, self.model))
+            if property_type == "finite_t_latt":
+                return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
+            elif property_type in ["annealing", "Annealing"]:
+                return ["in.lammps", "variable_Annealing.in"] + model_files
+            elif property_type == "finite_t_elastic":
+                return model_files
+            elif self.inter_type in MULTI_MODELS_INTER_TYPE:
+                return ["in.lammps"] + model_files
             else:
-                return ["in.lammps", os.path.basename(self.model)]
+                return ["in.lammps"] + model_files
         else:
-            if self.inter_type in MULTI_MODELS_INTER_TYPE:
-                return list(map(os.path.basename, self.model))
-            else:
-                return [os.path.basename(self.model)]
+            return model_files
 
     def backward_files(self, property_type="relaxation"):
+        debug_files = ["apex_task_status.json", ".debug.log", ".debug.stdout", ".debug.stderr"]
         if property_type == "phonon":
-            return ["outlog", "FORCE_CONSTANTS"]
+            return ["outlog"] + debug_files + ["FORCE_CONSTANTS"]
+        elif property_type == "gruneisen":
+            return [
+                "log.lammps",
+                "outlog",
+                *debug_files,
+                "dump.relax",
+                "FORCE_CONSTANTS",
+                "mesh.yaml",
+                "band.yaml",
+                "phonopy.yaml",
+            ]
+        elif property_type == "finite_t_latt":
+            return ["log.lammps", "outlog"] + debug_files + ["dump.relax", "average_box.txt"]
+        elif property_type in ["annealing", "Annealing"]:
+            return [
+                "log.lammps",
+                "outlog",
+                *debug_files,
+                "dump.init.*",
+                "dump.eq_*",
+                "dump.T_ramp_*",
+                "dump.T_decline_*",
+                "dump.final_eq_*",
+                "heating_interval_*.dat",
+                "cooling_interval_*.dat",
+                "rdf.*.txt",
+                "msd.*.txt",
+                "restart.*",
+            ]
+        elif property_type == "finite_t_elastic":
+            return [
+                "log.lammps",
+                "outlog",
+                *debug_files,
+                "dump.relax",
+                "stress_timeseries.txt",
+            ]
         else:
-            return ["log.lammps", "outlog", "dump.relax"]
-
+            return ["log.lammps", "outlog"] + debug_files + ["dump.relax"]
