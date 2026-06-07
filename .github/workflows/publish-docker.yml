@@ -26,19 +26,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Select Dockerfile
-        id: dockerfile
-        run: |
-          if [ -s docs/Dockerfile.bohrium ]; then
-            echo "path=docs/Dockerfile.bohrium" >> "$GITHUB_OUTPUT"
-          else
-            echo "path=docs/Dockerfile" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ steps.dockerfile.outputs.path }}
+          file: docs/Dockerfile.bohrium
           platforms: linux/amd64
           push: true
           tags: |
