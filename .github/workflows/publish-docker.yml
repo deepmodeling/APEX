@@ -33,5 +33,5 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/apex-flow:${{ inputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/apex-flow:latest
+            ghcr.io/zikkying/apex-flow:${{ inputs.tag }}
+            ghcr.io/zikkying/apex-flow:latest
