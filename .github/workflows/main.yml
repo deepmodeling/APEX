@@ -1,8 +1,8 @@
 name: Python unit-tests
 
 on:
-  - push
-  - pull_request
+- push
+- pull_request
 
 jobs:
   build:
@@ -32,3 +32,7 @@ jobs:
     - uses: codecov/codecov-action@v7
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      with:
+        use_oidc: true
+permissions:
+  id-token: write
