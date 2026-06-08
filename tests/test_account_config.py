@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from apex.account import (
     BOHRIUM_WORKFLOWS_HOST,
+    DEFAULT_BOHRIUM_CONFIG,
     merge_bohrium_defaults,
 )
 from apex.utils import load_config_file
@@ -22,6 +23,10 @@ class TestAccountConfig(unittest.TestCase):
         self.assertEqual(merged["k8s_api_server"], BOHRIUM_WORKFLOWS_HOST)
         self.assertEqual(merged["batch_type"], "Bohrium")
         self.assertEqual(merged["context_type"], "Bohrium")
+        self.assertEqual(
+            merged["apex_image_name"],
+            DEFAULT_BOHRIUM_CONFIG["apex_image_name"]
+        )
         self.assertEqual(merged["scass_type"], "c8_m31_1 * NVIDIA T4")
 
     def test_json_overrides_account_defaults(self):

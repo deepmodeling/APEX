@@ -13,7 +13,7 @@ DEFAULT_BOHRIUM_CONFIG = {
     "k8s_api_server": BOHRIUM_WORKFLOWS_HOST,
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "apex_image_name": "registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0",
+    "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
 }
 SENSITIVE_KEYS = {"password"}
 ACCOUNT_FILE_ENV = "APEX_ACCOUNT_FILE"
