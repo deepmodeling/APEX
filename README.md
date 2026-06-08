@@ -455,7 +455,7 @@ When you run `apex submit -c global_bohrium.json`, APEX auto-fills these default
 - `k8s_api_server`: `https://workflows.deepmodeling.com`
 - `batch_type`: `Bohrium`
 - `context_type`: `Bohrium`
-- `apex_image_name`: `registry.dp.tech/dptech/prod-11045/apex-dependency:1.2.0`
+- `apex_image_name`: `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0`
 
 Priority rule: values in your `-c` json file override account defaults.
 
