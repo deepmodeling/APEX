@@ -583,7 +583,7 @@ class Phonon(Property):
 
     @staticmethod
     def check_same_copy(src, dst):
-        if os.path.samefile(src, dst):
+        if os.path.exists(dst) and os.path.samefile(src, dst):
             return
         shutil.copyfile(src, dst)
 
@@ -627,7 +627,8 @@ class Phonon(Property):
 
                 elif self.inter_param["type"] == 'vasp':
                     self.check_same_copy("task.000000/band.conf", "band.conf")
-                    self.check_same_copy("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
+                    if not os.path.exists("POSCAR-unitcell"):
+                        self.check_same_copy("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
 
                     if self.approach == "linear":
                         os.chdir(all_tasks[0])
