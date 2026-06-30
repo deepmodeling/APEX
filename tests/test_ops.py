@@ -15,8 +15,9 @@ from dflow.python import (
 from monty.serialization import loadfn
 
 from apex.op.relaxation_ops import RelaxMake, _check_relaxation_outputs
-from apex.op.property_ops import PropsMake, _is_failed_task_status
+from apex.op.property_ops import PropsMake, PropsRepairStatusCheck, _is_failed_task_status
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.task_failure import REMOTE_LAMMPS_STARTUP_FAILURE
 from apex.utils import apex_task_succeeded, all_apex_task_status_succeeded
 try:
     from context import write_poscar
@@ -60,6 +61,36 @@ class TestTaskStatusHelpers(unittest.TestCase):
             (task1 / "apex_task_status.json").write_text('{"state": "succeeded", "exit_code": 7}')
             self.assertTrue(all_apex_task_status_succeeded(work_dir))
 
+    def test_props_repair_status_check_summarizes_remote_startup_failures(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            prop_dir = input_post / "confs" / "std-bcc" / "elastic_00"
+            task_dir = prop_dir / "task.000003"
+            (input_all / "confs").mkdir(parents=True)
+            task_dir.mkdir(parents=True)
+            (task_dir / "apex_task_status.json").write_text(
+                '{"state": "failed", "reason": "nonzero_exit", "exit_code": 1, '
+                '"retry_reason": "header_only_lammps_log_after_nonzero_exit"}'
+            )
+            (task_dir / "log.lammps").write_text("LAMMPS (29 Aug 2024)\n")
+
+            op = PropsRepairStatusCheck()
+            out = op.execute(OPIO({
+                "input_post": input_post,
+                "input_all": input_all,
+                "task_names": ["confs/std-bcc/elastic_00/task.000003"],
+                "path_to_prop": "confs/std-bcc/elastic_00",
+            }))
+
+            self.assertEqual(out["checked_post"], input_post)
+            summary = loadfn(prop_dir / "run_status_check.json")
+            self.assertEqual(
+                summary["retry_eligible_tasks"][0]["reason"],
+                REMOTE_LAMMPS_STARTUP_FAILURE,
+            )
+
 
 class TestRunLAMMPSDebug(unittest.TestCase):
     def test_run_lammps_writes_debug_log_on_success(self):
@@ -99,14 +130,23 @@ class TestRunLAMMPSDebug(unittest.TestCase):
             self.assertTrue((task_dir / ".debug.log").is_file())
             status = loadfn(task_dir / "apex_task_status.json")
             self.assertEqual(status["state"], "failed")
-            self.assertEqual(status["reason"], "nonzero_exit")
+            self.assertEqual(status["reason"], "nonzero_lammps_error")
             self.assertEqual(status["exit_code"], 7)
             self.assertEqual(status["debug_log"], ".debug.log")
 
     def test_run_lammps_classifies_common_exit_codes(self):
         self.assertEqual(RunLAMMPS._classify_exit_code(127)["reason"], "command_not_found")
+        self.assertEqual(RunLAMMPS._classify_exit_code(124)["reason"], "timeout")
         self.assertEqual(RunLAMMPS._classify_exit_code(137)["reason"], "killed_or_oom")
         self.assertEqual(RunLAMMPS._classify_exit_code(143)["reason"], "terminated")
+        self.assertEqual(
+            RunLAMMPS._runtime_int_option(
+                "APEX_LAMMPS_HEADER_RETRY=3 lmp -in in.lammps",
+                "APEX_LAMMPS_HEADER_RETRY",
+                2,
+            ),
+            3,
+        )
 
     def test_run_lammps_retries_header_only_failure(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -124,10 +164,18 @@ class TestRunLAMMPSDebug(unittest.TestCase):
                 "Path('stress_timeseries.txt').write_text('0 0 0 0 0 0 0\\n')\n"
             )
             op = RunLAMMPS()
-            op.execute(OPIO({
-                "input_lammps": task_dir,
-                "run_command": f"{sys.executable} {script.name}",
-            }))
+            old_delay = os.environ.get("APEX_LAMMPS_HEADER_RETRY_DELAY")
+            try:
+                os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = "0"
+                op.execute(OPIO({
+                    "input_lammps": task_dir,
+                    "run_command": f"{sys.executable} {script.name}",
+                }))
+            finally:
+                if old_delay is None:
+                    os.environ.pop("APEX_LAMMPS_HEADER_RETRY_DELAY", None)
+                else:
+                    os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = old_delay
 
             self.assertEqual((task_dir / "count.txt").read_text(), "2")
             self.assertTrue((task_dir / "log.lammps.attempt1").is_file())
@@ -135,6 +183,36 @@ class TestRunLAMMPSDebug(unittest.TestCase):
             self.assertEqual(status["state"], "succeeded")
             self.assertEqual(status["attempts"], 2)
             self.assertEqual(status["retry_reason"], "header_only_lammps_log_after_nonzero_exit")
+            self.assertEqual(status["retry_classification"], REMOTE_LAMMPS_STARTUP_FAILURE)
+
+    def test_run_lammps_classifies_persistent_header_only_failure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            script = task_dir / "always_header_only.py"
+            script.write_text(
+                "from pathlib import Path\n"
+                "Path('log.lammps').write_text('LAMMPS (29 Aug 2024)\\n')\n"
+                "Path('outlog').write_text('LAMMPS (29 Aug 2024)\\n')\n"
+                "raise SystemExit(1)\n"
+            )
+            op = RunLAMMPS()
+            old_delay = os.environ.get("APEX_LAMMPS_HEADER_RETRY_DELAY")
+            try:
+                os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = "0"
+                op.execute(OPIO({
+                    "input_lammps": task_dir,
+                    "run_command": f"{sys.executable} {script.name}",
+                }))
+            finally:
+                if old_delay is None:
+                    os.environ.pop("APEX_LAMMPS_HEADER_RETRY_DELAY", None)
+                else:
+                    os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = old_delay
+
+            status = loadfn(task_dir / "apex_task_status.json")
+            self.assertEqual(status["state"], "failed")
+            self.assertEqual(status["reason"], REMOTE_LAMMPS_STARTUP_FAILURE)
+            self.assertEqual(status["attempts"], 2)
 
 
 class TestMakeRelaxOPs(unittest.TestCase):

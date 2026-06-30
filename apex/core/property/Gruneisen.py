@@ -794,8 +794,8 @@ if __name__ == "__main__":
             raise FileNotFoundError(f"POSCAR not found in {task_dir}")
         os.chdir(task_dir)
         cell_file = "POSCAR-unitcell" if self.inter_param["type"] == "vasp" else "POSCAR"
-        command = (
-            'phonopy --nomeshsym --dim="%s %s %s" -c %s band.conf'
+        command = Phonon.phonopy_command(
+            '--nomeshsym --dim="%s %s %s" -c %s band.conf'
             % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2], cell_file)
         )
         subprocess.check_call(command, shell=True)
@@ -868,8 +868,8 @@ if __name__ == "__main__":
             cwd = os.getcwd()
             try:
                 os.chdir(helper_dir)
-                subprocess.check_call(
-                    Phonon.phonopy_setup_command(
+                Phonon.run_first_success(
+                    Phonon.phonopy_writefc_commands(
                         '--dim="%s %s %s" -c POSCAR-unitcell --writefc'
                         % (
                             self.supercell_size[0],
@@ -877,7 +877,7 @@ if __name__ == "__main__":
                             self.supercell_size[2],
                         )
                     ),
-                    shell=True,
+                    required_file="FORCE_CONSTANTS",
                 )
             finally:
                 os.chdir(cwd)
@@ -888,8 +888,10 @@ if __name__ == "__main__":
             try:
                 os.chdir(helper_dir)
                 subprocess.check_call(
-                    'phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf'
-                    % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+                    Phonon.phonopy_command(
+                        '--dim="%s %s %s" -c POSCAR-unitcell band.conf'
+                        % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+                    ),
                     shell=True,
                 )
                 self._write_band_dat()
@@ -954,14 +956,14 @@ if __name__ == "__main__":
                 # Pass phonopy_disp.yaml explicitly so phonopy reads the supercell from the yaml
                 # rather than falling into old-style POSCAR mode (which has no DIM).
                 if not os.path.isfile("FORCE_CONSTANTS"):
-                    subprocess.check_call(
-                        Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc"),
-                        shell=True,
+                    Phonon.run_first_success(
+                        Phonon.phonopy_writefc_commands("phonopy_disp.yaml --writefc"),
+                        required_file="FORCE_CONSTANTS",
                     )
                 if not os.path.isfile("FORCE_CONSTANTS"):
                     raise FileNotFoundError(f"FORCE_CONSTANTS was not created in {helper_dir}")
                 if not os.path.isfile("mesh.yaml"):
-                    subprocess.check_call("phonopy band.conf", shell=True)
+                    subprocess.check_call(Phonon.phonopy_command("band.conf"), shell=True)
                     self._write_band_dat()
             finally:
                 os.chdir(cwd)
@@ -973,28 +975,7 @@ if __name__ == "__main__":
         if not os.path.isfile("band.yaml"):
             logging.warning("band.yaml was not created; skipping band.dat export")
             return
-        with open("band.dat", "w") as fp:
-            result = subprocess.run(
-                ["phonopy-bandplot", "--gnuplot", "band.yaml"],
-                stdout=fp,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-        if result.returncode == 0:
-            return
-        if os.path.isfile("band.dat") and os.path.getsize("band.dat") > 0:
-            logging.warning(
-                "phonopy-bandplot exited with code %s after writing band.dat; continuing. stderr: %s",
-                result.returncode,
-                result.stderr.strip(),
-            )
-            return
-        raise subprocess.CalledProcessError(
-            result.returncode,
-            ["phonopy-bandplot", "--gnuplot", "band.yaml"],
-            output=None,
-            stderr=result.stderr,
-        )
+        Phonon.write_band_dat()
 
     def _attach_abacus_reference_energies(
         self, task_infos: List[dict], task_result_map: Dict[str, str]

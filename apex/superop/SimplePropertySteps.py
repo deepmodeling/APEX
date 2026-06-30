@@ -43,6 +43,7 @@ class SimplePropertySteps(Steps):
         pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
+        repair_op: Type[OP] = None,
     ):
         self._input_parameters = {
             "flow_id": InputParameter(type=str, value=""),
@@ -99,7 +100,8 @@ class SimplePropertySteps(Steps):
             group_size,
             pool_size,
             executor,
-            upload_python_packages
+            upload_python_packages,
+            repair_op
         )
 
     @property
@@ -137,6 +139,7 @@ class SimplePropertySteps(Steps):
         pool_size: Optional[int] = None,
         executor: Optional[DispatcherExecutor] = None,
         upload_python_packages: Optional[List[os.PathLike]] = None,
+        repair_op: Type[OP] = None,
     ):
         # Step for property make
         make = Step(
@@ -233,6 +236,29 @@ class SimplePropertySteps(Steps):
             raise RuntimeError(f'Incorrect calculator type to initiate step: {calculator}')
         self.add(runcal)
 
+        post_input = runcal.outputs.artifacts["backward_dir"]
+        if calculator == 'lammps' and repair_op is not None:
+            repair = Step(
+                name="Props-run-status-check",
+                template=PythonOPTemplate(
+                    repair_op,
+                    image=post_image,
+                    python_packages=upload_python_packages,
+                    command=["python3"]
+                ),
+                artifacts={
+                    "input_post": runcal.outputs.artifacts["backward_dir"],
+                    "input_all": make.outputs.artifacts["output_work_path"]
+                },
+                parameters={
+                    "task_names": make.outputs.parameters["task_names"],
+                    "path_to_prop": self.inputs.parameters["path_to_prop"]
+                },
+                key=self.step_keys["run"] + '-status-check',
+            )
+            self.add(repair)
+            post_input = repair.outputs.artifacts["checked_post"]
+
         # Step for property post
         post = Step(
             name="Props-post",
@@ -243,7 +269,7 @@ class SimplePropertySteps(Steps):
                 command=["python3"]
             ),
             artifacts={
-                "input_post": runcal.outputs.artifacts["backward_dir"],
+                "input_post": post_input,
                 "input_all": make.outputs.artifacts["output_work_path"]
             },
             parameters={

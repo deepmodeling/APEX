@@ -312,6 +312,72 @@ class WorkflowQueryErrorTest(unittest.TestCase):
         self.assertEqual(downloaded, 0)
         mocked_download.assert_not_called()
 
+    def test_download_failure_artifacts_prefers_failed_backward_slice_and_writes_summary(self):
+        class SliceStepInfo:
+            def get_step(self, parent_id=None, sort_by_generation=False, key=None):
+                if parent_id == "post-001":
+                    return [
+                        {
+                            "id": "run-004",
+                            "displayName": "PropsLAMMPS-Cal",
+                            "outputs": {
+                                "artifacts": {
+                                    "backward_dir": "backward-artifact",
+                                }
+                            },
+                        }
+                    ]
+                return []
+
+        root_step = {
+            "id": "post-001",
+            "displayName": "Props-post",
+            "outputs": {
+                "artifacts": {
+                    "main-logs": "logs-artifact",
+                }
+            },
+        }
+
+        def fake_download(artifact, path, **kwargs):
+            os.makedirs(path, exist_ok=True)
+            if artifact == "logs-artifact":
+                with open(os.path.join(path, "main.log"), "w", encoding="utf-8") as fp:
+                    fp.write("LAMMPS failed for property task(s): task.000004\n")
+            else:
+                self.assertEqual(kwargs.get("slice"), 4)
+                with open(os.path.join(path, "apex_task_status.json"), "w", encoding="utf-8") as fp:
+                    fp.write(
+                        '{"state": "failed", "reason": "nonzero_exit", "exit_code": 1, '
+                        '"retry_reason": "header_only_lammps_log_after_nonzero_exit"}'
+                    )
+                with open(os.path.join(path, "log.lammps"), "w", encoding="utf-8") as fp:
+                    fp.write("LAMMPS (29 Aug 2024)\n")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("apex.main.download_artifact", side_effect=fake_download) as mocked_download:
+                downloaded = apex_main._download_failure_artifacts_for_step(
+                    wf_info=SliceStepInfo(),
+                    root_step=root_step,
+                    key="propertycal-confs-std-bcc-elastic-00",
+                    work_dir=tmpdir,
+                )
+
+            summary_path = os.path.join(
+                tmpdir,
+                ".failed-artifacts",
+                "propertycal-confs-std-bcc-elastic-00",
+                "summary.json",
+            )
+            self.assertTrue(os.path.isfile(summary_path))
+            with open(summary_path, "r", encoding="utf-8") as fp:
+                summary = __import__("json").load(fp)
+
+        self.assertEqual(downloaded, 2)
+        self.assertEqual(mocked_download.call_count, 2)
+        self.assertEqual(summary["failed_task_count"], 1)
+        self.assertEqual(summary["classifications"]["remote_lammps_startup_failure"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
