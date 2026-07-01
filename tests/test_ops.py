@@ -17,7 +17,14 @@ from monty.serialization import loadfn
 from apex.op.relaxation_ops import RelaxMake, _check_relaxation_outputs
 from apex.op.property_ops import PropsMake, PropsRepairStatusCheck, _is_failed_task_status
 from apex.op.RunLAMMPS import RunLAMMPS
-from apex.task_failure import REMOTE_LAMMPS_STARTUP_FAILURE
+from apex.task_failure import (
+    REMOTE_LAMMPS_STARTUP_FAILURE,
+    classify_apex_task_status,
+    classify_lammps_exit_code,
+    is_header_only_lammps_failure,
+    is_lammps_header_only_log,
+    load_and_classify_task_status,
+)
 from apex.utils import apex_task_succeeded, all_apex_task_status_succeeded
 try:
     from context import write_poscar
@@ -29,6 +36,43 @@ __package__ = "tests"
 
 
 class TestTaskStatusHelpers(unittest.TestCase):
+    def test_task_failure_helpers_cover_error_branches(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            (task_dir / "log.lammps").write_text("LAMMPS (29 Aug 2024)\n")
+            self.assertTrue(is_lammps_header_only_log(task_dir / "log.lammps"))
+            self.assertTrue(is_header_only_lammps_failure(task_dir, 1))
+
+            (task_dir / "CONTCAR").write_text("finished\n")
+            self.assertFalse(is_header_only_lammps_failure(task_dir, 1))
+
+            broken_status = task_dir / "broken_status.json"
+            broken_status.write_text("{not-json")
+            self.assertEqual(
+                load_and_classify_task_status(broken_status)["reason"],
+                "invalid_task_status",
+            )
+
+            valid_status = task_dir / "apex_task_status.json"
+            valid_status.write_text('{"state": "failed", "exit_code": "bad"}')
+            self.assertEqual(
+                load_and_classify_task_status(valid_status)["reason"],
+                "unknown_failure",
+            )
+
+        self.assertEqual(classify_lammps_exit_code(None)["reason"], "unknown_failure")
+        self.assertEqual(classify_lammps_exit_code(126)["reason"], "command_not_executable")
+        self.assertEqual(classify_lammps_exit_code(129)["reason"], "killed_or_oom")
+        self.assertEqual(classify_apex_task_status(None)["reason"], "invalid_task_status")
+        self.assertEqual(
+            classify_apex_task_status({"state": "failed", "exit_code": "not-int"})["reason"],
+            "unknown_failure",
+        )
+        self.assertEqual(
+            classify_apex_task_status({"state": "failed", "exit_code": 0})["reason"],
+            "invalid_task_status",
+        )
+
     def test_failed_status_uses_apex_task_status_fields(self):
         self.assertFalse(_is_failed_task_status({
             "state": "succeeded",
@@ -147,6 +191,23 @@ class TestRunLAMMPSDebug(unittest.TestCase):
             ),
             3,
         )
+        self.assertEqual(
+            RunLAMMPS._runtime_int_option(
+                "APEX_LAMMPS_HEADER_RETRY=bad lmp -in in.lammps",
+                "APEX_LAMMPS_HEADER_RETRY",
+                2,
+            ),
+            2,
+        )
+        self.assertEqual(
+            RunLAMMPS._runtime_float_option(
+                "APEX_LAMMPS_HEADER_RETRY_DELAY=bad lmp -in in.lammps",
+                "APEX_LAMMPS_HEADER_RETRY_DELAY",
+                5.0,
+            ),
+            5.0,
+        )
+        self.assertFalse(RunLAMMPS._is_lammps_header_only_log(Path("missing-log")))
 
     def test_run_lammps_retries_header_only_failure(self):
         with tempfile.TemporaryDirectory() as tmpdir:

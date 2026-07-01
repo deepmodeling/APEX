@@ -378,6 +378,83 @@ class WorkflowQueryErrorTest(unittest.TestCase):
         self.assertEqual(summary["failed_task_count"], 1)
         self.assertEqual(summary["classifications"]["remote_lammps_startup_failure"], 1)
 
+    def test_failure_artifact_helpers_handle_invalid_status_and_fallback_downloads(self):
+        class RelatedStepInfo:
+            def get_step(self, parent_id=None, sort_by_generation=False, key=None):
+                if parent_id == "post-001":
+                    return [
+                        {
+                            "id": "run-001",
+                            "displayName": "PropsLAMMPS-Cal",
+                            "outputs": {
+                                "artifacts": {
+                                    "backward_dir": "backward-artifact",
+                                    "output_work_path": "extra-artifact",
+                                }
+                            },
+                        },
+                        {
+                            "id": "run-001",
+                            "displayName": "PropsLAMMPS-Cal",
+                            "outputs": {
+                                "artifacts": {
+                                    "backward_dir": "duplicate-artifact",
+                                }
+                            },
+                        },
+                    ]
+                return []
+
+        root_step = {
+            "id": "post-001",
+            "displayName": "Props-post",
+            "outputs": {
+                "artifacts": {
+                    "main-logs": "logs-artifact",
+                }
+            },
+        }
+        calls = []
+
+        def fake_download(artifact, path, **kwargs):
+            calls.append((artifact, kwargs))
+            os.makedirs(path, exist_ok=True)
+            if artifact == "logs-artifact":
+                with open(os.path.join(path, "main.log"), "w", encoding="utf-8") as fp:
+                    fp.write("no task id here\n")
+            elif artifact == "backward-artifact":
+                self.assertNotIn("slice", kwargs)
+                with open(os.path.join(path, "apex_task_status.json"), "w", encoding="utf-8") as fp:
+                    fp.write("{not-json")
+            else:
+                with open(os.path.join(path, ".debug.log"), "w", encoding="utf-8") as fp:
+                    fp.write("diagnostic\n")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing_path = os.path.join(tmpdir, "does-not-exist.txt")
+            self.assertEqual(apex_main._safe_read_text(missing_path), "")
+            with mock.patch("apex.main.download_artifact", side_effect=fake_download):
+                downloaded = apex_main._download_failure_artifacts_for_step(
+                    wf_info=RelatedStepInfo(),
+                    root_step=root_step,
+                    key="propertycal-confs-std-bcc-elastic-00",
+                    work_dir=tmpdir,
+                )
+
+            summary_path = os.path.join(
+                tmpdir,
+                ".failed-artifacts",
+                "propertycal-confs-std-bcc-elastic-00",
+                "summary.json",
+            )
+            with open(summary_path, "r", encoding="utf-8") as fp:
+                summary = __import__("json").load(fp)
+
+        self.assertEqual(downloaded, 3)
+        self.assertEqual([call[0] for call in calls], ["logs-artifact", "backward-artifact", "extra-artifact"])
+        self.assertEqual(summary["failed_task_count"], 1)
+        self.assertEqual(summary["classifications"]["invalid_task_status"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

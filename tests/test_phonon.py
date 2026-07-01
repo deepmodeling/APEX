@@ -143,6 +143,28 @@ class TestPhonon(unittest.TestCase):
                 Phonon.run_first_success(["phonopy-init --writefc", "phonopy --writefc"])
         self.assertEqual(context.exception.cmd, "phonopy --writefc")
 
+    def test_run_first_success_requires_output_file_before_accepting_command(self):
+        calls = []
+
+        def fake_check_call(command, shell):
+            self.assertTrue(shell)
+            calls.append(command)
+            if command == "second":
+                Path("FORCE_CONSTANTS").write_text("created\n")
+
+        work_dir = Path("output/phonopy_required_file")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            with patch("apex.core.property.Phonon.subprocess.check_call", side_effect=fake_check_call):
+                Phonon.run_first_success(["first", "second"], required_file="FORCE_CONSTANTS")
+            self.assertEqual(calls, ["first", "second"])
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
     def test_write_band_dat_accepts_nonzero_exit_with_output(self):
         work_dir = Path("output/phonopy_bandplot_nonzero")
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -160,6 +182,33 @@ class TestPhonon(unittest.TestCase):
             with patch("apex.core.property.Phonon.subprocess.run", side_effect=fake_run):
                 Phonon.write_band_dat()
             self.assertGreater(Path("band.dat").stat().st_size, 0)
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_write_band_dat_accepts_zero_exit_and_raises_on_empty_output(self):
+        work_dir = Path("output/phonopy_bandplot_branches")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            Path("band.yaml").write_text("phonon: []\n")
+
+            def successful_run(command, stdout, stderr, text):
+                stdout.write("# distance frequency\n")
+                return subprocess.CompletedProcess(command, 0, stderr="")
+
+            with patch("apex.core.property.Phonon.subprocess.run", side_effect=successful_run):
+                Phonon.write_band_dat()
+            self.assertGreater(Path("band.dat").stat().st_size, 0)
+
+            def empty_failed_run(command, stdout, stderr, text):
+                return subprocess.CompletedProcess(command, 1, stderr="empty")
+
+            with patch("apex.core.property.Phonon.subprocess.run", side_effect=empty_failed_run):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    Phonon.write_band_dat()
         finally:
             os.chdir(cwd)
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -185,6 +234,69 @@ class TestPhonon(unittest.TestCase):
 
     def _write_band_dat_for_compute(self):
         Path("band.dat").write_text("# phonopy bandplot\n#   G X\n\n")
+
+    def test_compute_lower_resolves_task_paths_and_restores_cwd_on_reproduce_error(self):
+        work_dir = Path("output/phonon_reproduce_missing_init")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        self._write_phonon_compute_common(work_dir)
+        existing_rel = Path("output/phonon_existing_relative_task")
+        existing_rel.mkdir(parents=True, exist_ok=True)
+        abs_task = (work_dir / "abs_task").absolute()
+        abs_task.mkdir(parents=True)
+        cwd = Path.cwd()
+
+        try:
+            phonon = Phonon(
+                {"type": "phonon", "reproduce": True, "init_from_suffix": "old", "output_suffix": "new"},
+                inter_param={"type": "vasp"},
+            )
+            with self.assertRaisesRegex(RuntimeError, "initial data path"):
+                phonon._compute_lower(
+                    str(work_dir / "result.json"),
+                    [str(abs_task), str(existing_rel), "bare_missing_task", "nested/missing_task"],
+                    [],
+                )
+            self.assertEqual(Path.cwd(), cwd)
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+            shutil.rmtree(existing_rel, ignore_errors=True)
+
+    def test_compute_lower_reproduce_success_and_malformed_band_errors(self):
+        work_dir = Path("output/phonon_reproduce_success")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        self._write_phonon_compute_common(work_dir)
+        init_dir = work_dir / "init"
+        init_dir.mkdir()
+
+        def fake_post_repro(init_data_path, init_from_suffix, all_tasks, ptr_data, reprod_last_frame):
+            self.assertEqual(init_data_path, str(init_dir.absolute()))
+            self.assertEqual(init_from_suffix, "old")
+            self.assertTrue(reprod_last_frame)
+            (work_dir / "band.dat").write_text("# phonopy bandplot\n#   G X\n\n")
+            return {"reproduced": True}, ptr_data
+
+        try:
+            phonon = Phonon(
+                {
+                    "type": "phonon",
+                    "reproduce": True,
+                    "init_from_suffix": "old",
+                    "output_suffix": "new",
+                    "init_data_path": str(init_dir),
+                },
+                inter_param={"type": "vasp"},
+            )
+            with patch("apex.core.property.Phonon.post_repro", side_effect=fake_post_repro):
+                result, ptr = phonon._compute_lower(str(work_dir / "result.json"), [], [])
+            self.assertTrue(result["reproduced"])
+            self.assertIn("G", result["segment"])
+
+            (work_dir / "band.dat").write_text("only one line")
+            with patch("apex.core.property.Phonon.post_repro", return_value=({}, "")):
+                with self.assertRaisesRegex(ValueError, "empty or malformed"):
+                    phonon._compute_lower(str(work_dir / "result2.json"), [], [])
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
 
     def test_compute_lower_abacus_uses_phonopy_init_for_forces_and_phonopy_for_band(self):
         work_dir = Path("output/phonon_abacus_compute")

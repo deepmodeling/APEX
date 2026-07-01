@@ -4,6 +4,7 @@ import os
 import json
 
 from apex.submit import (
+    _with_lammps_retry_env,
     validate_submit_paths,
     auto_fill_type_map_from_poscar,
     pack_upload_dir,
@@ -11,6 +12,21 @@ from apex.submit import (
 
 
 class TestSubmitPathValidation(unittest.TestCase):
+    def test_with_lammps_retry_env_handles_empty_existing_and_new_commands(self):
+        class DummyConfig:
+            lammps_header_retry_attempts = 4
+            lammps_header_retry_delay = 0.25
+            lammps_transient_retry_attempts = 2
+
+        self.assertEqual(_with_lammps_retry_env("", DummyConfig()), "")
+        existing = "APEX_LAMMPS_HEADER_RETRY=9 lmp -in in.lammps"
+        self.assertEqual(_with_lammps_retry_env(existing, DummyConfig()), existing)
+        wrapped = _with_lammps_retry_env("lmp -in in.lammps", DummyConfig())
+        self.assertTrue(wrapped.startswith("APEX_LAMMPS_HEADER_RETRY=4 "))
+        self.assertIn("APEX_LAMMPS_HEADER_RETRY_DELAY=0.25", wrapped)
+        self.assertIn("APEX_LAMMPS_TRANSIENT_RETRY=2", wrapped)
+        self.assertTrue(wrapped.endswith("lmp -in in.lammps"))
+
     def test_accept_paths_without_dot(self):
         params = [
             {
