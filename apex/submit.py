@@ -54,6 +54,19 @@ def validate_submit_paths(parameter_dicts: List[dict]) -> None:
         )
 
 
+def _with_lammps_retry_env(run_command: str, wf_config: Config) -> str:
+    if not run_command:
+        return run_command
+    if "APEX_LAMMPS_HEADER_RETRY" in run_command:
+        return run_command
+    retry_env = (
+        f"APEX_LAMMPS_HEADER_RETRY={int(wf_config.lammps_header_retry_attempts)} "
+        f"APEX_LAMMPS_HEADER_RETRY_DELAY={float(wf_config.lammps_header_retry_delay)} "
+        f"APEX_LAMMPS_TRANSIENT_RETRY={int(wf_config.lammps_transient_retry_attempts)}"
+    )
+    return f"{retry_env} {run_command}"
+
+
 def _infer_type_map_from_structure_file(structure_file: str) -> dict:
     structure_name = os.path.basename(structure_file)
     symbols = []
@@ -553,6 +566,8 @@ def submit_workflow(
     run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config_dict["run_command"]
+    if calculator == "lammps":
+        run_command = _with_lammps_retry_env(run_command, wf_config)
     lammps_run_command = wf_config.basic_config_dict["lammps_run_command"]
     phonolammps_run_command = wf_config.basic_config_dict["phonolammps_run_command"]
     post_image = make_image

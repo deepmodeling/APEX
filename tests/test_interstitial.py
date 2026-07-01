@@ -2,7 +2,9 @@ import glob
 import os
 import shutil
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from pymatgen.analysis.defects.core import Interstitial as pmg_Interstitial
@@ -104,3 +106,59 @@ class TestInterstitial(unittest.TestCase):
             center = (inter_site1.coords + inter_site2.coords) / 2
             self.assertTrue((center[0] - center[1]) < 1e-4)
             self.assertTrue((center[1] - center[2]) < 1e-4)
+
+    def test_special_interstitial_generation_reports_missing_reference_sites(self):
+        class FakeGeneratedStructure:
+            distance_matrix = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+            def __init__(self, coords):
+                self.coords = coords
+
+            def to(self, _fmt, filename):
+                with open(filename, "w", encoding="utf-8") as fp:
+                    fp.write("fake\n1.0\n1 0 0\n0 1 0\n0 0 1\nV\n")
+                    fp.write(f"{len(self.coords)}\nDirect\n")
+                    for coord in self.coords:
+                        fp.write(f"{coord[0]} {coord[1]} {coord[2]} T T T\n")
+
+        class FakeInterstitialDefect:
+            coords = []
+
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def get_supercell_structure(self, sc_mat):
+                return FakeGeneratedStructure(self.coords)
+
+        anchor = [0.12, 0.13, 0.14]
+        cases = [
+            ("bcc", [], "anchor site"),
+            ("bcc", [anchor], "BCC center atom"),
+            ("fcc", [anchor], "FCC face/corner atoms"),
+            ("hcp", [anchor], "HCP center atom"),
+        ]
+
+        for lattice_type, coords, message in cases:
+            with self.subTest(lattice_type=lattice_type, message=message):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    cwd = os.getcwd()
+                    equi_path = os.path.join(tmpdir, "relaxation", "relax_task")
+                    target_path = os.path.join(tmpdir, "interstitial_00")
+                    os.makedirs(equi_path)
+                    shutil.copy(
+                        os.path.join(self.source_path, "CONTCAR_V_bcc"),
+                        os.path.join(equi_path, "CONTCAR"),
+                    )
+                    FakeInterstitialDefect.coords = coords
+                    prop = Interstitial({
+                        "type": "interstitial",
+                        "supercell": [1, 1, 1],
+                        "insert_ele": ["V"],
+                        "lattice_type": lattice_type,
+                    })
+                    try:
+                        with patch("apex.core.property.Interstitial.pmgInterstitial", FakeInterstitialDefect):
+                            with self.assertRaisesRegex(RuntimeError, message):
+                                prop.make_confs(target_path, equi_path)
+                    finally:
+                        os.chdir(cwd)

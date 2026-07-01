@@ -1,5 +1,6 @@
 import datetime
 import os, subprocess, logging, time
+import re
 from pathlib import Path
 from monty.serialization import dumpfn, loadfn
 from dflow.python import (
@@ -8,6 +9,12 @@ from dflow.python import (
     OPIOSign,
     Artifact,
     upload_packages
+)
+from apex.task_failure import (
+    HEADER_ONLY_RETRY_REASON,
+    classify_lammps_exit_code,
+    is_header_only_lammps_failure,
+    is_lammps_header_only_log,
 )
 
 upload_packages.append(__file__)
@@ -66,53 +73,7 @@ class RunLAMMPS(OP):
 
     @classmethod
     def _classify_exit_code(cls, exit_code: int) -> dict:
-        if exit_code == 0:
-            return {
-                "state": "succeeded",
-                "reason": "command_exit_zero",
-                "message": "Command completed successfully.",
-            }
-        if exit_code == 124:
-            return {
-                "state": "failed",
-                "reason": "timeout",
-                "message": "Command exited with timeout code 124.",
-            }
-        if exit_code == 126:
-            return {
-                "state": "failed",
-                "reason": "command_not_executable",
-                "message": "Command was found but could not be executed.",
-            }
-        if exit_code == 127:
-            return {
-                "state": "failed",
-                "reason": "command_not_found",
-                "message": "Command executable was not found.",
-            }
-        if exit_code in (130, 143):
-            return {
-                "state": "failed",
-                "reason": "terminated",
-                "message": f"Command was terminated by signal-like exit code {exit_code}.",
-            }
-        if exit_code == 137:
-            return {
-                "state": "failed",
-                "reason": "killed_or_oom",
-                "message": "Command was killed with exit code 137, commonly SIGKILL/OOM/preemption.",
-            }
-        if exit_code > 128:
-            return {
-                "state": "failed",
-                "reason": "signal_exit",
-                "message": f"Command exited with code {exit_code}, likely signal {exit_code - 128}.",
-            }
-        return {
-            "state": "failed",
-            "reason": "nonzero_exit",
-            "message": f"Command exited with non-zero code {exit_code}.",
-        }
+        return classify_lammps_exit_code(exit_code)
 
     @classmethod
     def _write_task_status(
@@ -127,8 +88,15 @@ class RunLAMMPS(OP):
         debug_log: str = ".debug.log",
         attempts: int = 1,
         retry_reason: str | None = None,
+        task_dir: Path | None = None,
     ):
-        status = cls._classify_exit_code(exit_code)
+        remote_startup = (
+            retry_reason == HEADER_ONLY_RETRY_REASON
+            and exit_code != 0
+        )
+        if task_dir is not None:
+            remote_startup = remote_startup or is_header_only_lammps_failure(task_dir, exit_code)
+        status = classify_lammps_exit_code(exit_code, remote_startup=remote_startup)
         payload = {
             **status,
             "exit_code": int(exit_code),
@@ -141,6 +109,10 @@ class RunLAMMPS(OP):
         }
         if retry_reason:
             payload["retry_reason"] = retry_reason
+            payload["retry_classification"] = classify_lammps_exit_code(
+                1,
+                remote_startup=(retry_reason == HEADER_ONLY_RETRY_REASON),
+            )["reason"]
         dumpfn(
             payload,
             status_file,
@@ -167,6 +139,31 @@ class RunLAMMPS(OP):
             return out.rstrip()
         except Exception as exc:
             return f"<unavailable: {exc}>"
+
+    @classmethod
+    def _command_env_value(cls, cmd: str, name: str):
+        match = re.search(rf"(?:^|\s){re.escape(name)}=([^\s]+)", str(cmd))
+        return match.group(1) if match else None
+
+    @classmethod
+    def _runtime_int_option(cls, cmd: str, name: str, default: int) -> int:
+        value = cls._command_env_value(cmd, name)
+        if value is None:
+            value = os.environ.get(name, str(default))
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @classmethod
+    def _runtime_float_option(cls, cmd: str, name: str, default: float) -> float:
+        value = cls._command_env_value(cmd, name)
+        if value is None:
+            value = os.environ.get(name, str(default))
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
     @classmethod
     def _tail_file(cls, path: Path, n_lines: int = 80) -> str:
@@ -252,28 +249,11 @@ class RunLAMMPS(OP):
 
     @classmethod
     def _is_lammps_header_only_log(cls, path: Path) -> bool:
-        if not path.is_file():
-            return False
-        try:
-            lines = [
-                line.strip()
-                for line in path.read_text(errors="replace").splitlines()
-                if line.strip()
-            ]
-        except Exception:
-            return False
-        return len(lines) == 1 and lines[0].startswith("LAMMPS (")
+        return is_lammps_header_only_log(path)
 
     @classmethod
     def _is_header_only_lammps_failure(cls, task_dir: Path, exit_code: int) -> bool:
-        if exit_code == 0:
-            return False
-        if any((task_dir / name).exists() for name in ["CONTCAR", "dump.relax", "stress_timeseries.txt"]):
-            return False
-        return (
-            cls._is_lammps_header_only_log(task_dir / "log.lammps")
-            or cls._is_lammps_header_only_log(task_dir / "outlog")
-        )
+        return is_header_only_lammps_failure(task_dir, exit_code)
 
     @classmethod
     def _archive_retry_file(cls, path: Path, attempt: int):
@@ -380,6 +360,7 @@ class RunLAMMPS(OP):
                     elapsed=0.0,
                     started_at=now,
                     finished_at=now,
+                    task_dir=task_dir,
                 )
                 self._write_final_debug(debug_file, task_dir, 127, 0.0)
                 self._cleanup_model_links(task_dir)
@@ -389,14 +370,18 @@ class RunLAMMPS(OP):
             start = time.time()
             retry_reason = None
             attempts = 1
-            max_attempts = int(os.environ.get("APEX_LAMMPS_HEADER_RETRY", "2"))
+            max_attempts = self._runtime_int_option(cmd, "APEX_LAMMPS_HEADER_RETRY", 2)
             max_attempts = max(1, max_attempts)
+            retry_delay = max(
+                0.0,
+                self._runtime_float_option(cmd, "APEX_LAMMPS_HEADER_RETRY_DELAY", 5.0),
+            )
             exit_code = self._run_command(cmd, task_dir)
             while (
                 attempts < max_attempts
                 and self._is_header_only_lammps_failure(task_dir, exit_code)
             ):
-                retry_reason = "header_only_lammps_log_after_nonzero_exit"
+                retry_reason = HEADER_ONLY_RETRY_REASON
                 self._append_debug(
                     debug_file,
                     f"\n## Retry {attempts + 1}\n"
@@ -404,7 +389,7 @@ class RunLAMMPS(OP):
                     "contains only the LAMMPS header.",
                 )
                 self._prepare_retry(task_dir, attempts)
-                time.sleep(float(os.environ.get("APEX_LAMMPS_HEADER_RETRY_DELAY", "5")))
+                time.sleep(retry_delay)
                 attempts += 1
                 exit_code = self._run_command(cmd, task_dir)
             elapsed = time.time() - start
@@ -418,6 +403,7 @@ class RunLAMMPS(OP):
                 finished_at=finished_at,
                 attempts=attempts,
                 retry_reason=retry_reason,
+                task_dir=task_dir,
             )
             self._write_final_debug(debug_file, task_dir, exit_code, elapsed)
             if exit_code == 0:

@@ -25,7 +25,7 @@ from dflow.plugins.dispatcher import DispatcherExecutor
 from apex.superop.RelaxationFlow import RelaxationFlow
 from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.op.relaxation_ops import RelaxMake, RelaxPost
-from apex.op.property_ops import PropsMake, PropsPost
+from apex.op.property_ops import PropsMake, PropsPost, PropsRepairStatusCheck
 from apex.utils import json2dict, handle_prop_suffix
 
 from dflow.python import upload_packages
@@ -46,6 +46,7 @@ class FlowGenerator:
             relax_post_op: Type[OP] = RelaxPost,
             props_make_op: Type[OP] = PropsMake,
             props_post_op: Type[OP] = PropsPost,
+            props_repair_op: Type[OP] = PropsRepairStatusCheck,
             group_size: Optional[int] = None,
             pool_size: Optional[int] = None,
             executor: Optional[DispatcherExecutor] = None,
@@ -62,6 +63,7 @@ class FlowGenerator:
         self.relax_post_op = relax_post_op
         self.props_make_op = props_make_op
         self.props_post_op = props_post_op
+        self.props_repair_op = props_repair_op
         self.run_op = run_op
         self.make_image = make_image
         self.run_image = run_image
@@ -1001,6 +1003,7 @@ class FlowGenerator:
                     make_op=self.props_make_op,
                     run_op=self.run_op,
                     post_op=self.props_post_op,
+                    repair_op=self.props_repair_op,
                     make_image=self.make_image,
                     run_image=self.run_image,
                     post_image=self.post_image,
@@ -1122,6 +1125,7 @@ class FlowGenerator:
                     make_op=self.props_make_op,
                     run_op=self.run_op,
                     post_op=self.props_post_op,
+                    repair_op=self.props_repair_op,
                     make_image=self.make_image,
                     run_image=self.run_image,
                     post_image=self.post_image,
