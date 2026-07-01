@@ -335,6 +335,8 @@ class WorkflowQueryErrorTest(unittest.TestCase):
             "outputs": {
                 "artifacts": {
                     "main-logs": "logs-artifact",
+                    "dflow_internal": "ignored-dflow-artifact",
+                    "debug-extra": "ignored-extra-artifact",
                 }
             },
         }
