@@ -382,18 +382,11 @@ class TestRunLAMMPSDebug(unittest.TestCase):
                 "Path('stress_timeseries.txt').write_text('0 0 0 0 0 0 0\\n')\n"
             )
             op = RunLAMMPS()
-            old_delay = os.environ.get("APEX_LAMMPS_HEADER_RETRY_DELAY")
-            try:
-                os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = "0"
+            with patch.dict(os.environ, {"APEX_LAMMPS_HEADER_RETRY_DELAY": "0"}):
                 op.execute(OPIO({
                     "input_lammps": task_dir,
                     "run_command": f"{sys.executable} {script.name}",
                 }))
-            finally:
-                if old_delay is None:
-                    os.environ.pop("APEX_LAMMPS_HEADER_RETRY_DELAY", None)
-                else:
-                    os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = old_delay
 
             self.assertEqual((task_dir / "count.txt").read_text(), "2")
             self.assertTrue((task_dir / "log.lammps.attempt1").is_file())
@@ -414,18 +407,11 @@ class TestRunLAMMPSDebug(unittest.TestCase):
                 "raise SystemExit(1)\n"
             )
             op = RunLAMMPS()
-            old_delay = os.environ.get("APEX_LAMMPS_HEADER_RETRY_DELAY")
-            try:
-                os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = "0"
+            with patch.dict(os.environ, {"APEX_LAMMPS_HEADER_RETRY_DELAY": "0"}):
                 op.execute(OPIO({
                     "input_lammps": task_dir,
                     "run_command": f"{sys.executable} {script.name}",
                 }))
-            finally:
-                if old_delay is None:
-                    os.environ.pop("APEX_LAMMPS_HEADER_RETRY_DELAY", None)
-                else:
-                    os.environ["APEX_LAMMPS_HEADER_RETRY_DELAY"] = old_delay
 
             status = loadfn(task_dir / "apex_task_status.json")
             self.assertEqual(status["state"], "failed")

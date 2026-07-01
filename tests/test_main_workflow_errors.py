@@ -412,6 +412,50 @@ class WorkflowQueryErrorTest(unittest.TestCase):
 
         self.assertEqual(downloaded, 0)
 
+    def test_download_failure_artifacts_skips_duplicate_main_log_artifact(self):
+        class DuplicateStepInfo:
+            def get_step(self, parent_id=None, sort_by_generation=False, key=None):
+                if parent_id == "post-001":
+                    return [
+                        {
+                            "id": "post-001",
+                            "displayName": "Props-post-duplicate",
+                            "outputs": {
+                                "artifacts": {
+                                    "main-logs": "duplicate-logs-artifact",
+                                }
+                            },
+                        }
+                    ]
+                return []  # pragma: no cover
+
+        root_step = {
+            "id": "post-001",
+            "displayName": "Props-post",
+            "outputs": {
+                "artifacts": {
+                    "main-logs": "logs-artifact",
+                }
+            },
+        }
+
+        def fake_download(artifact, path, **_kwargs):
+            os.makedirs(path, exist_ok=True)
+            with open(os.path.join(path, "main.log"), "w", encoding="utf-8") as fp:
+                fp.write(f"{artifact}\n")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("apex.main.download_artifact", side_effect=fake_download) as mocked_download:
+                downloaded = apex_main._download_failure_artifacts_for_step(
+                    wf_info=DuplicateStepInfo(),
+                    root_step=root_step,
+                    key="propertycal-confs-std-bcc-elastic-00",
+                    work_dir=tmpdir,
+                )
+
+        self.assertEqual(downloaded, 1)
+        mocked_download.assert_called_once()
+
     def test_failure_artifact_helpers_handle_invalid_status_and_fallback_downloads(self):
         class RelatedStepInfo:
             def get_step(self, parent_id=None, sort_by_generation=False, key=None):
