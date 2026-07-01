@@ -4,6 +4,7 @@ import logging
 import os
 import datetime
 import time
+import json
 from typing import List
 
 from dflow import (
@@ -23,6 +24,7 @@ from apex.submit import submit_from_args
 from apex.archive import archive_from_args
 from apex.report import report_from_args
 from apex.utils import load_config_file
+from apex.task_failure import classify_apex_task_status
 
 
 def parse_args():
@@ -902,11 +904,11 @@ def _is_transient_download_error(exc: Exception) -> bool:
     return any(marker in message for marker in _TRANSIENT_DOWNLOAD_MARKERS)
 
 
-def _download_artifact_with_retry(artifact, path, retries: int = 3, delay: int = 10):
+def _download_artifact_with_retry(artifact, path, retries: int = 3, delay: int = 10, **kwargs):
     last_exc = None
     for attempt in range(1, retries + 1):
         try:
-            return download_artifact(artifact=artifact, path=path)
+            return download_artifact(artifact=artifact, path=path, **kwargs)
         except Exception as exc:
             last_exc = exc
             if _is_missing_artifact_error(exc) or not _is_transient_download_error(exc):
@@ -1019,6 +1021,94 @@ def _collect_step_with_children(wf_info, root_step):
     return all_steps
 
 
+def _safe_read_text(path: str, limit: int = 200000) -> str:
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fp:
+            return fp.read(limit)
+    except Exception:
+        return ""
+
+
+def _extract_failed_task_ids(artifact_root: str) -> list[str]:
+    task_ids = set()
+    for root, _dirs, files in os.walk(artifact_root):
+        for filename in files:
+            if filename not in {"main.log", "failed_lammps_tasks.json", "run_status_check.json"}:
+                continue
+            text = _safe_read_text(os.path.join(root, filename))
+            for match in re.findall(r"task\.(\d{6})", text):
+                task_ids.add(match)
+    return sorted(task_ids)
+
+
+def _is_diagnostic_file(filename: str) -> bool:
+    if filename in {
+        "apex_task_status.json",
+        ".debug.log",
+        "log.lammps",
+        "outlog",
+        "task.json",
+        "failed_lammps_tasks.json",
+        "run_status_check.json",
+    }:
+        return True
+    return filename.endswith(".json") and filename not in {"param.json", "result.json", "result_task.json"}
+
+
+def _write_failed_artifact_summary(key: str, artifact_root: str) -> dict:
+    task_records = []
+    diagnostic_files = []
+    classifications = {}
+    for root, _dirs, files in os.walk(artifact_root):
+        for filename in files:
+            full_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(full_path, artifact_root)
+            if _is_diagnostic_file(filename):
+                diagnostic_files.append(rel_path)
+            if filename != "apex_task_status.json":
+                continue
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="replace") as fp:
+                    status = json.load(fp)
+            except Exception as exc:
+                classified = {
+                    "state": "failed",
+                    "reason": "invalid_task_status",
+                    "message": f"Could not parse apex_task_status.json: {exc}",
+                    "exit_code": None,
+                }
+            else:
+                classified = classify_apex_task_status(status, root)
+            reason = classified.get("reason", "unknown_failure")
+            classifications[reason] = classifications.get(reason, 0) + 1
+            task_records.append(
+                {
+                    "task": os.path.basename(root),
+                    "classification": reason,
+                    "state": classified.get("state"),
+                    "exit_code": classified.get("exit_code"),
+                    "diagnostic_path": os.path.relpath(root, artifact_root),
+                    "retry_reason": classified.get("retry_reason"),
+                    "original_reason": classified.get("original_reason"),
+                }
+            )
+
+    failed_tasks = [record for record in task_records if record.get("state") != "succeeded"]
+    summary = {
+        "step_key": key,
+        "failed_task_count": len(failed_tasks),
+        "task_status_count": len(task_records),
+        "classifications": classifications,
+        "failed_tasks": failed_tasks,
+        "diagnostic_files": sorted(diagnostic_files),
+    }
+    os.makedirs(artifact_root, exist_ok=True)
+    summary_path = os.path.join(artifact_root, "summary.json")
+    with open(summary_path, "w", encoding="utf-8") as fp:
+        json.dump(summary, fp, indent=4)
+    return summary
+
+
 def _is_retrievable_result_step_key(key: str) -> bool:
     prefix = str(key).split("-")[0]
     return prefix in {"propertycal", "relaxcal"} or key == "relaxationcal"
@@ -1041,6 +1131,40 @@ def _download_failure_artifacts_for_step(wf_info, root_step, key, work_dir):
     related_steps = _collect_step_with_children(wf_info, root_step)
     downloaded = 0
     seen = set()
+    artifact_root = os.path.join(
+        work_dir,
+        ".failed-artifacts",
+        _sanitize_path_token(key),
+    )
+
+    def _target_dir(step_name, art_name, suffix=None):
+        parts = [
+            artifact_root,
+            _sanitize_path_token(step_name),
+            _sanitize_path_token(art_name),
+        ]
+        if suffix:
+            parts.append(_sanitize_path_token(suffix))
+        return os.path.join(*parts)
+
+    def _download_one(step_name, step_id, art_name, artifact, target_dir, **kwargs):
+        nonlocal downloaded
+        os.makedirs(target_dir, exist_ok=True)
+        if _directory_has_entries(target_dir):
+            logging.info(
+                "Skip retrieving failure artifact %s for step %s (%s) "
+                "because %s already contains files.",
+                art_name,
+                step_name,
+                key,
+                target_dir,
+            )
+            return
+        _download_artifact_with_retry(artifact=artifact, path=target_dir, **kwargs)
+        downloaded += 1
+
+    # Download failed step logs first; they often contain the failed task IDs
+    # needed for focused backward_dir slice retrieval.
     for step in related_steps:
         step_id = _safe_get(step, "id", "step")
         step_name = _safe_get(step, "displayName", _safe_get(step, "name", step_id))
@@ -1048,34 +1172,14 @@ def _download_failure_artifacts_for_step(wf_info, root_step, key, work_dir):
         for art_name, artifact in artifacts.items():
             if art_name.startswith("dflow_"):
                 continue
-            if art_name not in preferred_names:
+            if art_name not in {"main-logs", "main_logs"}:
                 continue
             key_tuple = (str(step_id), str(art_name))
             if key_tuple in seen:
                 continue
             seen.add(key_tuple)
-
-            target_dir = os.path.join(
-                work_dir,
-                ".failed-artifacts",
-                _sanitize_path_token(key),
-                _sanitize_path_token(step_name),
-                _sanitize_path_token(art_name),
-            )
-            os.makedirs(target_dir, exist_ok=True)
-            if _directory_has_entries(target_dir):
-                logging.info(
-                    "Skip retrieving failure artifact %s for step %s (%s) "
-                    "because %s already contains files.",
-                    art_name,
-                    step_name,
-                    key,
-                    target_dir,
-                )
-                continue
             try:
-                _download_artifact_with_retry(artifact=artifact, path=target_dir)
-                downloaded += 1
+                _download_one(step_name, step_id, art_name, artifact, _target_dir(step_name, art_name))
             except Exception as exc:
                 logging.warning(
                     "Failed to download artifact %s for step %s (%s): %s",
@@ -1084,6 +1188,59 @@ def _download_failure_artifacts_for_step(wf_info, root_step, key, work_dir):
                     key,
                     exc,
                 )
+
+    failed_task_ids = _extract_failed_task_ids(artifact_root)
+
+    for step in related_steps:
+        step_id = _safe_get(step, "id", "step")
+        step_name = _safe_get(step, "displayName", _safe_get(step, "name", step_id))
+        artifacts = _get_step_artifacts(step)
+        for art_name, artifact in artifacts.items():
+            if art_name.startswith("dflow_"):
+                continue
+            if art_name not in preferred_names or art_name in {"main-logs", "main_logs"}:
+                continue
+            key_tuple = (str(step_id), str(art_name))
+            if key_tuple in seen:
+                continue
+            seen.add(key_tuple)
+            try:
+                if art_name == "backward_dir":
+                    if failed_task_ids:
+                        for task_id in failed_task_ids:
+                            _download_one(
+                                step_name,
+                                step_id,
+                                art_name,
+                                artifact,
+                                _target_dir(step_name, art_name, f"task.{task_id}"),
+                                slice=int(task_id),
+                                remove_catalog=False,
+                            )
+                    else:
+                        logging.warning(
+                            "Could not determine failed task slices for %s; "
+                            "falling back to full backward_dir download.",
+                            key,
+                        )
+                        _download_one(step_name, step_id, art_name, artifact, _target_dir(step_name, art_name))
+                else:
+                    _download_one(step_name, step_id, art_name, artifact, _target_dir(step_name, art_name))
+            except Exception as exc:
+                logging.warning(
+                    "Failed to download artifact %s for step %s (%s): %s",
+                    art_name,
+                    step_name,
+                    key,
+                    exc,
+                )
+    summary = _write_failed_artifact_summary(key, artifact_root)
+    logging.warning(
+        "Failure summary for %s: %s failed task(s), classifications=%s",
+        key,
+        summary.get("failed_task_count", 0),
+        summary.get("classifications", {}),
+    )
     return downloaded
 
 

@@ -67,6 +67,10 @@ class Config:
     vasp_run_command: str = None
     abacus_image_name: str = None
     abacus_run_command: str = None
+    lammps_header_retry_attempts: int = 2
+    lammps_header_retry_delay: float = 5
+    lammps_transient_retry_attempts: int = 1
+    lammps_retry_group_size: int = None
 
     # common APEX config
     is_bohrium_dflow: bool = False
@@ -256,7 +260,11 @@ class Config:
             "vasp_image_name": self.vasp_image_name,
             "vasp_run_command": self.vasp_run_command,
             "abacus_image_name": self.abacus_image_name,
-            "abacus_run_command": self.abacus_run_command
+            "abacus_run_command": self.abacus_run_command,
+            "lammps_header_retry_attempts": self.lammps_header_retry_attempts,
+            "lammps_header_retry_delay": self.lammps_header_retry_delay,
+            "lammps_transient_retry_attempts": self.lammps_transient_retry_attempts,
+            "lammps_retry_group_size": self.lammps_retry_group_size
         }
         return basic_config
 

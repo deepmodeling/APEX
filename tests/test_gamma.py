@@ -74,6 +74,14 @@ class TestGamma(unittest.TestCase):
     def test_task_param(self):
         self.assertEqual(self.prop_param[0], self.gamma.task_param())
 
+    def test_refine_style_gamma_defaults_cal_type(self):
+        gamma = Gamma({
+            "type": "gamma",
+            "init_from_suffix": "00",
+            "output_suffix": "01",
+        })
+        self.assertEqual(gamma.cal_type, "relaxation")
+
     def test_make_confs_bcc(self):
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
             with self.assertRaises(RuntimeError):
@@ -82,6 +90,10 @@ class TestGamma(unittest.TestCase):
             os.path.join(self.source_path, "CONTCAR_Mo_bcc"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
+        with self.assertRaisesRegex(RuntimeError, "result.json"):
+            self.gamma.make_confs(self.target_path, self.equi_path)
+        with open(os.path.join(self.equi_path, "result.json"), "w", encoding="utf-8") as fp:
+            fp.write('{"energies": [-1.0], "atom_numbs": [1]}')
         task_list = self.gamma.make_confs(self.target_path, self.equi_path)
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
         self.assertEqual(len(dfm_dirs), self.gamma.n_steps + 1)
@@ -106,6 +118,33 @@ class TestGamma(unittest.TestCase):
                 z_coord_str = f.readlines()[-1].split()[-2]
                 z_coord = float(z_coord_str)
             self.assertTrue(z_coord <= 1)
+
+    def test_static_gamma_defaults_without_add_fix(self):
+        gamma = Gamma({
+            "type": "gamma",
+            "cal_type": "static",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+        })
+        self.assertIsNone(gamma.add_fix)
+
+    def test_incompatible_lammps_add_fix_fails_clearly(self):
+        gamma = Gamma({
+            "type": "gamma",
+            "cal_type": "static",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "add_fix": ["true", "true", "false"],
+        })
+        task_dir = os.path.join(self.target_path, "task.000000")
+        os.makedirs(task_dir, exist_ok=True)
+        with open(os.path.join(task_dir, "inter.json"), "w", encoding="utf-8") as fp:
+            fp.write('{"type": "deepmd"}')
+        with open(os.path.join(task_dir, "in.lammps"), "w", encoding="utf-8") as fp:
+            fp.write("run 0\n")
+
+        with self.assertRaisesRegex(RuntimeError, "add_fix was requested"):
+            gamma.post_process([task_dir])
 
     def test_compute_lower(self):
         cwd = os.getcwd()

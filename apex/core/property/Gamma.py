@@ -36,6 +36,7 @@ class Gamma(Property):
         self.reprod = parameter["reproduce"]
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
+                parameter["cal_type"] = parameter.get("cal_type", "relaxation")
                 parameter["plane_miller"] = parameter.get("plane_miller", None)
                 self.plane_miller = parameter["plane_miller"]
                 parameter["slip_direction"] = parameter.get("slip_direction", None)
@@ -48,14 +49,18 @@ class Gamma(Property):
                 self.supercell_size = parameter["supercell_size"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
                 self.vacuum_size = parameter["vacuum_size"]
-                parameter["add_fix"] = parameter.get(
-                    "add_fix", ["true", "true", "false"]
-                )  # standard method
+                if parameter["cal_type"] == "static" and "add_fix" not in parameter:
+                    parameter["add_fix"] = None
+                else:
+                    parameter["add_fix"] = parameter.get(
+                        "add_fix", ["true", "true", "false"]
+                    )  # standard method
                 self.add_fix = parameter["add_fix"]
                 parameter["n_steps"] = parameter.get("n_steps", 10)
                 self.n_steps = parameter["n_steps"]
                 self.atom_num = None
-            parameter["cal_type"] = parameter.get("cal_type", "relaxation")
+            else:
+                parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             default_cal_setting = {
                 "relax_pos": True,
                 "relax_shape": False,
@@ -157,7 +162,18 @@ class Gamma(Property):
 
                 equi_contcar = os.path.join(path_to_equi, CONTCAR)
                 if not os.path.exists(equi_contcar):
-                    raise RuntimeError("please do relaxation first")
+                    raise RuntimeError(
+                        "Gamma requires a baseline relaxation before PropsMake. "
+                        "For static gamma scans, run a static baseline relaxation "
+                        "with relax_pos=false, relax_shape=false, and relax_vol=false."
+                    )
+                equi_result = os.path.join(path_to_equi, "result.json")
+                if not os.path.exists(equi_result):
+                    raise RuntimeError(
+                        "Gamma post-processing requires relaxation/relax_task/result.json. "
+                        "Please provide a static baseline relaxation result before "
+                        "running gamma PropsMake."
+                    )
                 # print("we now only support gamma line calculation for BCC FCC and HCP metals")
                 # print(
                 #    f"supported slip systems are:\n{SlabSlipSystem.hint_string()}"
@@ -451,6 +467,8 @@ class Gamma(Property):
         )
         with open(inLammps, "r") as fin1:
             contents = fin1.readlines()
+            lower_id = None
+            upper_id = None
             for ii in range(len(contents)):
                 upper = contents[ii].split()[:3] == ["variable", "N", "equal"]
                 lower = re.search("min_style       cg", contents[ii])
@@ -460,6 +478,13 @@ class Gamma(Property):
                 elif upper:
                     upper_id = ii
                     # print(upper_id)
+            if lower_id is None or upper_id is None or lower_id >= upper_id:
+                raise RuntimeError(
+                    "Gamma add_fix was requested, but in.lammps does not contain "
+                    "a compatible minimization block to patch. For static gamma "
+                    "calculations set add_fix to null, or use a relaxation-style "
+                    "LAMMPS input with min_style cg and variable N equal markers."
+                )
             del contents[lower_id + 1:upper_id - 1]
             contents.insert(lower_id + 1, add_fix_str)
         with open(inLammps, "w") as fin2:

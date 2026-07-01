@@ -4,6 +4,8 @@ import os
 import glob
 import shutil
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 from dflow.python import (
     OP,
@@ -15,8 +17,17 @@ from dflow.python import (
 from monty.serialization import loadfn
 
 from apex.op.relaxation_ops import RelaxMake, _check_relaxation_outputs
-from apex.op.property_ops import PropsMake, _is_failed_task_status
+from apex.op.property_ops import PropsMake, PropsPost, PropsRepairStatusCheck, _is_failed_task_status
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.superop.SimplePropertySteps import SimplePropertySteps
+from apex.task_failure import (
+    REMOTE_LAMMPS_STARTUP_FAILURE,
+    classify_apex_task_status,
+    classify_lammps_exit_code,
+    is_header_only_lammps_failure,
+    is_lammps_header_only_log,
+    load_and_classify_task_status,
+)
 from apex.utils import apex_task_succeeded, all_apex_task_status_succeeded
 try:
     from context import write_poscar
@@ -28,6 +39,50 @@ __package__ = "tests"
 
 
 class TestTaskStatusHelpers(unittest.TestCase):
+    def test_task_failure_helpers_cover_error_branches(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            (task_dir / "log.lammps").write_text("LAMMPS (29 Aug 2024)\n")
+            self.assertTrue(is_lammps_header_only_log(task_dir / "log.lammps"))
+            self.assertTrue(is_header_only_lammps_failure(task_dir, 1))
+
+            (task_dir / "CONTCAR").write_text("finished\n")
+            self.assertFalse(is_header_only_lammps_failure(task_dir, 1))
+
+            broken_status = task_dir / "broken_status.json"
+            broken_status.write_text("{not-json")
+            self.assertEqual(
+                load_and_classify_task_status(broken_status)["reason"],
+                "invalid_task_status",
+            )
+
+            valid_status = task_dir / "apex_task_status.json"
+            valid_status.write_text('{"state": "failed", "exit_code": "bad"}')
+            self.assertEqual(
+                load_and_classify_task_status(valid_status)["reason"],
+                "unknown_failure",
+            )
+
+        self.assertEqual(classify_lammps_exit_code(None)["reason"], "unknown_failure")
+        self.assertEqual(classify_lammps_exit_code(126)["reason"], "command_not_executable")
+        self.assertEqual(classify_lammps_exit_code(129)["reason"], "killed_or_oom")
+        self.assertEqual(classify_apex_task_status(None)["reason"], "invalid_task_status")
+        self.assertEqual(
+            classify_apex_task_status({"state": "failed", "exit_code": "not-int"})["reason"],
+            "unknown_failure",
+        )
+        self.assertEqual(
+            classify_apex_task_status({"state": "failed", "exit_code": 0})["reason"],
+            "invalid_task_status",
+        )
+
+    def test_lammps_header_only_log_treats_read_error_as_not_header_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "log.lammps"
+            log_path.write_text("LAMMPS (29 Aug 2024)\n")
+            with patch("apex.task_failure.Path.read_text", side_effect=OSError("boom")):
+                self.assertFalse(is_lammps_header_only_log(log_path))
+
     def test_failed_status_uses_apex_task_status_fields(self):
         self.assertFalse(_is_failed_task_status({
             "state": "succeeded",
@@ -59,6 +114,183 @@ class TestTaskStatusHelpers(unittest.TestCase):
 
             (task1 / "apex_task_status.json").write_text('{"state": "succeeded", "exit_code": 7}')
             self.assertTrue(all_apex_task_status_succeeded(work_dir))
+
+    def test_props_repair_status_check_summarizes_remote_startup_failures(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            prop_dir = input_post / "confs" / "std-bcc" / "elastic_00"
+            task_dir = prop_dir / "task.000003"
+            (input_all / "confs").mkdir(parents=True)
+            task_dir.mkdir(parents=True)
+            (task_dir / "apex_task_status.json").write_text(
+                '{"state": "failed", "reason": "nonzero_exit", "exit_code": 1, '
+                '"retry_reason": "header_only_lammps_log_after_nonzero_exit"}'
+            )
+            (task_dir / "log.lammps").write_text("LAMMPS (29 Aug 2024)\n")
+
+            op = PropsRepairStatusCheck()
+            out = op.execute(OPIO({
+                "input_post": input_post,
+                "input_all": input_all,
+                "task_names": ["confs/std-bcc/elastic_00/task.000003"],
+                "path_to_prop": "confs/std-bcc/elastic_00",
+            }))
+
+            self.assertEqual(out["checked_post"], input_post)
+            summary = loadfn(prop_dir / "run_status_check.json")
+            self.assertEqual(
+                summary["retry_eligible_tasks"][0]["reason"],
+                REMOTE_LAMMPS_STARTUP_FAILURE,
+            )
+
+    def test_props_repair_status_check_short_circuits_empty_or_missing_inputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            (input_all / "confs").mkdir(parents=True)
+            input_post.mkdir()
+
+            op = PropsRepairStatusCheck()
+            empty_out = op.execute(OPIO({
+                "input_post": input_post,
+                "input_all": input_all,
+                "task_names": [],
+                "path_to_prop": "confs/std-bcc/eos_00",
+            }))
+            self.assertEqual(empty_out["checked_post"], input_post)
+
+            missing_src_out = op.execute(OPIO({
+                "input_post": input_post,
+                "input_all": input_all,
+                "task_names": ["confs/std-bcc/eos_00/task.000000"],
+                "path_to_prop": "confs/std-bcc/eos_00",
+            }))
+            self.assertEqual(missing_src_out["checked_post"], input_post)
+
+    def test_props_post_reports_lammps_status_failures_before_compute(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = os.getcwd()
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            prop_dir = input_post / "confs" / "std-bcc" / "eos_00"
+            task_dir = prop_dir / "task.000000"
+            (input_all / "confs").mkdir(parents=True)
+            task_dir.mkdir(parents=True)
+            (task_dir / "apex_task_status.json").write_text(
+                '{"state": "failed", "reason": "nonzero_exit", "exit_code": 7}'
+            )
+
+            try:
+                with self.assertRaisesRegex(RuntimeError, "LAMMPS failed for property task"):
+                    PropsPost().execute(OPIO({
+                        "input_post": input_post,
+                        "input_all": input_all,
+                        "prop_param": {"type": "eos"},
+                        "inter_param": {"type": "deepmd", "model": "model.pb"},
+                        "task_names": ["confs/std-bcc/eos_00/task.000000"],
+                        "path_to_prop": "confs/std-bcc/eos_00",
+                    }))
+            finally:
+                os.chdir(cwd)
+
+
+class TestSimplePropertySteps(unittest.TestCase):
+    def test_lammps_repair_step_feeds_checked_post_to_post_step(self):
+        import apex.superop.SimplePropertySteps as simple_steps
+
+        added_steps = []
+
+        class FakeTemplate:
+            def __init__(self, op, **kwargs):
+                self.op = op
+                self.kwargs = kwargs
+
+        class FakeStep:
+            def __init__(self, name, template=None, artifacts=None, parameters=None,
+                         with_param=None, key=None, executor=None):
+                self.name = name
+                self.template = template
+                self.artifacts = artifacts or {}
+                self.parameters = parameters or {}
+                self.with_param = with_param
+                self.key = key
+                self.executor = executor
+                self.outputs = SimpleNamespace(
+                    artifacts={
+                        "task_paths": f"{name}-task_paths",
+                        "output_work_path": f"{name}-output_work_path",
+                        "backward_dir": f"{name}-backward_dir",
+                        "checked_post": f"{name}-checked_post",
+                        "retrieve_path": f"{name}-retrieve_path",
+                    },
+                    parameters={
+                        "task_names": f"{name}-task_names",
+                        "njobs": f"{name}-njobs",
+                    },
+                )
+
+        def fake_add(self, step):
+            added_steps.append(step)
+
+        obj = SimplePropertySteps.__new__(SimplePropertySteps)
+        object.__setattr__(obj, "inputs", SimpleNamespace(
+            parameters={
+                "prop_param": "prop-param",
+                "inter_param": "inter-param",
+                "do_refine": False,
+                "path_to_prop": "confs/std-bcc/eos_00",
+            },
+            artifacts={"input_work_path": "input-work"},
+        ))
+        object.__setattr__(obj, "outputs", SimpleNamespace(
+            artifacts={"retrieve_path": SimpleNamespace(_from=None)}
+        ))
+        object.__setattr__(obj, "step_keys", {
+            "make": "props-make",
+            "run": "props-run",
+            "post": "props-post",
+        })
+
+        with patch.object(simple_steps, "Step", FakeStep), \
+                patch.object(simple_steps, "PythonOPTemplate", FakeTemplate), \
+                patch.object(simple_steps, "Slices", lambda *args, **kwargs: ("slices", args, kwargs)), \
+                patch.object(simple_steps, "argo_range", lambda value: f"range:{value}"), \
+                patch.object(simple_steps, "argo_len", lambda value: f"len:{value}"), \
+                patch.object(SimplePropertySteps, "add", fake_add):
+            obj._build(
+                "step",
+                make_op=object(),
+                run_op=object(),
+                post_op=object(),
+                make_image="make-image",
+                run_image="run-image",
+                post_image="post-image",
+                run_command="lmp -in in.lammps",
+                calculator="lammps",
+                upload_python_packages=[],
+                group_size=1,
+                pool_size=1,
+                executor=None,
+                repair_op=object(),
+            )
+
+        self.assertEqual(
+            [step.name for step in added_steps],
+            ["Props-make", "PropsLAMMPS-Cal", "Props-run-status-check", "Props-post"],
+        )
+        post_step = added_steps[-1]
+        self.assertEqual(
+            post_step.artifacts["input_post"],
+            "Props-run-status-check-checked_post",
+        )
+        self.assertEqual(
+            obj.outputs.artifacts["retrieve_path"]._from,
+            "Props-post-retrieve_path",
+        )
 
 
 class TestRunLAMMPSDebug(unittest.TestCase):
@@ -99,14 +331,40 @@ class TestRunLAMMPSDebug(unittest.TestCase):
             self.assertTrue((task_dir / ".debug.log").is_file())
             status = loadfn(task_dir / "apex_task_status.json")
             self.assertEqual(status["state"], "failed")
-            self.assertEqual(status["reason"], "nonzero_exit")
+            self.assertEqual(status["reason"], "nonzero_lammps_error")
             self.assertEqual(status["exit_code"], 7)
             self.assertEqual(status["debug_log"], ".debug.log")
 
     def test_run_lammps_classifies_common_exit_codes(self):
         self.assertEqual(RunLAMMPS._classify_exit_code(127)["reason"], "command_not_found")
+        self.assertEqual(RunLAMMPS._classify_exit_code(124)["reason"], "timeout")
         self.assertEqual(RunLAMMPS._classify_exit_code(137)["reason"], "killed_or_oom")
         self.assertEqual(RunLAMMPS._classify_exit_code(143)["reason"], "terminated")
+        self.assertEqual(
+            RunLAMMPS._runtime_int_option(
+                "APEX_LAMMPS_HEADER_RETRY=3 lmp -in in.lammps",
+                "APEX_LAMMPS_HEADER_RETRY",
+                2,
+            ),
+            3,
+        )
+        self.assertEqual(
+            RunLAMMPS._runtime_int_option(
+                "APEX_LAMMPS_HEADER_RETRY=bad lmp -in in.lammps",
+                "APEX_LAMMPS_HEADER_RETRY",
+                2,
+            ),
+            2,
+        )
+        self.assertEqual(
+            RunLAMMPS._runtime_float_option(
+                "APEX_LAMMPS_HEADER_RETRY_DELAY=bad lmp -in in.lammps",
+                "APEX_LAMMPS_HEADER_RETRY_DELAY",
+                5.0,
+            ),
+            5.0,
+        )
+        self.assertFalse(RunLAMMPS._is_lammps_header_only_log(Path("missing-log")))
 
     def test_run_lammps_retries_header_only_failure(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -124,10 +382,11 @@ class TestRunLAMMPSDebug(unittest.TestCase):
                 "Path('stress_timeseries.txt').write_text('0 0 0 0 0 0 0\\n')\n"
             )
             op = RunLAMMPS()
-            op.execute(OPIO({
-                "input_lammps": task_dir,
-                "run_command": f"{sys.executable} {script.name}",
-            }))
+            with patch.dict(os.environ, {"APEX_LAMMPS_HEADER_RETRY_DELAY": "0"}):
+                op.execute(OPIO({
+                    "input_lammps": task_dir,
+                    "run_command": f"{sys.executable} {script.name}",
+                }))
 
             self.assertEqual((task_dir / "count.txt").read_text(), "2")
             self.assertTrue((task_dir / "log.lammps.attempt1").is_file())
@@ -135,6 +394,29 @@ class TestRunLAMMPSDebug(unittest.TestCase):
             self.assertEqual(status["state"], "succeeded")
             self.assertEqual(status["attempts"], 2)
             self.assertEqual(status["retry_reason"], "header_only_lammps_log_after_nonzero_exit")
+            self.assertEqual(status["retry_classification"], REMOTE_LAMMPS_STARTUP_FAILURE)
+
+    def test_run_lammps_classifies_persistent_header_only_failure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            script = task_dir / "always_header_only.py"
+            script.write_text(
+                "from pathlib import Path\n"
+                "Path('log.lammps').write_text('LAMMPS (29 Aug 2024)\\n')\n"
+                "Path('outlog').write_text('LAMMPS (29 Aug 2024)\\n')\n"
+                "raise SystemExit(1)\n"
+            )
+            op = RunLAMMPS()
+            with patch.dict(os.environ, {"APEX_LAMMPS_HEADER_RETRY_DELAY": "0"}):
+                op.execute(OPIO({
+                    "input_lammps": task_dir,
+                    "run_command": f"{sys.executable} {script.name}",
+                }))
+
+            status = loadfn(task_dir / "apex_task_status.json")
+            self.assertEqual(status["state"], "failed")
+            self.assertEqual(status["reason"], REMOTE_LAMMPS_STARTUP_FAILURE)
+            self.assertEqual(status["attempts"], 2)
 
 
 class TestMakeRelaxOPs(unittest.TestCase):

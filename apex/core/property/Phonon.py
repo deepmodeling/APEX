@@ -30,6 +30,60 @@ class Phonon(Property):
         executable = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
         return f"{executable} {arguments}"
 
+    @staticmethod
+    def phonopy_command(arguments: str) -> str:
+        return f"phonopy {arguments}"
+
+    @staticmethod
+    def phonopy_writefc_commands(arguments: str) -> List[str]:
+        setup_command = Phonon.phonopy_setup_command(arguments)
+        phonopy_command = Phonon.phonopy_command(arguments)
+        if setup_command == phonopy_command:
+            return [setup_command]
+        return [setup_command, phonopy_command]
+
+    @staticmethod
+    def run_first_success(commands: List[str], required_file: str | None = None) -> None:
+        errors = []
+        for command in commands:
+            try:
+                subprocess.check_call(command, shell=True)
+            except subprocess.CalledProcessError as exc:
+                errors.append(exc)
+                continue
+            if required_file is None or os.path.isfile(required_file):
+                return
+            errors.append(FileNotFoundError(f"{required_file} was not created by: {command}"))
+        if errors:
+            raise errors[-1]
+
+    @staticmethod
+    def write_band_dat() -> None:
+        if not os.path.isfile("band.yaml"):
+            raise FileNotFoundError("band.yaml was not created")
+        with open("band.dat", "w") as fp:
+            result = subprocess.run(
+                ["phonopy-bandplot", "--gnuplot", "band.yaml"],
+                stdout=fp,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        if result.returncode == 0:
+            return
+        if os.path.isfile("band.dat") and os.path.getsize("band.dat") > 0:
+            logging.warning(
+                "phonopy-bandplot exited with code %s after writing band.dat; continuing. stderr: %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+            return
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            ["phonopy-bandplot", "--gnuplot", "band.yaml"],
+            output=None,
+            stderr=result.stderr,
+        )
+
     def __init__(self, parameter, inter_param=None):
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
@@ -529,7 +583,7 @@ class Phonon(Property):
 
     @staticmethod
     def check_same_copy(src, dst):
-        if os.path.samefile(src, dst):
+        if os.path.exists(dst) and os.path.samefile(src, dst):
             return
         shutil.copyfile(src, dst)
 
@@ -537,90 +591,110 @@ class Phonon(Property):
         cwd = Path.cwd()
         work_path = Path(output_file).parent.absolute()
         output_file = os.path.abspath(output_file)
+        resolved_tasks = []
+        for task in all_tasks:
+            task_path = Path(task)
+            if task_path.is_absolute():
+                resolved_tasks.append(str(task_path))
+            elif (cwd / task_path).exists():
+                resolved_tasks.append(str((cwd / task_path).absolute()))
+            elif task_path.parent == Path("."):
+                resolved_tasks.append(str((work_path / task_path).absolute()))
+            else:
+                resolved_tasks.append(str((cwd / task_path).absolute()))
+        all_tasks = resolved_tasks
         res_data = {}
         ptr_data = os.path.dirname(output_file) + "\n"
 
         band_path = loadfn(os.path.join(work_path, "band_path.json"))
 
-        if not self.reprod:
-            os.chdir(work_path)
-            if self.inter_param["type"] == 'abacus':
-                self.check_same_copy("task.000000/band.conf", "band.conf")
-                self.check_same_copy("task.000000/STRU.ori", "STRU")
-                self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                os.system(self.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
-                if os.path.exists("FORCE_SETS"):
+        try:
+            if not self.reprod:
+                os.chdir(work_path)
+                if self.inter_param["type"] == 'abacus':
+                    self.check_same_copy("task.000000/band.conf", "band.conf")
+                    self.check_same_copy("task.000000/STRU.ori", "STRU")
+                    self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
+                    subprocess.check_call(
+                        self.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"),
+                        shell=True,
+                    )
+                    if not os.path.exists("FORCE_SETS"):
+                        raise FileNotFoundError("FORCE_SETS was not created")
                     print('FORCE_SETS is created')
-                else:
-                    logging.warning('FORCE_SETS can not be created')
-                os.system('phonopy band.conf --abacus')
-                os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+                    subprocess.check_call(self.phonopy_command("band.conf"), shell=True)
+                    self.write_band_dat()
 
-            elif self.inter_param["type"] == 'vasp':
-                self.check_same_copy("task.000000/band.conf", "band.conf")
-                self.check_same_copy("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
+                elif self.inter_param["type"] == 'vasp':
+                    self.check_same_copy("task.000000/band.conf", "band.conf")
+                    if not os.path.exists("POSCAR-unitcell"):
+                        self.check_same_copy("task.000000/POSCAR-unitcell", "POSCAR-unitcell")
 
-                if self.approach == "linear":
-                    os.chdir(all_tasks[0])
-                    assert os.path.isfile('vasprun.xml'), "vasprun.xml not found"
-                    os.system(self.phonopy_setup_command("--fc vasprun.xml"))
-                    assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
-                    os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
+                    if self.approach == "linear":
+                        os.chdir(all_tasks[0])
+                        assert os.path.isfile('vasprun.xml'), "vasprun.xml not found"
+                        subprocess.check_call(self.phonopy_setup_command("--fc vasprun.xml"), shell=True)
+                        assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
+                        subprocess.check_call(self.phonopy_command('--dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
+                                self.supercell_size[0],
+                                self.supercell_size[1],
+                                self.supercell_size[2])), shell=True)
+                        self.write_band_dat()
+                        print('band.dat is created')
+                        shutil.copyfile("band.dat", work_path/"band.dat")
+
+                    elif self.approach == "displacement":
+                        self.check_same_copy("task.000000/band.conf", "band.conf")
+                        self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
+                        subprocess.check_call(self.phonopy_setup_command("-f task.0*/vasprun.xml"), shell=True)
+                        if not os.path.exists("FORCE_SETS"):
+                            raise FileNotFoundError("FORCE_SETS was not created")
+                        print('FORCE_SETS is created')
+                        subprocess.check_call(self.phonopy_command('--dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
                             self.supercell_size[0],
                             self.supercell_size[1],
-                            self.supercell_size[2]))
-                    os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
-                    print('band.dat is created')
+                            self.supercell_size[2])), shell=True)
+                        self.write_band_dat()
+
+                elif self.inter_param["type"] in LAMMPS_INTER_TYPE:
+                    os.chdir(all_tasks[0])
+                    assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
+                    subprocess.check_call(self.phonopy_command('--dim="%s %s %s" -c POSCAR band.conf' % (
+                        self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+                        ), shell=True)
+                    self.write_band_dat()
                     shutil.copyfile("band.dat", work_path/"band.dat")
 
-                elif self.approach == "displacement":
-                    self.check_same_copy("task.000000/band.conf", "band.conf")
-                    self.check_same_copy("task.000000/phonopy_disp.yaml", "phonopy_disp.yaml")
-                    os.system(self.phonopy_setup_command("-f task.0*/vasprun.xml"))
-                    if os.path.exists("FORCE_SETS"):
-                        print('FORCE_SETS is created')
-                    else:
-                        logging.warning('FORCE_SETS can not be created')
-                    os.system('phonopy --dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
-                        self.supercell_size[0],
-                        self.supercell_size[1],
-                        self.supercell_size[2]))
-                    os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
+            else:
+                if "init_data_path" not in self.parameter:
+                    raise RuntimeError("please provide the initial data path to reproduce")
+                init_data_path = os.path.abspath(self.parameter["init_data_path"])
+                res_data, ptr_data = post_repro(
+                    init_data_path,
+                    self.parameter["init_from_suffix"],
+                    all_tasks,
+                    ptr_data,
+                    self.parameter.get("reprod_last_frame", True),
+                )
 
-            elif self.inter_param["type"] in LAMMPS_INTER_TYPE:
-                os.chdir(all_tasks[0])
-                assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
-                os.system('phonopy --dim="%s %s %s" -c POSCAR band.conf' % (
-                    self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
-                    )
-                os.system('phonopy-bandplot --gnuplot band.yaml > band.dat')
-                shutil.copyfile("band.dat", work_path/"band.dat")
+            os.chdir(work_path)
+            if not os.path.isfile("band.dat"):
+                raise FileNotFoundError("band.dat was not created")
+            with open('band.dat', 'r') as f:
+                ptr_data = f.read()
 
-        else:
-            if "init_data_path" not in self.parameter:
-                raise RuntimeError("please provide the initial data path to reproduce")
-            init_data_path = os.path.abspath(self.parameter["init_data_path"])
-            res_data, ptr_data = post_repro(
-                init_data_path,
-                self.parameter["init_from_suffix"],
-                all_tasks,
-                ptr_data,
-                self.parameter.get("reprod_last_frame", True),
-            )
+            if len(ptr_data.split('\n')) < 2:
+                raise ValueError("band.dat is empty or malformed")
+            result_points = ptr_data.split('\n')[1][4:].split()
+            result_lines = ptr_data.split('\n')[2:]
+            unpacked_lines = self.unpack_band('\n'.join(result_lines))
+            res_data['segment'] = result_points
+            res_data['band_path'] = band_path
+            res_data['band'] = unpacked_lines
 
-        os.chdir(work_path)
-        with open('band.dat', 'r') as f:
-            ptr_data = f.read()
+            with open(output_file, "w") as fp:
+                json.dump(res_data, fp, indent=4)
 
-        result_points = ptr_data.split('\n')[1][4:].split()
-        result_lines = ptr_data.split('\n')[2:]
-        unpacked_lines = self.unpack_band('\n'.join(result_lines))
-        res_data['segment'] = result_points
-        res_data['band_path'] = band_path
-        res_data['band'] = unpacked_lines
-
-        with open(output_file, "w") as fp:
-            json.dump(res_data, fp, indent=4)
-
-        os.chdir(cwd)
-        return res_data, ptr_data
+            return res_data, ptr_data
+        finally:
+            os.chdir(cwd)
