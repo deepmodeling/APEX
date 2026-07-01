@@ -2,9 +2,12 @@ import unittest
 import tempfile
 import os
 import json
+from unittest.mock import patch
 
+import apex.submit as submit_module
 from apex.submit import (
     _with_lammps_retry_env,
+    submit_workflow,
     validate_submit_paths,
     auto_fill_type_map_from_poscar,
     pack_upload_dir,
@@ -26,6 +29,70 @@ class TestSubmitPathValidation(unittest.TestCase):
         self.assertIn("APEX_LAMMPS_HEADER_RETRY_DELAY=0.25", wrapped)
         self.assertIn("APEX_LAMMPS_TRANSIENT_RETRY=2", wrapped)
         self.assertTrue(wrapped.endswith("lmp -in in.lammps"))
+
+    def test_submit_workflow_wraps_lammps_run_command(self):
+        captured = {}
+
+        class DummyConfig:
+            remote_root = None
+            dispatcher_config_dict = {}
+            dflow_config_dict = {}
+            bohrium_config_dict = {}
+            dflow_s3_config_dict = {}
+            database_type = "local"
+            submit_only = False
+            flow_name = None
+            lammps_header_retry_attempts = 4
+            lammps_header_retry_delay = 0.25
+            lammps_transient_retry_attempts = 2
+
+            def __init__(self, **_kwargs):
+                self.basic_config_dict = {
+                    "apex_image_name": "apex-image",
+                    "lammps_image_name": "",
+                    "run_image_name": "run-image",
+                    "lammps_run_command": "",
+                    "run_command": "lmp -in in.lammps",
+                    "phonolammps_run_command": "",
+                    "group_size": 1,
+                    "pool_size": 1,
+                    "upload_python_packages": [],
+                }
+
+            @staticmethod
+            def config_dflow(_config):
+                return None
+
+            @staticmethod
+            def config_bohrium(_config):
+                return None
+
+            @staticmethod
+            def config_s3(_config):
+                return None
+
+            def get_executor(self, _config):
+                return None
+
+        class DummyFlow:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+        with tempfile.TemporaryDirectory() as work_dir, \
+                patch.object(submit_module, "validate_submit_paths"), \
+                patch.object(submit_module, "Config", DummyConfig), \
+                patch.object(
+                    submit_module,
+                    "judge_flow",
+                    return_value=(object(), "lammps", "props", None, {"properties": []}),
+                ), \
+                patch.object(submit_module, "FlowGenerator", DummyFlow), \
+                patch.object(submit_module, "submit") as mocked_submit:
+            submit_workflow([{}], {}, [work_dir], "props", submit_only=True)
+
+        self.assertIn("APEX_LAMMPS_HEADER_RETRY=4", captured["run_command"])
+        self.assertTrue(captured["run_command"].endswith("lmp -in in.lammps"))
+        mocked_submit.assert_called_once()
 
     def test_accept_paths_without_dot(self):
         params = [

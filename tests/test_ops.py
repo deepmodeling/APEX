@@ -17,7 +17,7 @@ from dflow.python import (
 from monty.serialization import loadfn
 
 from apex.op.relaxation_ops import RelaxMake, _check_relaxation_outputs
-from apex.op.property_ops import PropsMake, PropsRepairStatusCheck, _is_failed_task_status
+from apex.op.property_ops import PropsMake, PropsPost, PropsRepairStatusCheck, _is_failed_task_status
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.task_failure import (
@@ -150,7 +150,7 @@ class TestTaskStatusHelpers(unittest.TestCase):
             root = Path(tmpdir)
             input_all = root / "all"
             input_post = root / "post"
-            input_all.mkdir()
+            (input_all / "confs").mkdir(parents=True)
             input_post.mkdir()
 
             op = PropsRepairStatusCheck()
@@ -169,6 +169,33 @@ class TestTaskStatusHelpers(unittest.TestCase):
                 "path_to_prop": "confs/std-bcc/eos_00",
             }))
             self.assertEqual(missing_src_out["checked_post"], input_post)
+
+    def test_props_post_reports_lammps_status_failures_before_compute(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = os.getcwd()
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            prop_dir = input_post / "confs" / "std-bcc" / "eos_00"
+            task_dir = prop_dir / "task.000000"
+            (input_all / "confs").mkdir(parents=True)
+            task_dir.mkdir(parents=True)
+            (task_dir / "apex_task_status.json").write_text(
+                '{"state": "failed", "reason": "nonzero_exit", "exit_code": 7}'
+            )
+
+            try:
+                with self.assertRaisesRegex(RuntimeError, "LAMMPS failed for property task"):
+                    PropsPost().execute(OPIO({
+                        "input_post": input_post,
+                        "input_all": input_all,
+                        "prop_param": {"type": "eos"},
+                        "inter_param": {"type": "deepmd", "model": "model.pb"},
+                        "task_names": ["confs/std-bcc/eos_00/task.000000"],
+                        "path_to_prop": "confs/std-bcc/eos_00",
+                    }))
+            finally:
+                os.chdir(cwd)
 
 
 class TestSimplePropertySteps(unittest.TestCase):

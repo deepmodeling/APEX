@@ -74,6 +74,14 @@ class TestGamma(unittest.TestCase):
     def test_task_param(self):
         self.assertEqual(self.prop_param[0], self.gamma.task_param())
 
+    def test_refine_style_gamma_defaults_cal_type(self):
+        gamma = Gamma({
+            "type": "gamma",
+            "init_from_suffix": "00",
+            "output_suffix": "01",
+        })
+        self.assertEqual(gamma.cal_type, "relaxation")
+
     def test_make_confs_bcc(self):
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
             with self.assertRaises(RuntimeError):
@@ -82,6 +90,8 @@ class TestGamma(unittest.TestCase):
             os.path.join(self.source_path, "CONTCAR_Mo_bcc"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
+        with self.assertRaisesRegex(RuntimeError, "result.json"):
+            self.gamma.make_confs(self.target_path, self.equi_path)
         with open(os.path.join(self.equi_path, "result.json"), "w", encoding="utf-8") as fp:
             fp.write('{"energies": [-1.0], "atom_numbs": [1]}')
         task_list = self.gamma.make_confs(self.target_path, self.equi_path)
