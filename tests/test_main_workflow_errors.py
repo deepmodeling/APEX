@@ -378,6 +378,40 @@ class WorkflowQueryErrorTest(unittest.TestCase):
         self.assertEqual(summary["failed_task_count"], 1)
         self.assertEqual(summary["classifications"]["remote_lammps_startup_failure"], 1)
 
+    def test_extract_failed_task_ids_ignores_unrelated_files(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(os.path.join(tmpdir, "notes.txt"), "w", encoding="utf-8") as fp:
+                fp.write("unrelated task.000001 text\n")
+            with open(os.path.join(tmpdir, "main.log"), "w", encoding="utf-8") as fp:
+                fp.write("LAMMPS failed for task.000002\n")
+
+            self.assertEqual(apex_main._extract_failed_task_ids(tmpdir), ["000002"])
+
+    def test_download_failure_artifacts_continues_after_main_log_download_error(self):
+        root_step = {
+            "id": "post-001",
+            "displayName": "Props-post",
+            "outputs": {
+                "artifacts": {
+                    "main-logs": "logs-artifact",
+                }
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch(
+                    "apex.main._download_artifact_with_retry",
+                    side_effect=RuntimeError("storage temporarily unavailable"),
+            ):
+                downloaded = apex_main._download_failure_artifacts_for_step(
+                    wf_info=FakeStepInfo(),
+                    root_step=root_step,
+                    key="propertycal-confs-std-bcc-elastic-00",
+                    work_dir=tmpdir,
+                )
+
+        self.assertEqual(downloaded, 0)
+
     def test_failure_artifact_helpers_handle_invalid_status_and_fallback_downloads(self):
         class RelatedStepInfo:
             def get_step(self, parent_id=None, sort_by_generation=False, key=None):

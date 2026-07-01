@@ -298,6 +298,30 @@ class TestPhonon(unittest.TestCase):
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
+    def test_compute_lower_reproduce_requires_band_dat_from_post_repro(self):
+        work_dir = Path("output/phonon_reproduce_missing_band")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        self._write_phonon_compute_common(work_dir)
+        init_dir = work_dir / "init"
+        init_dir.mkdir()
+
+        try:
+            phonon = Phonon(
+                {
+                    "type": "phonon",
+                    "reproduce": True,
+                    "init_from_suffix": "old",
+                    "output_suffix": "new",
+                    "init_data_path": str(init_dir),
+                },
+                inter_param={"type": "vasp"},
+            )
+            with patch("apex.core.property.Phonon.post_repro", return_value=({}, "")):
+                with self.assertRaisesRegex(FileNotFoundError, "band.dat was not created"):
+                    phonon._compute_lower(str(work_dir / "result.json"), [], [])
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
     def test_compute_lower_abacus_uses_phonopy_init_for_forces_and_phonopy_for_band(self):
         work_dir = Path("output/phonon_abacus_compute")
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -329,6 +353,26 @@ class TestPhonon(unittest.TestCase):
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
             self.assertEqual(calls[1], Phonon.phonopy_command("band.conf"))
             self.assertFalse(any("--abacus" in command and command.startswith("phonopy band.conf") for command in calls))
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_compute_lower_abacus_requires_force_sets_after_setup(self):
+        work_dir = Path("output/phonon_abacus_missing_force_sets")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        self._write_phonon_compute_common(work_dir)
+        task_dir = work_dir / "task.000000"
+        (task_dir / "OUT.ABACUS").mkdir(parents=True)
+        (task_dir / "band.conf").write_text((work_dir / "band.conf").read_text())
+        (task_dir / "STRU.ori").write_text("STRU\n")
+        (work_dir / "STRU").write_text("STRU\n")
+        (task_dir / "phonopy_disp.yaml").write_text((work_dir / "phonopy_disp.yaml").read_text())
+        (task_dir / "OUT.ABACUS" / "running_scf.log").write_text("force log\n")
+
+        try:
+            phonon = Phonon({"type": "phonon"}, inter_param={"type": "abacus"})
+            with patch("apex.core.property.Phonon.subprocess.check_call", return_value=0):
+                with self.assertRaisesRegex(FileNotFoundError, "FORCE_SETS was not created"):
+                    phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -395,6 +439,28 @@ class TestPhonon(unittest.TestCase):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/vasprun.xml"))
             self.assertEqual(calls[1], Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'))
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_compute_lower_vasp_displacement_requires_force_sets_after_setup(self):
+        work_dir = Path("output/phonon_vasp_displacement_missing_force_sets")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        self._write_phonon_compute_common(work_dir)
+        task_dir = work_dir / "task.000000"
+        task_dir.mkdir(parents=True)
+        (task_dir / "band.conf").write_text((work_dir / "band.conf").read_text())
+        (task_dir / "phonopy_disp.yaml").write_text((work_dir / "phonopy_disp.yaml").read_text())
+        (work_dir / "POSCAR-unitcell").write_text("POSCAR\n")
+        (task_dir / "vasprun.xml").write_text("<modeling />\n")
+
+        try:
+            phonon = Phonon(
+                {"type": "phonon", "supercell_size": [2, 2, 2], "approach": "displacement"},
+                inter_param={"type": "vasp"},
+            )
+            with patch("apex.core.property.Phonon.subprocess.check_call", return_value=0):
+                with self.assertRaisesRegex(FileNotFoundError, "FORCE_SETS was not created"):
+                    phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 

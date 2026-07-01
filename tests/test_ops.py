@@ -4,6 +4,8 @@ import os
 import glob
 import shutil
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 from dflow.python import (
     OP,
@@ -17,6 +19,7 @@ from monty.serialization import loadfn
 from apex.op.relaxation_ops import RelaxMake, _check_relaxation_outputs
 from apex.op.property_ops import PropsMake, PropsRepairStatusCheck, _is_failed_task_status
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.task_failure import (
     REMOTE_LAMMPS_STARTUP_FAILURE,
     classify_apex_task_status,
@@ -72,6 +75,13 @@ class TestTaskStatusHelpers(unittest.TestCase):
             classify_apex_task_status({"state": "failed", "exit_code": 0})["reason"],
             "invalid_task_status",
         )
+
+    def test_lammps_header_only_log_treats_read_error_as_not_header_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "log.lammps"
+            log_path.write_text("LAMMPS (29 Aug 2024)\n")
+            with patch("apex.task_failure.Path.read_text", side_effect=OSError("boom")):
+                self.assertFalse(is_lammps_header_only_log(log_path))
 
     def test_failed_status_uses_apex_task_status_fields(self):
         self.assertFalse(_is_failed_task_status({
@@ -134,6 +144,126 @@ class TestTaskStatusHelpers(unittest.TestCase):
                 summary["retry_eligible_tasks"][0]["reason"],
                 REMOTE_LAMMPS_STARTUP_FAILURE,
             )
+
+    def test_props_repair_status_check_short_circuits_empty_or_missing_inputs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            input_all.mkdir()
+            input_post.mkdir()
+
+            op = PropsRepairStatusCheck()
+            empty_out = op.execute(OPIO({
+                "input_post": input_post,
+                "input_all": input_all,
+                "task_names": [],
+                "path_to_prop": "confs/std-bcc/eos_00",
+            }))
+            self.assertEqual(empty_out["checked_post"], input_post)
+
+            missing_src_out = op.execute(OPIO({
+                "input_post": input_post,
+                "input_all": input_all,
+                "task_names": ["confs/std-bcc/eos_00/task.000000"],
+                "path_to_prop": "confs/std-bcc/eos_00",
+            }))
+            self.assertEqual(missing_src_out["checked_post"], input_post)
+
+
+class TestSimplePropertySteps(unittest.TestCase):
+    def test_lammps_repair_step_feeds_checked_post_to_post_step(self):
+        import apex.superop.SimplePropertySteps as simple_steps
+
+        added_steps = []
+
+        class FakeTemplate:
+            def __init__(self, op, **kwargs):
+                self.op = op
+                self.kwargs = kwargs
+
+        class FakeStep:
+            def __init__(self, name, template=None, artifacts=None, parameters=None,
+                         with_param=None, key=None, executor=None):
+                self.name = name
+                self.template = template
+                self.artifacts = artifacts or {}
+                self.parameters = parameters or {}
+                self.with_param = with_param
+                self.key = key
+                self.executor = executor
+                self.outputs = SimpleNamespace(
+                    artifacts={
+                        "task_paths": f"{name}-task_paths",
+                        "output_work_path": f"{name}-output_work_path",
+                        "backward_dir": f"{name}-backward_dir",
+                        "checked_post": f"{name}-checked_post",
+                        "retrieve_path": f"{name}-retrieve_path",
+                    },
+                    parameters={
+                        "task_names": f"{name}-task_names",
+                        "njobs": f"{name}-njobs",
+                    },
+                )
+
+        def fake_add(self, step):
+            added_steps.append(step)
+
+        obj = SimplePropertySteps.__new__(SimplePropertySteps)
+        object.__setattr__(obj, "inputs", SimpleNamespace(
+            parameters={
+                "prop_param": "prop-param",
+                "inter_param": "inter-param",
+                "do_refine": False,
+                "path_to_prop": "confs/std-bcc/eos_00",
+            },
+            artifacts={"input_work_path": "input-work"},
+        ))
+        object.__setattr__(obj, "outputs", SimpleNamespace(
+            artifacts={"retrieve_path": SimpleNamespace(_from=None)}
+        ))
+        object.__setattr__(obj, "step_keys", {
+            "make": "props-make",
+            "run": "props-run",
+            "post": "props-post",
+        })
+
+        with patch.object(simple_steps, "Step", FakeStep), \
+                patch.object(simple_steps, "PythonOPTemplate", FakeTemplate), \
+                patch.object(simple_steps, "Slices", lambda *args, **kwargs: ("slices", args, kwargs)), \
+                patch.object(simple_steps, "argo_range", lambda value: f"range:{value}"), \
+                patch.object(simple_steps, "argo_len", lambda value: f"len:{value}"), \
+                patch.object(SimplePropertySteps, "add", fake_add):
+            obj._build(
+                "step",
+                make_op=object(),
+                run_op=object(),
+                post_op=object(),
+                make_image="make-image",
+                run_image="run-image",
+                post_image="post-image",
+                run_command="lmp -in in.lammps",
+                calculator="lammps",
+                upload_python_packages=[],
+                group_size=1,
+                pool_size=1,
+                executor=None,
+                repair_op=object(),
+            )
+
+        self.assertEqual(
+            [step.name for step in added_steps],
+            ["Props-make", "PropsLAMMPS-Cal", "Props-run-status-check", "Props-post"],
+        )
+        post_step = added_steps[-1]
+        self.assertEqual(
+            post_step.artifacts["input_post"],
+            "Props-run-status-check-checked_post",
+        )
+        self.assertEqual(
+            obj.outputs.artifacts["retrieve_path"]._from,
+            "Props-post-retrieve_path",
+        )
 
 
 class TestRunLAMMPSDebug(unittest.TestCase):
