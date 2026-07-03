@@ -622,7 +622,7 @@ class Phonon(Property):
                     if not os.path.exists("FORCE_SETS"):
                         raise FileNotFoundError("FORCE_SETS was not created")
                     print('FORCE_SETS is created')
-                    subprocess.check_call(self.phonopy_command("band.conf"), shell=True)
+                    subprocess.check_call(self.phonopy_command("phonopy_disp.yaml --config band.conf"), shell=True)
                     self.write_band_dat()
 
                 elif self.inter_param["type"] == 'vasp':
