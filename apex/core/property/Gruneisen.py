@@ -963,7 +963,7 @@ if __name__ == "__main__":
                 if not os.path.isfile("FORCE_CONSTANTS"):
                     raise FileNotFoundError(f"FORCE_CONSTANTS was not created in {helper_dir}")
                 if not os.path.isfile("mesh.yaml"):
-                    subprocess.check_call(Phonon.phonopy_command("band.conf"), shell=True)
+                    subprocess.check_call(Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"), shell=True)
                     self._write_band_dat()
             finally:
                 os.chdir(cwd)
