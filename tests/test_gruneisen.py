@@ -286,9 +286,14 @@ class TestGruneisen(unittest.TestCase):
             calls.append((Path.cwd().name, command))
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command.startswith(Phonon.phonopy_setup_command("--dim=")) and "--writefc" in command:
+            elif command in Phonon.phonopy_writefc_load_commands(
+                '--dim="2 2 2" -c POSCAR-unitcell --writefc'
+            ):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command.startswith(Phonon.phonopy_command("--dim=")):
+            elif command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            ):
                 strain = loadfn("volume.json")["strain"]
                 if strain < 0:
                     frequencies = [4.2, 8.4]
@@ -406,9 +411,9 @@ class TestGruneisen(unittest.TestCase):
             calls.append((Path.cwd().name, command))
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc"):
+            elif command in Phonon.phonopy_writefc_load_commands("phonopy_disp.yaml --writefc"):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command == Phonon.phonopy_command("band.conf"):
+            elif command in Phonon.phonopy_load_commands():
                 strain = loadfn("volume.json")["strain"]
                 if strain < 0:
                     frequencies = [4.2, 8.4]
@@ -455,11 +460,18 @@ class TestGruneisen(unittest.TestCase):
             len([
                 cmd
                 for _, cmd in calls
-                if cmd == Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc")
+                if cmd == Phonon.phonopy_command("phonopy_disp.yaml --writefc")
             ]),
             3,
         )
-        self.assertEqual(len([cmd for _, cmd in calls if cmd == Phonon.phonopy_command("band.conf")]), 3)
+        self.assertEqual(
+            len([
+                cmd
+                for _, cmd in calls
+                if cmd == Phonon.phonopy_command("phonopy_disp.yaml --config band.conf")
+            ]),
+            3,
+        )
         self.assertFalse(any(cmd == "phonopy band.conf --abacus" for _, cmd in calls))
         self.assertTrue((work_dir / "volume.000000" / "mesh.yaml").is_file())
         self.assertTrue((work_dir / "volume.000001" / "band.dat").is_file())

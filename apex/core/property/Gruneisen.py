@@ -484,7 +484,15 @@ class Gruneisen(Property):
 
     def _prepare_vasp_phonon_task(self) -> None:
         if self.primitive:
-            subprocess.check_call(Phonon.phonopy_setup_command("--symmetry"), shell=True)
+            subprocess.check_call(
+                Phonon.phonopy_setup_command(
+                    Phonon._join_phonopy_arguments(
+                        "--symmetry",
+                        Phonon.primitive_axes_setup_argument(self.PRIMITIVE_AXES),
+                    )
+                ),
+                shell=True,
+            )
             if not os.path.isfile("PPOSCAR"):
                 raise FileNotFoundError("PPOSCAR was not created by phonopy --symmetry")
             shutil.copyfile("PPOSCAR", "POSCAR-unitcell")
@@ -494,8 +502,11 @@ class Gruneisen(Property):
 
         subprocess.check_call(
             Phonon.phonopy_setup_command(
-                '-d --dim="%s %s %s" -c POSCAR'
-                % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+                Phonon._join_phonopy_arguments(
+                    '-d --dim="%s %s %s" -c POSCAR'
+                    % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2]),
+                    Phonon.primitive_axes_setup_argument(self.PRIMITIVE_AXES),
+                )
             ),
             shell=True,
         )
@@ -794,11 +805,14 @@ if __name__ == "__main__":
             raise FileNotFoundError(f"POSCAR not found in {task_dir}")
         os.chdir(task_dir)
         cell_file = "POSCAR-unitcell" if self.inter_param["type"] == "vasp" else "POSCAR"
-        command = Phonon.phonopy_command(
-            '--nomeshsym --dim="%s %s %s" -c %s band.conf'
-            % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2], cell_file)
+        Phonon.run_first_success(
+            Phonon.phonopy_load_commands(
+                supercell_size=self.supercell_size,
+                cell_file=cell_file,
+                extra_args="--nomeshsym",
+            ),
+            required_file="mesh.yaml",
         )
-        subprocess.check_call(command, shell=True)
         if not os.path.isfile(mesh_path):
             raise FileNotFoundError(f"mesh.yaml was not created in {task_dir}")
 
@@ -869,7 +883,7 @@ if __name__ == "__main__":
             try:
                 os.chdir(helper_dir)
                 Phonon.run_first_success(
-                    Phonon.phonopy_writefc_commands(
+                    Phonon.phonopy_writefc_load_commands(
                         '--dim="%s %s %s" -c POSCAR-unitcell --writefc'
                         % (
                             self.supercell_size[0],
@@ -887,12 +901,12 @@ if __name__ == "__main__":
             cwd = os.getcwd()
             try:
                 os.chdir(helper_dir)
-                subprocess.check_call(
-                    Phonon.phonopy_command(
-                        '--dim="%s %s %s" -c POSCAR-unitcell band.conf'
-                        % (self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
+                Phonon.run_first_success(
+                    Phonon.phonopy_load_commands(
+                        supercell_size=self.supercell_size,
+                        cell_file="POSCAR-unitcell",
                     ),
-                    shell=True,
+                    required_file="mesh.yaml",
                 )
                 self._write_band_dat()
             finally:
@@ -957,13 +971,16 @@ if __name__ == "__main__":
                 # rather than falling into old-style POSCAR mode (which has no DIM).
                 if not os.path.isfile("FORCE_CONSTANTS"):
                     Phonon.run_first_success(
-                        Phonon.phonopy_writefc_commands("phonopy_disp.yaml --writefc"),
+                        Phonon.phonopy_writefc_load_commands("phonopy_disp.yaml --writefc"),
                         required_file="FORCE_CONSTANTS",
                     )
                 if not os.path.isfile("FORCE_CONSTANTS"):
                     raise FileNotFoundError(f"FORCE_CONSTANTS was not created in {helper_dir}")
                 if not os.path.isfile("mesh.yaml"):
-                    subprocess.check_call(Phonon.phonopy_command("band.conf"), shell=True)
+                    Phonon.run_first_success(
+                        Phonon.phonopy_load_commands(),
+                        required_file="mesh.yaml",
+                    )
                     self._write_band_dat()
             finally:
                 os.chdir(cwd)

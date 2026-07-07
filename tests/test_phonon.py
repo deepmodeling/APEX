@@ -97,6 +97,68 @@ class TestPhonon(unittest.TestCase):
                 ["phonopy phonopy_disp.yaml --writefc"],
             )
 
+    def test_phonopy_load_commands_prefer_yaml_config_and_keep_legacy_fallback(self):
+        work_dir = Path("output/phonopy_load_commands")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            Path("phonopy_disp.yaml").write_text("phonopy yaml\n")
+            commands = Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            )
+            self.assertEqual(commands[0], "phonopy phonopy_disp.yaml --config band.conf")
+            self.assertIn(
+                'phonopy --dim="2 2 2" -c POSCAR-unitcell band.conf',
+                commands,
+            )
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_phonopy_load_commands_can_create_yaml_before_v4_load(self):
+        work_dir = Path("output/phonopy_load_commands_no_yaml")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            commands = Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR",
+            )
+            self.assertEqual(
+                commands[0],
+                Phonon.phonopy_setup_command('-d --dim="2 2 2" -c POSCAR')
+                + " && phonopy phonopy_disp.yaml --config band.conf",
+            )
+            self.assertEqual(commands[-1], 'phonopy --dim="2 2 2" -c POSCAR band.conf')
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_phonopy_writefc_load_commands_prefer_yaml_load_mode(self):
+        work_dir = Path("output/phonopy_writefc_load_commands")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            Path("phonopy_disp.yaml").write_text("phonopy yaml\n")
+            commands = Phonon.phonopy_writefc_load_commands(
+                '--dim="2 2 2" -c POSCAR-unitcell --writefc'
+            )
+            self.assertEqual(commands[0], "phonopy phonopy_disp.yaml --writefc")
+            self.assertIn(
+                Phonon.phonopy_setup_command('--dim="2 2 2" -c POSCAR-unitcell --writefc'),
+                commands,
+            )
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
     def test_writefc_command_falls_back_to_phonopy(self):
         work_dir = Path("output/phonopy_writefc_fallback")
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -340,7 +402,7 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_command("band.conf"):
+            elif command in Phonon.phonopy_load_commands():
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -349,7 +411,7 @@ class TestPhonon(unittest.TestCase):
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
-            self.assertEqual(calls[1], Phonon.phonopy_command("band.conf"))
+            self.assertEqual(calls[1], Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"))
             self.assertFalse(any("--abacus" in command and command.startswith("phonopy band.conf") for command in calls))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -390,7 +452,10 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command == Phonon.phonopy_setup_command("--fc vasprun.xml"):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command == Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'):
+            elif command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            ):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -399,7 +464,11 @@ class TestPhonon(unittest.TestCase):
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("--fc vasprun.xml"))
-            self.assertEqual(calls[1], Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'))
+            self.assertEqual(
+                calls[1],
+                Phonon.phonopy_setup_command('-d --dim="2 2 2" -c POSCAR-unitcell')
+                + " && phonopy phonopy_disp.yaml --config band.conf",
+            )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -420,7 +489,10 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command == Phonon.phonopy_setup_command("-f task.0*/vasprun.xml"):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'):
+            elif command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            ):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -432,7 +504,7 @@ class TestPhonon(unittest.TestCase):
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/vasprun.xml"))
-            self.assertEqual(calls[1], Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'))
+            self.assertEqual(calls[1], Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -470,7 +542,10 @@ class TestPhonon(unittest.TestCase):
         def fake_check_call(command, shell):
             self.assertTrue(shell)
             calls.append(command)
-            if command == Phonon.phonopy_command('--dim="2 2 2" -c POSCAR band.conf'):
+            if command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR",
+            ):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -478,7 +553,13 @@ class TestPhonon(unittest.TestCase):
             with patch("apex.core.property.Phonon.subprocess.check_call", side_effect=fake_check_call), \
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
-            self.assertEqual(calls, [Phonon.phonopy_command('--dim="2 2 2" -c POSCAR band.conf')])
+            self.assertEqual(
+                calls,
+                [
+                    Phonon.phonopy_setup_command('-d --dim="2 2 2" -c POSCAR')
+                    + " && phonopy phonopy_disp.yaml --config band.conf"
+                ],
+            )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
