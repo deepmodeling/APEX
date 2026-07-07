@@ -340,7 +340,7 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_command("band.conf"):
+            elif command == Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -349,8 +349,8 @@ class TestPhonon(unittest.TestCase):
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
-            self.assertEqual(calls[1], Phonon.phonopy_command("band.conf"))
-            self.assertFalse(any("--abacus" in command and command.startswith("phonopy band.conf") for command in calls))
+            self.assertEqual(calls[1], Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"))
+            self.assertFalse(any("--abacus" in command and "band.conf" in command for command in calls))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
