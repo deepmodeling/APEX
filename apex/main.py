@@ -619,19 +619,19 @@ def parse_args():
     # Agent skill
     parser_skill = subparsers.add_parser(
         "skill",
-        help="Print an Agent prompt for installing apex-skill, or build a zip file for uploading to MatMaster",
+        help="Print an Agent prompt for installing apex-flow, or build a zip file for uploading to MatMaster",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_skill.add_argument(
         "--zip",
         action="store_true",
-        help="Write a zip of the bundled apex-skill",
+        help="Write a zip of the bundled apex-flow",
     )
     parser_skill.add_argument(
         "-o", "--output",
         type=str,
         default=None,
-        help="Output zip path when using --zip (default: ./apex-skill.zip)",
+        help="Output zip path when using --zip (default: ./apex-flow.zip)",
     )
 
     parsed_args = parser.parse_args()

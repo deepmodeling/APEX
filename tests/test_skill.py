@@ -71,7 +71,7 @@ class TestApexSkill(unittest.TestCase):
         import zipfile
 
         with tempfile.TemporaryDirectory() as tmp:
-            out = Path(tmp) / "apex-skill.zip"
+            out = Path(tmp) / "apex-flow.zip"
             buf = io.StringIO()
             with patch("sys.stdout", buf):
                 skill_from_args(SimpleNamespace(zip=True, output=str(out)))

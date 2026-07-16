@@ -1,9 +1,9 @@
 ---
-name: apex-skill
+name: apex-flow
 description: Batch multi-property materials calculations (EOS, elastic, surface, phonon, etc.) via APEX calculator backends VASP/ABACUS/LAMMPS (dflow). DPA-2/DPA_alloy are DeePMD model files under LAMMPS, not backends. Use when the user mentions APEX, apex submit, alloy property workflows, or multi-property DFT/MLIP screening.
 ---
 
-# APEX Skill — Alloy Properties EXplorer
+# APEX Flow — Alloy Properties EXplorer
 
 APEX is an automated workflow for computing alloy/material properties via batch DFT or MLIP calculations. It handles the full pipeline: structure preparation → task generation → computation → result extraction.
 

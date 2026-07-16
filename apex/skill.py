@@ -80,15 +80,14 @@ cp -R "{skill_root}" ~/.codex/skills/{SKILL_NAME}
 
 ## After install
 
-- Tell the user the skill is available as `{SKILL_NAME}` / `/apex-skill`
+- Tell the user the skill is available as `{SKILL_NAME}` / `/apex-flow`
 - For APEX calculation requests, read `SKILL.md` first, then load referenced
   docs under `reference/` only as needed
-- Do not keep a duplicate skill named `apex-flow`
+- Do not keep duplicate installations under legacy skill names
 
 ## Notes
 
-- The PyPI / pip package name remains `apex-flow`; the agent skill name is
-  `{SKILL_NAME}`.
+- The PyPI / pip package and agent skill both use the name `{SKILL_NAME}`.
 - Re-run `apex skill` to reprint this prompt, or `apex skill --zip` to rebuild
   the MatMaster upload archive.
 """
@@ -96,7 +95,7 @@ cp -R "{skill_root}" ~/.codex/skills/{SKILL_NAME}
 
 def build_skill_zip(output: Path | None = None) -> Path:
     """
-    Pack the bundled apex-skill directory into a zip for MatMaster upload.
+    Pack the bundled apex-flow directory into a zip for MatMaster upload.
 
     Large DeePMD checkpoints (``*.pt``) are excluded on purpose so the archive
     stays small. Frozen ``*.pb`` models under ``models/`` are included.
