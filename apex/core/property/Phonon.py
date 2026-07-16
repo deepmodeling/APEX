@@ -37,6 +37,11 @@ class Phonon(Property):
         return f"phonopy {arguments}"
 
     @staticmethod
+    def sorted_displacement_files(pattern: str) -> List[str]:
+        """Return phonopy displacement files in displacement order."""
+        return sorted(glob.glob(pattern))
+
+    @staticmethod
     def phonopy_writefc_commands(arguments: str) -> List[str]:
         setup_command = Phonon.phonopy_setup_command(arguments)
         phonopy_command = Phonon.phonopy_command(arguments)
@@ -441,7 +446,8 @@ class Phonon(Property):
                     with open("band.conf", "a") as fp:
                         fp.write(ret)
                     # generate task.000*
-                    stru_list = glob.glob("STRU-0*")
+                    # Keep task numbering aligned with phonopy_disp.yaml.
+                    stru_list = self.sorted_displacement_files("STRU-0*")
                     for ii in range(len(stru_list)):
                         task_path = os.path.join(path_to_work, 'task.%06d' % ii)
                         os.makedirs(task_path, exist_ok=True)
@@ -500,7 +506,8 @@ class Phonon(Property):
                             fp.write(ret_force_read)
                     # finite displacement method
                     elif self.approach == 'displacement':
-                        poscar_list = glob.glob("POSCAR-0*")
+                        # Keep task numbering aligned with phonopy_disp.yaml.
+                        poscar_list = self.sorted_displacement_files("POSCAR-0*")
                         for ii in range(len(poscar_list)):
                             task_path = os.path.join(path_to_work, 'task.%06d' % ii)
                             os.makedirs(task_path, exist_ok=True)

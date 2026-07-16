@@ -90,6 +90,16 @@ class TestPhonon(unittest.TestCase):
                 "phonopy -d --dim='2 2 2' -c POSCAR",
             )
 
+    def test_sorted_displacement_files_restores_phonopy_order(self):
+        with patch(
+            "apex.core.property.Phonon.glob.glob",
+            return_value=["POSCAR-003", "POSCAR-002", "POSCAR-001"],
+        ):
+            self.assertEqual(
+                Phonon.sorted_displacement_files("POSCAR-0*"),
+                ["POSCAR-001", "POSCAR-002", "POSCAR-003"],
+            )
+
     def test_phonopy_writefc_commands_collapse_for_phonopy_2(self):
         with patch("apex.core.property.Phonon.shutil.which", return_value=None):
             self.assertEqual(
