@@ -23,7 +23,7 @@ VALID_PROPERTIES = {
 }
 
 # LAMMPS-only properties
-LAMMPS_ONLY_PROPERTIES = {"finite_t_latt", "finite_t_elastic", "annealing"}
+LAMMPS_ONLY_PROPERTIES = {"finite_t_elastic"}
 
 # Valid LAMMPS potential types
 VALID_LAMMPS_TYPES = {
@@ -167,6 +167,39 @@ def validate_properties(properties: list, interaction_type: str) -> list:
             if method != "paired_langevin":
                 errors.append(
                     f"{prefix}: finite_t_elastic only supports method='paired_langevin'"
+                )
+
+        if prop_type in {"gamma", "gamma_surface"}:
+            plane = prop.get("plane_miller")
+            direction = prop.get("slip_direction")
+            if not plane or not direction:
+                errors.append(
+                    f"{prefix}: {prop_type} requires plane_miller and slip_direction"
+                )
+            elif len(plane) != len(direction):
+                errors.append(
+                    f"{prefix}: plane_miller and slip_direction dimensions differ"
+                )
+            elif sum(p * d for p, d in zip(plane, direction)) != 0:
+                errors.append(
+                    f"{prefix}: slip_direction must lie on plane_miller"
+                )
+
+        if prop_type == "gamma_surface":
+            for key in ("n_steps_x", "n_steps_y"):
+                value = prop.get(key, prop.get("n_steps", 10))
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    errors.append(f"{prefix}: {key} must be a positive integer")
+            closed_loop = prop.get("closed_loop", False)
+            if not isinstance(closed_loop, bool):
+                errors.append(f"{prefix}: closed_loop must be a boolean")
+            if closed_loop is True and (
+                prop.get("slip_length") is not None
+                or prop.get("slip_length_y") is not None
+            ):
+                errors.append(
+                    f"{prefix}: closed_loop cannot be combined with "
+                    "slip_length/slip_length_y"
                 )
 
     return errors, warnings

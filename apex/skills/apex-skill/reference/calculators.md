@@ -2,7 +2,12 @@
 
 ## Overview
 
-APEX supports three calculator backends. Each requires specific configuration in `param.json` under the `"interaction"` key.
+APEX supports three calculator **backends**: LAMMPS, ABACUS, and VASP.
+Each requires specific configuration in `param.json` under the `"interaction"` key.
+
+> APEX **backend** = calculator (`lammps` / `abacus` / `vasp`).
+> “DPA-2” / “DPA_alloy” / “DPA-3” are DeePMD **model files** under LAMMPS (`interaction.type: deepmd`).
+> Ask calculator backend first; if LAMMPS+DeePMD, then ask which model file.
 
 ---
 
@@ -15,7 +20,7 @@ APEX supports three calculator backends. Each requires specific configuration in
     "interaction": {
         "type": "<potential_type>",
         "model": "<model_file>",
-        "type_map": {"Element1": 0, "Element2": 1}
+        "type_map": "auto"
     }
 }
 ```
@@ -42,7 +47,7 @@ APEX supports three calculator backends. Each requires specific configuration in
     "interaction": {
         "type": "deepmd",
         "model": "frozen_model.pb",
-        "type_map": {"Mo": 0}
+        "type_map": "auto"
     }
 }
 ```
@@ -54,7 +59,7 @@ APEX supports three calculator backends. Each requires specific configuration in
     "interaction": {
         "type": "mace",
         "model": "mace_model.model",
-        "type_map": {"Al": 0, "Cu": 1}
+        "type_map": "auto"
     }
 }
 ```
@@ -66,7 +71,7 @@ APEX supports three calculator backends. Each requires specific configuration in
     "interaction": {
         "type": "nep",
         "model": "nep.txt",
-        "type_map": {"W": 0}
+        "type_map": "auto"
     }
 }
 ```
@@ -78,7 +83,7 @@ APEX supports three calculator backends. Each requires specific configuration in
     "interaction": {
         "type": "eam_alloy",
         "model": "AlCu.eam.alloy",
-        "type_map": {"Al": 0, "Cu": 1}
+        "type_map": "auto"
     }
 }
 ```
@@ -90,7 +95,7 @@ APEX supports three calculator backends. Each requires specific configuration in
     "interaction": {
         "type": "meam",
         "model": "library.meam TiAl.meam",
-        "type_map": {"Ti": 0, "Al": 1}
+        "type_map": "auto"
     }
 }
 ```
@@ -120,7 +125,7 @@ The **frozen** `.pth` or `.pb` file is what goes into `interaction.model`:
     "interaction": {
         "type": "deepmd",
         "model": "DPA2_alloy.pth",
-        "type_map": {"Al": 0, "Cu": 1, "Ni": 2}
+        "type_map": "auto"
     }
 }
 ```
@@ -131,23 +136,40 @@ The **frozen** `.pth` or `.pb` file is what goes into `interaction.model`:
 
 > 💡 If you pass an unfrozen multi-head `.pt` file directly to LAMMPS, it will error with a message about missing head selection.
 
-### Built-in DPA-2 Model
+### Built-in DPA models (`models/`)
 
-This plugin ships a pre-frozen DPA-2 model at `models/DPA2.pb` (TensorFlow format, ~6MB). When the user requests DPA-2 calculations without providing their own model file, **copy this built-in model to the task directory** and set:
+**Priority:** use bundled **frozen** models first. The skill zip only includes
+small `.pb` files (not multi-head `.pt` / DPA3). Details: `models/README.md`.
+
+| Path | Format | Use |
+|------|--------|-----|
+| `models/DPA2/DPA2.pb` | Frozen TF (~6MB, ready) | Default DPA-2 for APEX |
+| `models/DPA_alloy/DPA_alloy.pb` | Frozen TF (~6MB, ready) | Prefer for alloys / HEA |
+
+When the user requests DPA-2 without a custom model, **copy** `models/DPA2/DPA2.pb`
+into the task directory (for alloys prefer `models/DPA_alloy/DPA_alloy.pb`) and set:
 
 ```json
 {
     "interaction": {
         "type": "deepmd",
         "model": "DPA2.pb",
-        "type_map": {"<element1>": 0, "<element2>": 1, ...}
+        "type_map": "auto"
     }
 }
 ```
 
-The built-in model path relative to the plugin root is: `models/DPA2.pb`
+Large checkpoints are optional and downloaded only on explicit request:
 
-> ⚠️ `type_map` must be set according to the user's system — it maps element names to the model's internal type indices. For DPA-2 universal models, consult the model's training element order.
+```bash
+python scripts/fetch_models.py --dpa2-pt   # ~76MB multi-head
+python scripts/fetch_models.py --dpa3      # ~62MB, then freeze a head
+```
+
+> Use `"type_map": "auto"` by default. APEX infers the local contiguous type
+> mapping from the structure; do not copy atomic-number or model-internal indices.
+> Multi-head `.pt` files **must** be frozen (`dp --pt freeze ... --head <HEAD>`)
+> before use as `interaction.model`.
 
 ### Relaxation cal_setting (LAMMPS)
 

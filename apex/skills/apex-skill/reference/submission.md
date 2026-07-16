@@ -45,28 +45,21 @@ Header: x-app-key: (can be empty string)
 Response: {"code": 0, "data": {"ticket": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}}
 ```
 
-The ticket goes into `global.json` as `bohrium_config.ticket`. Environment variable: `BOHRIUM_ACCESS_KEY`.
+The ticket goes into `global.json` as `bohrium_config.ticket`. Generate it before
+the job directory is packaged:
 
-> ⚠️ **Ticket 有效期约 1 周，会过期！** 每次提交 APEX 任务时都必须重新调用上述 API 获取新 ticket，不要复用之前缓存的 ticket。`run.sh` 中应在 `apex submit` 之前执行 ticket 刷新逻辑。
+1. Inspect the agent/local environment for `BOHRIUM_ACCESS_KEY`.
+2. If the variable is missing, stop and ask the user to provide/configure it.
+   `generate_config.py` cannot obtain a ticket without an access key.
+3. If it is present, run `scripts/generate_config.py`; the script calls the ticket
+   API, validates the response, and writes a fresh ticket to `global.json`.
+4. Verify that `global.json` contains a non-empty `bohrium_config.ticket`.
 
-### Recommended run.sh Ticket Refresh Template
-
-```bash
-# Refresh ticket before submission (tickets expire in ~1 week)
-NEW_TICKET=$(python3 -c "
-import requests, json, os
-key = os.environ.get('BOHRIUM_ACCESS_KEY', '')
-r = requests.get(f'https://openapi.dp.tech/openapi/v1/ticket/get?accessKey={key}', headers={'x-app-key': ''})
-print(json.loads(r.text)['data']['ticket'])
-")
-python3 -c "
-import json
-with open('global.json') as f: d = json.load(f)
-d.setdefault('bohrium_config', {})['ticket'] = '$NEW_TICKET'
-with open('global.json', 'w') as f: json.dump(d, f, indent=4)
-"
-echo "Ticket refreshed: ${NEW_TICKET:0:8}..."
-```
+> ⚠️ **Ticket 有效期约 1 周，会过期！** Generate a fresh `global.json` with
+> `generate_config.py` when preparing each new submission. Do not refresh the
+> ticket in `run.sh`: the outer APEX container may not receive
+> `BOHRIUM_ACCESS_KEY`, and ad-hoc response parsing there has no reliable error
+> handling.
 
 > **WARNING**: The log may show `WARNING:root:Missing Bohrium account fields: email, password.` — this is **non-fatal**; ticket-based auth works without email/password.
 
@@ -82,6 +75,8 @@ set -eo pipefail
 pip install apex-flow 2>&1 | tail -3
 python3 -c "import apex; print(f'APEX version: {apex.__version__}')"
 
+# Authentication is already stored in global.json by generate_config.py.
+# Do not read BOHRIUM_ACCESS_KEY or refresh the ticket in this container.
 set +eo pipefail
 apex submit param.json -c global.json -n "<workflow-name>" 2>&1 | tee apex_submit.log
 EXIT_CODE=${PIPESTATUS[0]}
@@ -101,6 +96,7 @@ fi
 **Key points:**
 - `pip install apex-flow` (no `==` pin) → always gets latest from PyPI
 - The installed APEX code is automatically sent to inner dflow steps via `upload_packages`
+- `run.sh` does not access `BOHRIUM_ACCESS_KEY` or modify `global.json`
 - **单次执行，不重试** — 失败即退出，由用户决定是否重新提交
 - `-n` flag sets workflow name (NOT `-w` which is work directory)
 - No `-s` flag → outer job waits for dflow completion and retrieves results

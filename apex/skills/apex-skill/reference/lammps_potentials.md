@@ -16,7 +16,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "deepmd",
     "model": "frozen_model.pb",
-    "type_map": {"Mo": 0, "W": 1}
+    "type_map": "auto"
 }
 ```
 
@@ -24,7 +24,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 **Notes**:
 - Most widely used MLIP in APEX workflows
 - GPU strongly recommended for large systems
-- `type_map` indices must match training order
+- APEX infers the local element ordering from the submitted structure
 - Supports model deviation with multiple models: `"model": "model_0.pb model_1.pb"`
 
 ### 2. MACE (`mace`)
@@ -35,7 +35,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "mace",
     "model": "MACE_model.model",
-    "type_map": {"Al": 0, "Cu": 1}
+    "type_map": "auto"
 }
 ```
 
@@ -53,7 +53,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "nep",
     "model": "nep.txt",
-    "type_map": {"W": 0, "Re": 1}
+    "type_map": "auto"
 }
 ```
 
@@ -71,7 +71,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "gap",
     "model": "GAP.xml",
-    "type_map": {"Si": 0}
+    "type_map": "auto"
 }
 ```
 
@@ -90,7 +90,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "snap",
     "model": "W.snapcoeff W.snapparam",
-    "type_map": {"W": 0}
+    "type_map": "auto"
 }
 ```
 
@@ -108,7 +108,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "rann",
     "model": "Fe.nn",
-    "type_map": {"Fe": 0}
+    "type_map": "auto"
 }
 ```
 
@@ -129,7 +129,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "eam_alloy",
     "model": "AlCu.eam.alloy",
-    "type_map": {"Al": 0, "Cu": 1}
+    "type_map": "auto"
 }
 ```
 
@@ -147,7 +147,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "eam_fs",
     "model": "Fe.eam.fs",
-    "type_map": {"Fe": 0}
+    "type_map": "auto"
 }
 ```
 
@@ -164,7 +164,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "meam",
     "model": "library.meam TiAl.meam",
-    "type_map": {"Ti": 0, "Al": 1}
+    "type_map": "auto"
 }
 ```
 
@@ -182,7 +182,7 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 {
     "type": "meam_spline",
     "model": "Ti.meam.spline",
-    "type_map": {"Ti": 0}
+    "type_map": "auto"
 }
 ```
 
@@ -196,19 +196,21 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 
 ## type_map Convention
 
-The `type_map` dictionary maps element symbols to integer indices:
+Use automatic inference for LAMMPS interactions:
 
 ```json
-"type_map": {"Element1": 0, "Element2": 1, "Element3": 2}
+"type_map": "auto"
 ```
 
-**Rules**:
-- Indices must start from 0
-- Order must match the model's training type order
-- For multi-element POSCAR, the order in POSCAR species line must be consistent
-- For DeePMD: matches `type_map` in training `input.json`
-- For MACE: matches element ordering during training
-- For classical potentials: matches element order in potential file header
+At submission time, APEX reads the first matching structure, creates a
+zero-based contiguous element map, and writes the resolved dictionary back to
+`param.json`. Do not derive values from atomic numbers or a model's internal
+type indices.
+
+Use a manual dictionary only when the user explicitly needs a fixed custom
+ordering. If multiple matched structures contain different element sets,
+split them into compatible submissions or provide and verify one complete
+manual map.
 
 ---
 
@@ -236,7 +238,7 @@ All potential types are supported by the unified APEX image. The APEX 1.3.0 imag
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `pair_style not found` | LAMMPS not compiled with required package | Use APEX official image |
-| `type_map mismatch` | Element order differs from model training | Check training config for correct order |
+| `type_map` inference failure | Structure file is missing or matched structures use incompatible element sets | Fix `structures` paths or provide one verified manual map |
 | `model file not found` | File not in job directory | Ensure model file is copied to submission dir |
 | `GPU not available` | Running GPU potential on CPU node | Switch to GPU machine type |
 | `segfault in mace` | Domain decomposition issue | `no_domain_decomposition` is already set by APEX |

@@ -320,6 +320,7 @@ These parameters appear in most property configurations:
 | `plane_shift` | optional | int/float | `0` | Slip plane shift |
 | `supercell_size` | optional | list[int] | `[1,1,5]` | Supercell |
 | `vacuum_size` | optional | float | `0` | Vacuum (Å) |
+| `closed_loop` | optional | bool | `false` | Derive a periodic, possibly oblique in-plane basis |
 | `n_steps_x` | optional | int | `10` | Grid points in x |
 | `n_steps_y` | optional | int | `n_steps_x` | Grid points in y |
 | `add_fix` | optional | list[str] | `["true","true","false"]` | Selective dynamics |
@@ -333,12 +334,16 @@ These parameters appear in most property configurations:
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
+    "closed_loop": false,
     "n_steps_x": 10,
     "n_steps_y": 10
 }
 ```
 
-**Output**: 2D grid of SFE values (mJ/m²), (n_steps_x+1) × (n_steps_y+1) points.
+**Output**: 2D grid of SFE values (J/m²), (n_steps_x+1) × (n_steps_y+1) points.
+With `closed_loop=true`, `slip_length` and `slip_length_y` must be omitted.
+APEX records the periodic basis vectors and the true Cartesian displacement of
+every grid point; use this mode for oblique or disordered supercells.
 
 ⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with `plane_miller`. See valid systems table in §8.
 
@@ -386,7 +391,7 @@ These parameters appear in most property configurations:
 
 ---
 
-## 11. Finite-Temperature Lattice (LAMMPS only)
+## 11. Finite-Temperature Lattice
 
 **type**: `"finite_t_latt"`
 
@@ -407,6 +412,8 @@ These parameters appear in most property configurations:
 | `N_every` | optional | int | `100` | Sample frequency |
 | `N_repeat` | optional | int | `10` | Repeat count |
 | `N_freq` | optional | int | `2000` | Output frequency |
+| `timestep_fs` | DFT optional | float | `1.0` | VASP/ABACUS timestep (fs) |
+| `pressure_kbar` | DFT optional | float | `0.0` | VASP/ABACUS target pressure (kbar) |
 
 **Complete working default**:
 ```json
@@ -421,7 +428,7 @@ These parameters appear in most property configurations:
 
 **Output**: Lattice parameter a (and c/a for non-cubic) vs temperature.
 
-⚠️ **LAMMPS-only** — raises error for VASP/ABACUS backends.
+VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style NpT. These integrations share the thermodynamic target but not thermostat/barostat parameters.
 
 **Notes**:
 - Each temperature is a separate NPT MD run.
@@ -514,7 +521,7 @@ These parameters appear in most property configurations:
 
 ---
 
-## 14. Annealing (LAMMPS only)
+## 14. Annealing
 
 **type**: `"annealing"`
 
@@ -538,6 +545,8 @@ These parameters appear in most property configurations:
 | `thermostat` | optional | str | `"nose_hoover"` | Thermostat type |
 | `ensemble` | optional | str | `"npt"` | Ensemble type |
 | `velocity_seed` | optional | int | `123457` | Random seed |
+| `timestep_fs` | DFT optional | float | `1.0` | VASP/ABACUS timestep (fs) |
+| `pressure_kbar` | DFT optional | float | `0.0` | VASP/ABACUS target pressure (kbar) |
 
 **cal_setting keys (analysis)**:
 
@@ -564,7 +573,7 @@ These parameters appear in most property configurations:
 
 **Output**: RDF at each stage, MSD, volume-temperature curves, final quenched structure.
 
-⚠️ **LAMMPS-only** — full heat-hold-quench MD cycle.
+VASP and ABACUS run the same temperature schedule with their native NpT integrators and post-process compact trajectories into the same result schema.
 
 **Notes**:
 - [3,3,3] supercell recommended for statistical sampling (108+ atoms).
@@ -601,10 +610,10 @@ See `reference/rss_workflow.md` for full details.
 | `gamma` | plane_miller, slip_direction | [1,1,1], [-1,1,0] | ⚠️ slip_dir NOT on plane |
 | `gamma_surface` | plane_miller, slip_direction | [1,1,1], [-1,1,0] | ⚠️ slip_dir NOT on plane |
 | `decohesive` | miller_index, min_slab_size | [1,1,1], 40 Å | ⚠️ Missing miller_index → KeyError |
-| `finite_t_latt` | cal_setting.temperature | [200,400,600,800] | LAMMPS-only |
+| `finite_t_latt` | cal_setting.temperature | [200,400,600,800] | DFT MD is expensive |
 | `finite_t_elastic` | cal_setting.temperature | [300] | LAMMPS-only |
 | `gruneisen` | volume_strains, temperatures | [-0.02..0.02], [100..500] | ⚠️ Missing temperatures → KeyError |
-| `annealing` | (none critical) | target_temp=300 | LAMMPS-only |
+| `annealing` | (none critical) | target_temp=300 | DFT MD is expensive |
 
 ---
 
@@ -621,7 +630,7 @@ Before submitting any APEX property calculation, verify:
    - Phonon: ≥ [3,3,3] for LAMMPS
    - Finite-T properties: ≥ [3,3,3]
 4. ✅ **LAMMPS-only properties** not sent to DFT backend:
-   - `finite_t_latt`, `finite_t_elastic`, `annealing`
+   - `finite_t_elastic`
 5. ✅ **Physical reasonableness**:
    - Temperatures below melting point
    - Volume strains ≤ ±5% (avoid unphysical compression)

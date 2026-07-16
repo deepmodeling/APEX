@@ -15,7 +15,6 @@ Usage:
         --backend lammps \
         --potential eam_alloy \
         --model Cu01.eam.alloy \
-        --type-map "Cu:0" \
         --properties elastic \
         --flow-type joint \
         --workflow-name "cu-fcc-elastic" \
@@ -96,6 +95,7 @@ PROPERTY_DEFAULTS = {
         "plane_miller": [1, 1, 1],
         "slip_direction": [-1, 1, 0],
         "supercell_size": [1, 1, 5],
+        "closed_loop": False,
         "n_steps_x": 10,
         "n_steps_y": 10,
     },
@@ -141,7 +141,7 @@ PROPERTY_DEFAULTS = {
 }
 
 # LAMMPS-only properties
-LAMMPS_ONLY = {"finite_t_latt", "finite_t_elastic", "annealing"}
+LAMMPS_ONLY = {"finite_t_elastic"}
 
 # GPU potential types — benefit from GPU scass_type
 GPU_POTENTIALS = {"deepmd", "mace", "nep"}
@@ -431,7 +431,7 @@ def build_global_json(backend: str, potential: str = None,
 # =============================================================================
 
 def build_interaction(backend: str, potential: str = None,
-                      model: str = None, type_map: dict = None,
+                      model: str = None,
                       incar: str = None, potcar_prefix: str = None,
                       potcars: dict = None, orb_files: dict = None) -> dict:
     """Build interaction configuration."""
@@ -440,12 +440,10 @@ def build_interaction(backend: str, potential: str = None,
             raise ValueError("--potential required for LAMMPS backend")
         if not model:
             raise ValueError("--model required for LAMMPS backend")
-        if not type_map:
-            raise ValueError("--type-map required for LAMMPS backend")
         return {
             "type": potential,
             "model": model,
-            "type_map": type_map,
+            "type_map": "auto",
         }
     elif backend == "abacus":
         interaction = {
@@ -554,18 +552,6 @@ def validate_config(backend: str, potential: str, properties: list):
 # Helpers
 # =============================================================================
 
-def parse_type_map(type_map_str: str) -> dict:
-    """Parse type_map from string like 'Mo:0,W:1'."""
-    if not type_map_str:
-        return None
-    result = {}
-    for pair in type_map_str.split(","):
-        parts = pair.strip().split(":")
-        if len(parts) == 2:
-            result[parts[0].strip()] = int(parts[1].strip())
-    return result
-
-
 def parse_str_map(map_str: str) -> dict:
     """Parse a string map like 'Element1:value1,Element2:value2'."""
     if not map_str:
@@ -596,8 +582,6 @@ def main():
                         help="LAMMPS potential type (deepmd/mace/nep/eam_alloy/...)")
     parser.add_argument("--model", "-m",
                         help="Model/potential file path")
-    parser.add_argument("--type-map", "-t",
-                        help="Type map as 'Element1:0,Element2:1,...'")
     parser.add_argument("--properties", nargs="+", required=True,
                         help="Property types to calculate")
     parser.add_argument("--flow-type", default="joint",
@@ -629,7 +613,6 @@ def main():
     # -------------------------------------------------------------------------
     # Parse complex arguments
     # -------------------------------------------------------------------------
-    type_map = parse_type_map(args.type_map)
     potcars = parse_str_map(args.potcars)
     orb_files = parse_str_map(args.orb_files)
 
@@ -674,8 +657,13 @@ def main():
     # Build interaction
     # -------------------------------------------------------------------------
     interaction = build_interaction(
-        args.backend, args.potential, args.model, type_map,
-        args.incar, args.potcar_prefix, potcars, orb_files
+        backend=args.backend,
+        potential=args.potential,
+        model=args.model,
+        incar=args.incar,
+        potcar_prefix=args.potcar_prefix,
+        potcars=potcars,
+        orb_files=orb_files,
     )
 
     # -------------------------------------------------------------------------

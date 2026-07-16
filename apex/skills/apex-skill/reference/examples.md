@@ -51,7 +51,7 @@ Direct
     "interaction": {
         "type": "deepmd",
         "model": "frozen_model.pb",
-        "type_map": {"Mo": 0}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {
@@ -199,7 +199,7 @@ apex rss --composition "Co0.2Cr0.2Fe0.2Mn0.2Ni0.2" \
     "interaction": {
         "type": "deepmd",
         "model": "CoCrFeMnNi.pb",
-        "type_map": {"Co": 0, "Cr": 1, "Fe": 2, "Mn": 3, "Ni": 4}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {
@@ -229,7 +229,7 @@ apex rss --composition "Co0.2Cr0.2Fe0.2Mn0.2Ni0.2" \
     "interaction": {
         "type": "eam_alloy",
         "model": "Al99.eam.alloy",
-        "type_map": {"Al": 0}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {
@@ -325,7 +325,7 @@ LREAL = .FALSE.
     "interaction": {
         "type": "deepmd",
         "model": "W_model.pb",
-        "type_map": {"W": 0}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {
@@ -366,7 +366,7 @@ LREAL = .FALSE.
     "interaction": {
         "type": "deepmd",
         "model": "Cu_model.pb",
-        "type_map": {"Cu": 0}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {
@@ -407,7 +407,7 @@ LREAL = .FALSE.
     "interaction": {
         "type": "deepmd",
         "model": "Fe_model.pb",
-        "type_map": {"Fe": 0}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {

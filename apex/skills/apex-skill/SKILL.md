@@ -1,6 +1,6 @@
 ---
 name: apex-skill
-description: Batch multi-property materials calculations (EOS, elastic, surface, phonon, etc.) via VASP/ABACUS/LAMMPS backends orchestrated through dflow. Use when the user mentions APEX, apex submit, alloy property workflows, or multi-property DFT/MLIP screening.
+description: Batch multi-property materials calculations (EOS, elastic, surface, phonon, etc.) via APEX calculator backends VASP/ABACUS/LAMMPS (dflow). DPA-2/DPA_alloy are DeePMD model files under LAMMPS, not backends. Use when the user mentions APEX, apex submit, alloy property workflows, or multi-property DFT/MLIP screening.
 ---
 
 # APEX Skill — Alloy Properties EXplorer
@@ -39,7 +39,7 @@ Options to offer via AskQuestion:
 
 ## High-Level Workflow (5 Steps)
 
-1. **Prepare inputs** — Generate `param.json` + `global.json` + copy structure/model files into a job directory using `scripts/generate_config.py`
+1. **Prepare inputs** — Check `BOHRIUM_ACCESS_KEY`, then generate `param.json` + `global.json` (including a fresh ticket) and copy structure/model files into a job directory using `scripts/generate_config.py`
 2. **Submit outer Bohrium job** — A thin client (`c2_m4_cpu`) that runs `apex submit` to connect to the dflow orchestration server
 3. **dflow executes** — Inner containers (LAMMPS/ABACUS/VASP) run the actual calculations, managed by `workflows.deepmodeling.com`
 4. **Retrieve results** — Outer job blocks until completion (no `-s` flag), auto-retrieves results; parse `confs/<structure>/<prop>_00/result.json`
@@ -47,15 +47,31 @@ Options to offer via AskQuestion:
 
 ## Critical Rules
 
-1. **STOP: Confirm calculation engine before submission — DO NOT PROCEED WITHOUT USER ANSWER.** Before preparing an APEX workflow, you MUST use `AskQuestion` to confirm the backend. Do NOT proceed with any default engine silently. Present options:
-   - LAMMPS + MLIP (DeePMD/MACE/NEP): fast, GPU-friendly, requires trained model file
-   - LAMMPS + classical (EAM/MEAM/SNAP): fast, CPU, limited to elements with available potentials
-   - ABACUS (DFT): high accuracy, slower, needs pseudopotentials + orbital files
-   - VASP (DFT): high accuracy, commercial license required, user must provide image
-   
-   **Skip ONLY if** the user has already explicitly stated the backend in THIS message (e.g. "用 EAM 算弹性常数" or "用 ABACUS 做EOS").
-   
-   **If AskQuestion times out or fails**: state your intended default in plain text (e.g. "我将使用 LAMMPS + EAM，如果需要更换请告诉我") and WAIT for user's next message before submitting. Never silently choose an engine.
+1. **STOP: Confirm the APEX calculator backend before submission.**
+   In APEX, **backend** means the calculator that runs tasks: `lammps` / `abacus` / `vasp`.
+   DPA / DeePMD model names are potential files used under the LAMMPS backend, not APEX backends.
+
+   Ask in two steps when needed:
+
+   **Step A — APEX calculator backend** (`AskQuestion`):
+   - LAMMPS + MLIP (DeePMD / DPA / MACE / NEP): fast, GPU-friendly
+   - LAMMPS + classical (EAM / MEAM / SNAP): fast, CPU
+   - ABACUS (DFT)
+   - VASP (DFT; license + image required)
+
+   **Step B — only if Step A is LAMMPS + DeePMD/DPA: use a model bundled with this skill.**
+   - General systems: copy `models/DPA2/DPA2.pb` into the job directory.
+   - Alloys / HEA: copy `models/DPA_alloy/DPA_alloy.pb` into the job directory.
+   - Set `interaction.model` to the copied filename and set `"type_map": "auto"`.
+     APEX reads the structure at submission time and writes a zero-based,
+     contiguous element map. Do not derive indices from atomic numbers or the
+     model's internal type order.
+   - Do not invent a model path, download another model, or use a multi-head `.pt` directly. Use a user-provided or downloaded model only when the user explicitly requests it or the bundled models do not support the system; explain the incompatibility and obtain confirmation first.
+
+   **Skip Step A/B ONLY if** the user already stated them in THIS message
+   (e.g. “用 EAM”, “用 ABACUS 做 EOS”, “用 DPA_alloy.pb”).
+
+   **If AskQuestion times out or fails**: state the intended APEX backend and bundled model selection (if LAMMPS+DPA) in plain text and WAIT. Never silently submit.
 
 2. **STOP: Confirm property parameters before submission — DO NOT PROCEED WITHOUT USER ANSWER.** Before submitting, present the full `properties` configuration (JSON) to the user. Show the defaults that will be used and highlight:
    - Miller indices (for surface/gamma/decohesive)
@@ -71,7 +87,13 @@ Options to offer via AskQuestion:
 
 4. **Kill = inner FIRST, outer SECOND.** If you only kill the outer Bohrium node, the dflow workflow continues consuming resources silently. Always terminate the inner dflow workflow first. See `reference/workflow-control.md`.
 
-5. **Ticket refresh every submission.** Tickets expire in ~1 week. Always refresh via the ticket API before `apex submit`. See `reference/submission.md`.
+5. **Generate the ticket before packaging the job; never refresh it in `run.sh`.**
+   - First inspect the agent/local environment for `BOHRIUM_ACCESS_KEY`.
+   - If it is missing, STOP and ask the user to provide/configure it. `generate_config.py` cannot generate a ticket without an access key.
+   - If it exists, run `scripts/generate_config.py`; it converts the key to a fresh ticket and writes it to `global.json`.
+   - Verify that `global.json` contains a non-empty `bohrium_config.ticket` before submission.
+   - `run.sh` must only install/verify APEX and call `apex submit`. Do not add ticket API calls or depend on `BOHRIUM_ACCESS_KEY` inside the APEX container.
+   See `reference/submission.md`.
 
 6. **Project ID from environment only.** `generate_config.py` reads `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a project ID (including old examples like `13529`) into `global.json`, docs, or prompts.
 
@@ -83,6 +105,28 @@ Options to offer via AskQuestion:
      --scass "c8_m31_1 * NVIDIA T4"
    ```
    Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`.
+
+8. **MUST use bundled frozen DPA models under `models/` for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill only ships small
+   ready-to-run graphs (`models/DPA2/DPA2.pb`, `models/DPA_alloy/DPA_alloy.pb`).
+   Copy the appropriate bundled model into the job directory before generating
+   `param.json`. Large `.pt` / DPA3 checkpoints are **not** in the skill zip —
+   fetch only when the user explicitly needs them (`scripts/fetch_models.py --dpa3`
+   or `dp pretrained download`) and freeze the selected head before use.
+   See `models/README.md`.
+
+9. **Preserve the user's input cell and prevent accidental double expansion.**
+   APEX does not require a conventional cell. Do not convert a primitive cell or
+   user-provided supercell to a conventional cell merely because an example uses
+   `confs/std-fcc` or another `std-*` name.
+   - Inspect the supplied structure and determine whether it is already a supercell.
+   - If it is a supercell, ask whether the user wants any additional replication.
+   - If the answer is no, explicitly set applicable volumetric `supercell` or
+     `supercell_size` parameters to `[1, 1, 1]` so APEX does not expand it again.
+   - Keep `elastic.conventional` false unless the user explicitly requests a
+     conventional-cell elastic calculation.
+   - Slab construction parameters for surface/gamma/decohesive calculations are
+     property geometry controls; confirm them separately rather than treating them
+     as generic bulk expansion.
 
 ## Supported Properties (15 types)
 
@@ -98,10 +142,10 @@ Options to offer via AskQuestion:
 | Gamma surface | `gamma_surface` | All | 2D GSFE map |
 | Cohesive | `cohesive` | All | Cohesive energy curve |
 | Decohesive | `decohesive` | All | Ideal work of separation |
-| Finite-T lattice | `finite_t_latt` | LAMMPS only | Lattice parameter vs temperature (NPT MD) |
+| Finite-T lattice | `finite_t_latt` | All | Lattice parameter vs temperature (NPT MD) |
 | Finite-T elastic | `finite_t_elastic` | LAMMPS only | Elastic constants at finite temperature |
 | Grüneisen | `gruneisen` | All | Grüneisen parameters & thermal expansion |
-| Annealing | `annealing` | LAMMPS only | Heat-hold-quench MD cycle |
+| Annealing | `annealing` | All | Heat-hold-quench MD cycle |
 
 > See `reference/properties.md` for full parameter details of each property.
 
@@ -128,7 +172,7 @@ Options to offer via AskQuestion:
     "interaction": {
         "type": "eam_alloy",
         "model": "Cu01.eam.alloy",
-        "type_map": {"Cu": 0}
+        "type_map": "auto"
     },
     "relaxation": {
         "cal_setting": {"etol": 0, "ftol": 1e-10, "maxiter": 5000, "maximal": 500000}
@@ -146,17 +190,17 @@ See `reference/submission.md` for the full validated template.
 
 ## Key Additional Rules
 
-8. **LAMMPS-only properties**: `finite_t_latt`, `finite_t_elastic`, and `annealing` ONLY work with LAMMPS backends. Inform users of this limitation if they request these with VASP/ABACUS.
+10. **LAMMPS-only properties**: `finite_t_elastic` only works with LAMMPS. `finite_t_latt` and `annealing` also support VASP Langevin–Parrinello–Rahman NpT and ABACUS Nose–Hoover-style NpT.
 
-9. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`.
+11. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy the required bundled model from `models/DPA2` or `models/DPA_alloy`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
 
-10. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
+12. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
 
-11. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
+13. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
 
-12. **Supercell sizing.** For defect calculations (vacancy, interstitial), use at least [2,2,2] supercell. For phonon, [3,3,3] recommended (phonoLAMMPS may fail with [2,2,2]).
+14. **Supercell sizing applies to unit-cell inputs only.** For defect calculations (vacancy, interstitial), a total cell equivalent to at least a [2,2,2] unit-cell expansion is normally needed. For phonon, [3,3,3] total size is recommended (phonoLAMMPS may fail with a smaller total cell). If the input is already a supercell and the user declines further expansion, use `[1,1,1]`; do not apply these factors again.
 
-13. **Outer job machine.** The outer Bohrium job only needs `c2_m4_cpu` since it just calls `apex submit`. Don't waste GPU resources on the submission client.
+15. **Outer job machine.** The outer Bohrium job only needs `c2_m4_cpu` since it just calls `apex submit`. Don't waste GPU resources on the submission client.
 
 ## RSS (Random Solid Solution) Workflow
 
@@ -175,6 +219,7 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 |--------|---------|
 | `generate_config.py` | Generate global.json + param.json with ticket auth; requires `BOHRIUM_PROJECT_ID` |
 | `validate_apex_combo.py` | List / check / recommend safe image × scass_type combos |
+| `fetch_models.py` | Optional: download large DPA2/DPA3 `.pt` (not used by `apex skill --zip`) |
 | `parse_results.py` | Parse APEX output into summary |
 | `validate_inputs.py` | Validate configuration before submission |
 
