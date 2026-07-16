@@ -18,9 +18,9 @@ APEX uses a **two-layer submission architecture**:
 ┌─────────────────────────────────────────────────────────────────┐
 │  Outer Bohrium Job (APEX image, c16_m32_cpu)                   │
 │  1. pip install apex-flow (latest, no version pin)             │
-│  2. apex submit param.json -c global.json -n "<wf-name>"      │
+│  2. apex submit param.json -c global.json -s -n "<wf-name>"   │
 │  → Connects to workflows.deepmodeling.com                      │
-│  → Submits dflow workflow and waits for completion             │
+│  → Records the workflow ID and exits after submission          │
 │  → upload_packages sends new APEX code to all inner steps      │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ dflow orchestration
@@ -78,13 +78,13 @@ python3 -c "import apex; print(f'APEX version: {apex.__version__}')"
 # Authentication is already stored in global.json by generate_config.py.
 # Do not read BOHRIUM_ACCESS_KEY or refresh the ticket in this container.
 set +eo pipefail
-apex submit param.json -c global.json -n "<workflow-name>" 2>&1 | tee apex_submit.log
+apex submit param.json -c global.json -s -n "<workflow-name>" 2>&1 | tee apex_submit.log
 EXIT_CODE=${PIPESTATUS[0]}
 set -eo pipefail
 
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "=== APEX succeeded ==="
-    find . -name "result.json" -exec echo "Found: {}" \; -exec cat {} \;
+    echo "=== APEX workflow submitted ==="
+    echo "Retain apex_submit.log and the workflow ID for monitoring/retrieval."
     exit 0
 else
     echo "APEX failed (exit $EXIT_CODE)"
@@ -99,7 +99,9 @@ fi
 - `run.sh` does not access `BOHRIUM_ACCESS_KEY` or modify `global.json`
 - **单次执行，不重试** — 失败即退出，由用户决定是否重新提交
 - `-n` flag sets workflow name (NOT `-w` which is work directory)
-- No `-s` flag → outer job waits for dflow completion and retrieves results
+- `-s` is the default for agent-managed runs → the outer job exits after
+  submission; the agent must retain the workflow ID, monitor dflow, and retrieve
+  results explicitly
 
 ## RFC 1123 Workflow Name Constraint (CRITICAL)
 
@@ -160,37 +162,52 @@ project ID in examples or generated configs.
 > For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c8_m31_1 * NVIDIA T4"`.
 > Before submitting, run `scripts/validate_apex_combo.py check` on the chosen image × scass_type.
 
-## Submission Workflow (Complete Lifecycle)
+## Agent-Managed Submission Workflow (Complete Lifecycle)
 
-The workflow uses a **blocking** outer job (NO `-s` flag) so results come back automatically:
+The default agent workflow uses `-s` so the thin outer job does not consume
+machine time while the inner dflow workflow runs:
 
 1. **Prepare inputs locally** (Bash): run `scripts/generate_config.py` to generate `global.json` + `param.json` + copy structure/model files into a job directory.
 
-2. **Submit outer Bohrium job** (blocking mode):
+2. **Submit outer Bohrium job** (submit-only mode):
    ```python
    Bohrium(action="submit",
      input_dir="<job_dir>",
      image="registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
      machine="c2_m4_cpu",
-     cmd='apex submit param.json -c global.json -f joint -n "cu-fcc-elastic" > log 2>&1')
+     cmd='apex submit param.json -c global.json -f joint -s -n "cu-fcc-elastic" > log 2>&1')
    ```
-   **Without `-s`**, `apex submit` blocks until the dflow workflow finishes, then auto-retrieves results into the working directory. The outer Bohrium job stays running the entire time (typically 10–30 min for simple systems).
+   Parse and retain the workflow ID printed in the submission log. The outer
+   Bohrium job exits while the inner dflow workflow continues.
 
-3. **When outer job finishes**: MatMaster is automatically notified.
-   - **If Finished**: Download results → parse `confs/*/elastic_00/result.json` (or equivalent property results) → summarize and present to user.
-   - **If Failed**: Download logs → read `log` file and any `dpdispatcher.log` → analyze failure cause → report to user with fix suggestions.
+3. **Monitor the inner workflow by ID** using APEX workflow query commands.
+   Do not interpret successful completion of the outer job as successful
+   completion of the calculation.
 
-4. **Result parsing**: After download, read the property result files:
+4. **Retrieve after the inner workflow finishes**:
+   ```bash
+   apex retrieve -i <workflow-id> -c global.json
+   ```
+   - **If Finished**: retrieve results → parse `confs/*/elastic_00/result.json`
+     (or equivalent property results) → summarize and present to user.
+   - **If Failed**: retrieve available logs → read `log` and any
+     `dpdispatcher.log` → analyze the failure and report suggested fixes.
+
+5. **Result parsing**: After retrieval, read the property result files:
    - Elastic: `confs/<structure>/elastic_00/result.json` → contains `elastic_tensor`, `B`, `G`, `E`, `u`
    - EOS: `confs/<structure>/eos_00/result.json` → contains `volume`, `energy`, fitted EOS params
    - Surface: `confs/<structure>/surface_00/result.json` → surface energies per miller index
    - Other properties follow the same pattern: `confs/<structure>/<prop_type>_00/result.json`
 
-5. **Present results**: Summarize in a table with physical units (GPa for elastic, J/m² for surface, eV for formation energies). Compare with literature values when available.
+6. **Present results**: Summarize in a table with physical units (GPa for elastic, J/m² for surface, eV for formation energies). Compare with literature values when available.
 
-> **IMPORTANT**: Do NOT use the `-s` flag for the standard workflow. The `-s` (submit-only) flag makes the outer job exit immediately after submission, which means MatMaster cannot track completion or auto-retrieve results. Only use `-s` for advanced users who want to manage monitoring themselves.
+> **Blocking alternative**: Omit `-s` only when automatic waiting and retrieval
+> are more important than outer-machine time. In that mode, the outer job remains
+> active until dflow completes.
 
-> **Timeout**: For large systems or many properties, the outer Bohrium job may run for hours. Set an appropriate Bohrium job timeout if needed. If the outer job times out, use `apex retrieve -i <workflow-id> -c global.json` in a separate job to fetch results.
+> **Agent responsibility**: A submit-only outer job finishing successfully means
+> only that dflow accepted the workflow. The agent must continue tracking the
+> inner workflow and retrieve its outputs.
 
 ## Expected Log Warnings (Non-Fatal)
 

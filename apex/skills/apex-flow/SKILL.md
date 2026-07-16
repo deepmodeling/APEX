@@ -40,9 +40,9 @@ Options to offer via AskQuestion:
 ## High-Level Workflow (5 Steps)
 
 1. **Prepare inputs** — Check `BOHRIUM_ACCESS_KEY`, then generate `param.json` + `global.json` (including a fresh ticket) and copy structure/model files into a job directory using `scripts/generate_config.py`
-2. **Submit outer Bohrium job** — A thin client (`c2_m4_cpu`) that runs `apex submit` to connect to the dflow orchestration server
+2. **Submit outer Bohrium job** — A thin client (`c2_m4_cpu`) that runs `apex submit ... -s` to connect to the dflow orchestration server, records the workflow ID, and exits
 3. **dflow executes** — Inner containers (LAMMPS/ABACUS/VASP) run the actual calculations, managed by `workflows.deepmodeling.com`
-4. **Retrieve results** — Outer job blocks until completion (no `-s` flag), auto-retrieves results; parse `confs/<structure>/<prop>_00/result.json`
+4. **Monitor and retrieve results** — The agent monitors the inner workflow by ID and runs `apex retrieve` after completion; parse `confs/<structure>/<prop>_00/result.json`
 5. **Present results** — Summarize in a table with physical units (GPa for elastic, J/m² for surface, eV for energies)
 
 ## Critical Rules
@@ -84,6 +84,12 @@ Options to offer via AskQuestion:
    **If AskQuestion times out or fails**: display the parameters in your message and WAIT for confirmation before submitting.
 
 3. **Two-layer architecture.** The outer Bohrium job is a thin submission client only. Never attempt `apex do` for production workflows — use `apex submit` which delegates to dflow. See `reference/submission.md` for the full architecture diagram.
+
+   For agent-managed Bohrium runs, use `apex submit ... -s` by default so the
+   outer client exits after submission instead of consuming machine time while
+   dflow runs. Capture the workflow ID, monitor the inner workflow, and retrieve
+   results explicitly. Omit `-s` only when the user specifically wants a
+   blocking submission with automatic retrieval.
 
 4. **Kill = inner FIRST, outer SECOND.** If you only kill the outer Bohrium node, the dflow workflow continues consuming resources silently. Always terminate the inner dflow workflow first. See `reference/workflow-control.md`.
 
