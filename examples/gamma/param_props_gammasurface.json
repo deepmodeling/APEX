@@ -21,6 +21,7 @@
             "slip_direction": [1, -1, -1],
             "supercell_size": [1, 1, 20],
             "vacuum_size": 15,
+            "closed_loop": false,
             "add_fix": ["true", "true", "false"],
             "n_steps_x": 20,
             "n_steps_y": 20

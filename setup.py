@@ -19,6 +19,7 @@ setuptools.setup(
             "skills/apex-skill/plugin.yaml",
             "skills/apex-skill/data/*",
             "skills/apex-skill/models/*",
+            "skills/apex-skill/models/*/*",
             "skills/apex-skill/reference/*",
             "skills/apex-skill/scripts/*",
         ],

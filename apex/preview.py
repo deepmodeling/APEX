@@ -395,7 +395,12 @@ def preview_parameter_file(
                     temp_root,
                     f"structure_{structure_index}_{prop_index}",
                 )
-                task_list = prop_obj.make_confs(str(work_dir), equi_dir, refine=do_refine)
+                make_kwargs = {}
+                if prop.get("type") == "gamma_surface":
+                    make_kwargs["require_relaxation_result"] = False
+                task_list = prop_obj.make_confs(
+                    str(work_dir), equi_dir, refine=do_refine, **make_kwargs
+                )
                 prop_obj.post_process(task_list)
                 if prop.get("type") == "gamma_surface":
                     task_list = _arrange_gamma_surface_tasks(task_list)

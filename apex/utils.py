@@ -178,7 +178,7 @@ def handle_prop_suffix(parameter: dict):
             return None, None
     elif parameter.get("skip", False):
         return None, None
-    if 'init_from_suffix' and 'output_suffix' in parameter:
+    if 'init_from_suffix' in parameter and 'output_suffix' in parameter:
         do_refine = True
         suffix = parameter['output_suffix']
     elif 'reproduce' in parameter and parameter['reproduce']:

@@ -123,8 +123,12 @@ def _apply_gamma_fix_to_lammps_input(contents, add_fix):
         elif line.split()[:4] == ["variable", "N", "equal", "count(all)"]:
             upper_id = idx
             break
-    if lower_id is None or upper_id is None:
-        return contents
+    if lower_id is None or upper_id is None or lower_id >= upper_id:
+        raise RuntimeError(
+            "Gamma add_fix was requested, but the generated LAMMPS input does "
+            "not contain a compatible minimization block with 'min_style cg' "
+            "and 'variable N equal count(all)' markers"
+        )
     del lines[lower_id + 1 : upper_id - 1]
     lines.insert(lower_id + 1, add_fix_str)
     return "".join(lines)
@@ -386,6 +390,18 @@ class Lammps(Task):
                 else:
                     raise RuntimeError("not supported calculation setting for LAMMPS")
 
+            elif cal_type == "static":
+                fc = lammps_utils.make_lammps_eval(
+                    "conf.lmp", self.type_map, self.inter_func, self.model_param
+                )
+            elif cal_type == "finite_t_elastic":
+                fc = lammps_utils.make_lammps_FiniteTelastic(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    output_dir,
+                )
             elif task_type in ["annealing", "Annealing"]:
                 # MD annealing schedule: equilibrate -> ramp -> hold -> cool
                 fc = lammps_utils.make_lammps_annealing(
@@ -396,25 +412,13 @@ class Lammps(Task):
                     cal_setting,
                 )
 
-            elif cal_type == "static":
-                fc = lammps_utils.make_lammps_eval(
-                    "conf.lmp", self.type_map, self.inter_func, self.model_param
-                )
-            elif cal_type == "npt+ave/time":
+            elif task_type == "finite_t_latt":
                 fc = lammps_utils.make_lammps_FiniteTlatt(
                     "conf.lmp",
                     self.type_map,
                     self.inter_func,
                     self.model_param,
                     cal_setting,
-                )
-            elif cal_type == "finite_t_elastic":
-                fc = lammps_utils.make_lammps_FiniteTelastic(
-                    "conf.lmp",
-                    self.type_map,
-                    self.inter_func,
-                    self.model_param,
-                    output_dir,
                 )
 
             else:
@@ -423,7 +427,7 @@ class Lammps(Task):
         if (
             prop_type in {"gamma", "gamma_surface"}
             and cal_type == "relaxation"
-            and "add_fix" in task_param
+            and task_param.get("add_fix") is not None
         ):
             fc = _apply_gamma_fix_to_lammps_input(fc, task_param["add_fix"])
 

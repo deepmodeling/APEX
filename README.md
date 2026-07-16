@@ -733,6 +733,7 @@ Key parameters:
 | `vacuum_size` | Float | `0` | Added vacuum layer thickness (Å). |
 | `supercell_size` | Sequence[Int] | `[1, 1, 5]` | Slab supercell size. |
 | `add_fix` | Sequence[String] | `["true","true","false"]` | Position constraints along x/y/z. |
+| `closed_loop` | Bool | `false` |  when `true`, derive two periodic in-plane translation vectors from the generated slab. and slip_length or slip_length_y will be **ignored** |
 
 Example:
 
@@ -778,6 +779,7 @@ adds vacuum along the selected fault normal for slab/free-surface calculations.
             "slip_direction": [1, -1, -1],
             "supercell_size": [1, 1, 20],
             "vacuum_size": 15,
+            "closed_loop": false,
             "add_fix": ["true", "true", "false"],
             "n_steps_x": 20,
             "n_steps_y": 20
