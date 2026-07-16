@@ -615,6 +615,19 @@ def parse_args():
     parser_account.add_argument("--program-id", dest="program_id", type=int, default=None)
     parser_account.add_argument("--apex-image-name", dest="apex_image_name", type=str, default=None)
 
+    ##########################################
+    # Agent skill
+    parser_skill = subparsers.add_parser(
+        "skill",
+        help="Print an Agent prompt for installing the bundled apex-skill",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_skill.add_argument(
+        "--path",
+        action="store_true",
+        help="Only print the bundled skill directory path",
+    )
+
     parsed_args = parser.parse_args()
     # print help if no parser
     if not parsed_args.cmd:
@@ -1546,6 +1559,10 @@ def main():
         from apex.preview import preview_from_args
 
         preview_from_args(args)
+    elif args.cmd == 'skill':
+        from apex.skill import skill_from_args
+
+        skill_from_args(args)
     else:
         raise RuntimeError(
             f"unknown command {args.cmd}\n{parser.print_help()}"

@@ -1,6 +1,6 @@
 ---
-name: apex-flow
-description: Batch multi-property materials calculations (EOS, elastic, surface, phonon, etc.) via VASP/ABACUS/LAMMPS backends orchestrated through dflow
+name: apex-skill
+description: Batch multi-property materials calculations (EOS, elastic, surface, phonon, etc.) via VASP/ABACUS/LAMMPS backends orchestrated through dflow. Use when the user mentions APEX, apex submit, alloy property workflows, or multi-property DFT/MLIP screening.
 ---
 
 # APEX Skill — Alloy Properties EXplorer
@@ -73,6 +73,17 @@ Options to offer via AskQuestion:
 
 5. **Ticket refresh every submission.** Tickets expire in ~1 week. Always refresh via the ticket API before `apex submit`. See `reference/submission.md`.
 
+6. **Project ID from environment only.** `generate_config.py` reads `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a project ID (including old examples like `13529`) into `global.json`, docs, or prompts.
+
+7. **Screen image × machine before submit.** Before writing `global.json` or submitting, run:
+   ```bash
+   python scripts/validate_apex_combo.py list-combos --backend lammps --prefer gpu
+   python scripts/validate_apex_combo.py check \
+     --image registry.dp.tech/dptech/deepmd-kit:3.1.3 \
+     --scass "c8_m31_1 * NVIDIA T4"
+   ```
+   Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`.
+
 ## Supported Properties (15 types)
 
 | Type | JSON `type` value | Backend | Description |
@@ -135,17 +146,17 @@ See `reference/submission.md` for the full validated template.
 
 ## Key Additional Rules
 
-6. **LAMMPS-only properties**: `finite_t_latt`, `finite_t_elastic`, and `annealing` ONLY work with LAMMPS backends. Inform users of this limitation if they request these with VASP/ABACUS.
+8. **LAMMPS-only properties**: `finite_t_latt`, `finite_t_elastic`, and `annealing` ONLY work with LAMMPS backends. Inform users of this limitation if they request these with VASP/ABACUS.
 
-7. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`.
+9. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`.
 
-8. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
+10. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
 
-9. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to `"c8_m31_1 * NVIDIA T4"` for these backends.
+11. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
 
-10. **Supercell sizing.** For defect calculations (vacancy, interstitial), use at least [2,2,2] supercell. For phonon, [3,3,3] recommended (phonoLAMMPS may fail with [2,2,2]).
+12. **Supercell sizing.** For defect calculations (vacancy, interstitial), use at least [2,2,2] supercell. For phonon, [3,3,3] recommended (phonoLAMMPS may fail with [2,2,2]).
 
-11. **Outer job machine.** The outer Bohrium job only needs `c2_m4_cpu` since it just calls `apex submit`. Don't waste GPU resources on the submission client.
+13. **Outer job machine.** The outer Bohrium job only needs `c2_m4_cpu` since it just calls `apex submit`. Don't waste GPU resources on the submission client.
 
 ## RSS (Random Solid Solution) Workflow
 
@@ -162,7 +173,8 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 
 | Script | Purpose |
 |--------|---------|
-| `generate_config.py` | Generate global.json + param.json with ticket auth |
+| `generate_config.py` | Generate global.json + param.json with ticket auth; requires `BOHRIUM_PROJECT_ID` |
+| `validate_apex_combo.py` | List / check / recommend safe image × scass_type combos |
 | `parse_results.py` | Parse APEX output into summary |
 | `validate_inputs.py` | Validate configuration before submission |
 

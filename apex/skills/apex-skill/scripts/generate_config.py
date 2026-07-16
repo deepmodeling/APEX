@@ -7,7 +7,7 @@ Handles access_key → ticket conversion and RFC 1123 name compliance.
 
 Environment variables:
     BOHRIUM_ACCESS_KEY  — Bohrium access key (converted to ticket via API)
-    BOHRIUM_PROJECT_ID  — Bohrium project ID (default: 13529)
+    BOHRIUM_PROJECT_ID  — Bohrium project ID (required unless --project-id is set)
 
 Usage:
     python generate_config.py \
@@ -41,7 +41,6 @@ TICKET_API_URL = "https://openapi.dp.tech/openapi/v1/ticket/get"
 DFLOW_HOST = "https://workflows.deepmodeling.com"
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0"
 LAMMPS_IMAGE = "registry.dp.tech/dptech/deepmd-kit:3.1.3"
-DEFAULT_PROJECT_ID = 13529
 
 # Default parameters for each property type
 # These are TESTED stable defaults that prevent KeyError failures.
@@ -301,6 +300,45 @@ def sanitize_workflow_name(name: str) -> str:
 # Global config generation
 # =============================================================================
 
+def resolve_project_id(project_id: int = None) -> int:
+    """
+    Resolve Bohrium project ID from --project-id or BOHRIUM_PROJECT_ID.
+
+    Never hardcode a personal/project-specific ID. Fail loudly if unset.
+    """
+    if project_id is not None:
+        return int(project_id)
+    env = os.environ.get("BOHRIUM_PROJECT_ID", "").strip()
+    if not env:
+        raise RuntimeError(
+            "BOHRIUM_PROJECT_ID environment variable not set and --project-id "
+            "not provided. Set BOHRIUM_PROJECT_ID to the active Bohrium project "
+            "before generating global.json."
+        )
+    try:
+        return int(env)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"BOHRIUM_PROJECT_ID must be an integer, got: {env!r}"
+        ) from exc
+
+
+def _validate_image_scass(image: str, scass: str) -> None:
+    """Reject known-bad image × scass_type combinations before write-out."""
+    script_dir = Path(__file__).resolve().parent
+    if str(script_dir) not in sys.path:
+        sys.path.insert(0, str(script_dir))
+    from validate_apex_combo import check_combo  # noqa: WPS433
+
+    ok, errors = check_combo(image, scass)
+    if not ok:
+        raise RuntimeError(
+            "Blocked image × scass_type combination:\n  - "
+            + "\n  - ".join(errors)
+            + "\nRun: python scripts/validate_apex_combo.py list-combos"
+        )
+
+
 def build_global_json(backend: str, potential: str = None,
                       access_key: str = None, project_id: int = None,
                       scass_type: str = None,
@@ -310,9 +348,11 @@ def build_global_json(backend: str, potential: str = None,
 
     This config tells APEX how to orchestrate calculations via
     workflows.deepmodeling.com (dflow/Argo).
+
+    ``program_id`` / ``bohrium_config.project_id`` always come from
+    ``--project-id`` or ``BOHRIUM_PROJECT_ID`` (required).
     """
-    # Resolve project ID
-    pid = project_id or int(os.environ.get("BOHRIUM_PROJECT_ID", DEFAULT_PROJECT_ID))
+    pid = resolve_project_id(project_id)
 
     # Resolve access key and convert to ticket
     key = access_key or os.environ.get("BOHRIUM_ACCESS_KEY")
@@ -354,6 +394,8 @@ def build_global_json(backend: str, potential: str = None,
         lammps_image = LAMMPS_IMAGE
     else:
         lammps_image = LAMMPS_IMAGE  # Still needed as fallback in global.json
+
+    _validate_image_scass(lammps_image, inner_scass)
 
     config = {
         "dflow_host": DFLOW_HOST,
@@ -568,7 +610,7 @@ def main():
     parser.add_argument("--access-key",
                         help="Bohrium access key (or set BOHRIUM_ACCESS_KEY env var)")
     parser.add_argument("--project-id", type=int,
-                        help="Bohrium project ID (or set BOHRIUM_PROJECT_ID env var)")
+                        help="Bohrium project ID (required unless BOHRIUM_PROJECT_ID is set)")
     parser.add_argument("--scass-type",
                         help="Override scass_type for inner dflow containers")
     parser.add_argument("--run-command",

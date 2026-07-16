@@ -137,16 +137,20 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 
 ## Validated global.json Structure
 
+`program_id` and `bohrium_config.project_id` **must** come from the environment
+variable `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a personal
+project ID in examples or generated configs.
+
 ```json
 {
     "dflow_host": "https://workflows.deepmodeling.com",
     "k8s_api_server": "https://workflows.deepmodeling.com",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "program_id": 13529,
+    "program_id": "<BOHRIUM_PROJECT_ID>",
     "bohrium_config": {
         "ticket": "<UUID from API conversion — auto-filled by generate_config.py>",
-        "project_id": 13529
+        "project_id": "<BOHRIUM_PROJECT_ID>"
     },
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
     "lammps_image_name": "registry.dp.tech/dptech/deepmd-kit:3.1.3",
@@ -158,6 +162,7 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 ```
 
 > For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c8_m31_1 * NVIDIA T4"`.
+> Before submitting, run `scripts/validate_apex_combo.py check` on the chosen image × scass_type.
 
 ## Submission Workflow (Complete Lifecycle)
 

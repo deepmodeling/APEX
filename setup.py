@@ -13,6 +13,17 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/deepmodeling/APEX.git",
     packages=setuptools.find_packages(),
+    package_data={
+        "apex": [
+            "skills/apex-skill/SKILL.md",
+            "skills/apex-skill/plugin.yaml",
+            "skills/apex-skill/data/*",
+            "skills/apex-skill/models/*",
+            "skills/apex-skill/reference/*",
+            "skills/apex-skill/scripts/*",
+        ],
+    },
+    include_package_data=True,
     install_requires=[
         "numpy<2.0.0",
         "pydflow>=1.7.83",
