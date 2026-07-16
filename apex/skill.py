@@ -83,8 +83,6 @@ cp -R "{skill_root}" ~/.codex/skills/{SKILL_NAME}
 - Tell the user the skill is available as `{SKILL_NAME}` / `/apex-flow`
 - For APEX calculation requests, read `SKILL.md` first, then load referenced
   docs under `reference/` only as needed
-- Do not keep duplicate installations under legacy skill names
-
 ## Notes
 
 - The PyPI / pip package and agent skill both use the name `{SKILL_NAME}`.
