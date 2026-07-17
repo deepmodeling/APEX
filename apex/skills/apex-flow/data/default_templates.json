@@ -1,18 +1,18 @@
 {
-    "apex_image": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
+    "apex_image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
     "backends": {
         "lammps_gpu": {
-            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
+            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
             "machine": "c8_m31_1 * NVIDIA T4",
             "potentials": ["deepmd", "mace", "nep"]
         },
         "lammps_cpu": {
-            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
+            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
             "machine": "c16_m32_cpu",
             "potentials": ["gap", "snap", "rann", "eam_alloy", "eam_fs", "meam", "meam_spline"]
         },
         "abacus": {
-            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
+            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
             "machine": "c16_m32_cpu",
             "run_command": "mpirun -n 8 abacus"
         },

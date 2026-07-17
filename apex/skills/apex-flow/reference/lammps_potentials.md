@@ -218,16 +218,16 @@ manual map.
 
 | Potential Type | Recommended Image | GPU? |
 |---------------|-------------------|------|
-| deepmd | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | Yes |
-| mace | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | Yes |
-| nep | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | Yes |
-| gap | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No (CPU) |
-| snap | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No |
-| rann | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No |
-| eam_alloy | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No |
-| eam_fs | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No |
-| meam | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No |
-| meam_spline | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | No |
+| deepmd | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Yes |
+| mace | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Yes |
+| nep | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Yes |
+| gap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No (CPU) |
+| snap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
+| rann | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
+| eam_alloy | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
+| eam_fs | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
+| meam | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
+| meam_spline | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
 
 All potential types are supported by the unified APEX image. The APEX 1.3.0 image ships LAMMPS compiled with DeePMD, MACE, NEP, and standard LAMMPS potentials.
 
