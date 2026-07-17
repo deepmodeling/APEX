@@ -6,7 +6,7 @@ APEX supports three calculator **backends**: LAMMPS, ABACUS, and VASP.
 Each requires specific configuration in `param.json` under the `"interaction"` key.
 
 > APEX **backend** = calculator (`lammps` / `abacus` / `vasp`).
-> “DPA-2” / “DPA_alloy” / “DPA-3” are DeePMD **model files** under LAMMPS (`interaction.type: deepmd`).
+> DPA-3.2-5M is a DeePMD **model** under LAMMPS (`interaction.type: deepmd`).
 > Ask calculator backend first; if LAMMPS+DeePMD, then ask which model file.
 
 ---
@@ -108,13 +108,15 @@ Default image: `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonola
 
 > **LAMMPS phonon and Grüneisen**: `apex submit` forces the validated default image above. It supports the tested NVIDIA T4 configuration and includes phonoLAMMPS.
 
-### DPA-2 Multi-Head Model Preparation
+### DPA-3.2-5M Multi-Head Model Preparation
 
-DPA-2 pretrained models (`.pt` files, e.g. `dpa-2.4-7M.pt`) are **multi-head** and **cannot be used directly** as `interaction.model` in APEX. You must first freeze the model with a specific task head.
+The source DPA-3.2-5M `.pt` checkpoint is **multi-head** and cannot be used
+directly as `interaction.model` in APEX/LAMMPS. Freeze a specific task head
+first.
 
 **Freeze command:**
 ```bash
-dp --pt freeze -c dpa-2.4-7M.pt -o DPA2_alloy.pth --head Domains_Alloy
+dp --pt freeze -c DPA-3.2-5M.pt -o DPA-3.2-5M-OMat24.pth --head OMat24
 ```
 
 - `-c`: Input multi-head `.pt` checkpoint
@@ -126,46 +128,52 @@ The **frozen** `.pth` or `.pb` file is what goes into `interaction.model`:
 {
     "interaction": {
         "type": "deepmd",
-        "model": "DPA2_alloy.pth",
+        "model": "DPA-3.2-5M-OMat24.pth",
         "type_map": "auto"
     }
 }
 ```
 
-**Available heads** depend on the specific DPA-2 release. Common ones include:
-- `Domains_Alloy` — general alloy energetics
-- Check the model documentation / release notes for the full list of available heads.
+Useful heads include:
+- `OMat24` — broad materials coverage; bundled default, including oxygen
+- `Alloy_APEX` — APEX alloy/defect data; 53 metallic observed elements and no oxygen
+- `Domains_Alloy` — general alloy energetics; 53 metallic observed elements
+- `OC22` — oxide electrocatalyst structures
+
+Inspect the checkpoint before choosing:
+```bash
+dp --pt show DPA-3.2-5M.pt model-branch observed-type
+```
 
 > 💡 If you pass an unfrozen multi-head `.pt` file directly to LAMMPS, it will error with a message about missing head selection.
 
-### Built-in DPA models (`models/`)
+### Bundled DPA model (`models/`)
 
-**Priority:** use bundled **frozen** models first. The skill zip only includes
-small `.pb` files (not multi-head `.pt` / DPA3). Details: `models/README.md`.
+**Priority:** use the bundled **frozen** model first. The skill zip includes
+the ready-to-run OMat24 `.pth`, not the multi-head source `.pt`. Details:
+`models/README.md`.
 
 | Path | Format | Use |
 |------|--------|-----|
-| `models/DPA2/DPA2.pb` | Frozen TF (~6MB, ready) | Default DPA-2 for APEX |
-| `models/DPA_alloy/DPA_alloy.pb` | Frozen TF (~6MB, ready) | Prefer for alloys / HEA |
+| `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth` | Frozen PyTorch (~23MB) | Default DPA-3.2 model for APEX |
 
-When the user requests DPA-2 without a custom model, **copy** `models/DPA2/DPA2.pb`
-into the task directory (for alloys prefer `models/DPA_alloy/DPA_alloy.pb`) and set:
+Copy the bundled model into the task directory and set:
 
 ```json
 {
     "interaction": {
         "type": "deepmd",
-        "model": "DPA2.pb",
+        "model": "DPA-3.2-5M-OMat24.pth",
         "type_map": "auto"
     }
 }
 ```
 
-Large checkpoints are optional and downloaded only on explicit request:
+The source checkpoint is optional and downloaded only when another task head
+is explicitly requested:
 
 ```bash
-python scripts/fetch_models.py --dpa2-pt   # ~76MB multi-head
-python scripts/fetch_models.py --dpa3      # ~62MB, then freeze a head
+python scripts/fetch_models.py --source-checkpoint
 ```
 
 > Use `"type_map": "auto"` by default. APEX infers the local contiguous type

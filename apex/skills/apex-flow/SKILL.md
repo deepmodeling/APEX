@@ -1,6 +1,6 @@
 ---
 name: apex-flow
-description: Batch multi-property materials calculations (EOS, 0K elastic constant, surface energy, phonon, finite temperature elastic constant, gamma surface, gamma line, coherent energy) via APEX calculator backends VASP/ABACUS/LAMMPS. DPA-2/DPA_alloy are DeePMD model files under LAMMPS. Use when the user mentions APEX, apex, alloy property, or multi-property DFT/MLIP screening, including EOS, 0K elastic constant, surface energy, phonon calculation, finite temperature elastic constant, gamma surface, gamma line, coherent energy.
+description: Batch multi-property materials calculations (EOS, 0K elastic constant, surface energy, phonon, finite temperature elastic constant, gamma surface, gamma line, coherent energy) via APEX calculator backends VASP/ABACUS/LAMMPS. The bundled DPA-3.2-5M OMat24 model is a DeePMD potential for LAMMPS. Use when the user mentions APEX, apex, alloy property, oxide, or multi-property DFT/MLIP screening, including EOS, 0K elastic constant, surface energy, phonon calculation, finite temperature elastic constant, gamma surface, gamma line, coherent energy.
 ---
 
 # APEX Flow — Alloy Properties EXplorer
@@ -60,16 +60,17 @@ Options to offer via AskQuestion:
   - LAMMPS + classical (EAM / MEAM / SNAP): fast, CPU
   - ABACUS (DFT)
   - VASP (DFT; license + image required)
-   **Step B — only if Step A is LAMMPS + DeePMD/DPA: use a model bundled with this skill.**
-  - General systems: copy `models/DPA2/DPA2.pb` into the job directory.
-  - Alloys / HEA: copy `models/DPA_alloy/DPA_alloy.pb` into the job directory.
+   **Step B — only if Step A is LAMMPS + DeePMD/DPA: use the model bundled with this skill.**
+  - Copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth` into the job directory.
+  - This is the frozen, single-task `OMat24` branch of DPA-3.2-5M. It is
+    ready for APEX/LAMMPS, includes oxygen, and has 89 observed elements.
   - Set `interaction.model` to the copied filename and set `"type_map": "auto"`.
   APEX reads the structure at submission time and writes a zero-based,
   contiguous element map. Do not derive indices from atomic numbers or the
   model's internal type order.
-  - Do not invent a model path, download another model, or use a multi-head `.pt` directly. Use a user-provided or downloaded model only when the user explicitly requests it or the bundled models do not support the system; explain the incompatibility and obtain confirmation first.
+  - Do not invent a model path, download another model, or use the source multi-head `.pt` directly. Use a user-provided or separately frozen task head only when the user explicitly requests it or the bundled OMat24 model is unsuitable; explain the choice and obtain confirmation first.
    **Skip Step A/B ONLY if** the user already stated them in THIS message
-   (e.g. “用 EAM”, “用 ABACUS 做 EOS”, “用 DPA_alloy.pb”).
+   (e.g. “用 EAM”, “用 ABACUS 做 EOS”, “用 DPA-3.2-5M-OMat24.pth”).
    **If AskQuestion times out or fails**: state the intended APEX backend and bundled model selection (if LAMMPS+DPA) in plain text and WAIT. Never silently submit.
 2. **STOP: Confirm property parameters before submission — DO NOT PROCEED WITHOUT USER ANSWER.** Before submitting, present the full `properties` configuration (JSON) to the user. Show the defaults that will be used and highlight:
   - Miller indices (for surface/gamma/decohesive)
@@ -108,12 +109,13 @@ Options to offer via AskQuestion:
      --scass "c8_m31_1 * NVIDIA T4"
   ```
    Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, the combination `deepmd-kit:3.1.1` × `NVIDIA T4`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`. The default LAMMPS image is `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`; `apex submit` enforces it for LAMMPS phonon and Grüneisen workflows.
-8. **MUST use bundled frozen DPA models under** `models/` **for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill only ships small
-  ready-to-run graphs (`models/DPA2/DPA2.pb`, `models/DPA_alloy/DPA_alloy.pb`).
-   Copy the appropriate bundled model into the job directory before generating
-   `param.json`. Large `.pt` / DPA3 checkpoints are **not** in the skill zip —
-   fetch only when the user explicitly needs them (`scripts/fetch_models.py --dpa3`
-   or `dp pretrained download`) and freeze the selected head before use.
+8. **MUST use the bundled frozen DPA model under** `models/` **for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill ships
+   `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`, a ready-to-run frozen
+   DPA-3.2-5M OMat24 model. Copy it into the job directory before generating
+   `param.json`. The multi-head source checkpoint is **not** in the skill zip —
+   fetch it only when the user explicitly needs another task head
+   (`scripts/fetch_models.py --source-checkpoint` or
+   `dp --pt pretrained download DPA-3.2-5M`) and freeze that head before use.
    See `models/README.md`.
 9. **Preserve the user's input cell and prevent accidental double expansion.**
   APEX does not require a conventional cell. Do not convert a primitive cell or
@@ -206,7 +208,7 @@ See `reference/submission.md` for the full validated template.
 ## Key Additional Rules
 
 1. **LAMMPS-only properties**: `finite_t_elastic` only works with LAMMPS. `finite_t_latt` and `annealing` also support VASP Langevin–Parrinello–Rahman NpT and ABACUS Nose–Hoover-style NpT.
-2. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy the required bundled model from `models/DPA2` or `models/DPA_alloy`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
+2. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
 3. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
 4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
 5. **Supercell sizing applies to unit-cell inputs only.** For defect calculations (vacancy, interstitial), a total cell equivalent to at least a [2,2,2] unit-cell expansion is normally needed. For phonon, [3,3,3] total size is recommended (phonoLAMMPS may fail with a smaller total cell). If the input is already a supercell and the user declines further expansion, use `[1,1,1]`; do not apply these factors again.
@@ -235,7 +237,7 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 | ------------------------ | --------------------------------------------------------------------------------- |
 | `generate_config.py`     | Generate global.json + param.json with ticket auth; requires `BOHRIUM_PROJECT_ID` |
 | `validate_apex_combo.py` | List / check / recommend safe image × scass_type combos                           |
-| `fetch_models.py`        | Optional: download large DPA2/DPA3 `.pt` (not used by `apex skill --zip`)         |
+| `fetch_models.py`        | Optional: download the DPA-3.2-5M multi-head source `.pt` for freezing another head |
 | `parse_results.py`       | Parse APEX output into summary                                                    |
 | `validate_inputs.py`     | Validate configuration before submission                                          |
 

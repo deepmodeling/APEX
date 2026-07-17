@@ -46,18 +46,16 @@ apex skill --zip -o /tmp/{SKILL_NAME}.zip
 
 Confirm `{skill_md}` exists before copying. Do not invent or regenerate the
 skill content; copy the directory as-is (including `reference/`, `scripts/`,
-`data/`, `models/DPA2|DPA_alloy`, and `plugin.yaml`).
+`data/`, `models/DPA-3.2-5M`, and `plugin.yaml`).
 
-For DeePMD/DPA jobs, prefer bundled frozen models under `models/` first:
-- `models/DPA2/DPA2.pb`
-- `models/DPA_alloy/DPA_alloy.pb`
+For DeePMD/DPA jobs, use the bundled frozen DPA-3.2 model:
+- `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`
 
-Large multi-head checkpoints (`.pt`, DPA3, etc.) are **not** bundled. Only
-download them when the user explicitly needs that model/head:
+The source multi-head checkpoint (`.pt`) is **not** bundled. Download it only
+when the user explicitly needs a different task head:
 
 ```bash
-python scripts/fetch_models.py --dpa2-pt   # optional ~76MB
-python scripts/fetch_models.py --dpa3      # optional ~62MB
+python scripts/fetch_models.py --source-checkpoint
 ```
 
 Install destinations (create parents if missing):
@@ -95,8 +93,9 @@ def build_skill_zip(output: Path | None = None) -> Path:
     """
     Pack the bundled apex-flow directory into a zip for MatMaster upload.
 
-    Large DeePMD checkpoints (``*.pt``) are excluded on purpose so the archive
-    stays small. Frozen ``*.pb`` models under ``models/`` are included.
+    Large DeePMD source checkpoints (``*.pt``) are excluded on purpose.
+    Ready-to-run frozen ``*.pb`` and ``*.pth`` models under ``models/`` are
+    included.
     """
     skill_root = get_skill_root()
     if not (skill_root / "SKILL.md").is_file():

@@ -29,12 +29,18 @@ class TestApexSkill(unittest.TestCase):
         self.assertIn(f"name: {SKILL_NAME}", text)
         self.assertIn("BOHRIUM_PROJECT_ID", text)
         self.assertIn("validate_apex_combo.py", text)
-        self.assertIn("models/DPA2", text)
-        self.assertIn("models/DPA_alloy", text)
+        self.assertIn("models/DPA-3.2-5M", text)
+        self.assertIn("DPA-3.2-5M-OMat24.pth", text)
         root = get_skill_root()
         self.assertTrue((root / "models" / "README.md").is_file())
-        self.assertTrue((root / "models" / "DPA2" / "DPA2.pb").is_file())
-        self.assertTrue((root / "models" / "DPA_alloy" / "DPA_alloy.pb").is_file())
+        self.assertTrue(
+            (
+                root
+                / "models"
+                / "DPA-3.2-5M"
+                / "DPA-3.2-5M-OMat24.pth"
+            ).is_file()
+        )
         self.assertTrue((root / "scripts" / "fetch_models.py").is_file())
 
     def test_no_hardcoded_project_id_in_skill_docs(self):
@@ -61,7 +67,7 @@ class TestApexSkill(unittest.TestCase):
         self.assertIn("never refresh it in `run.sh`", skill)
         self.assertIn("Do not read BOHRIUM_ACCESS_KEY", submission)
         self.assertNotIn("Recommended run.sh Ticket Refresh Template", submission)
-        self.assertIn("use a model bundled with this skill", skill)
+        self.assertIn("use the model bundled with this skill", skill)
         self.assertIn('"type_map": "auto"', skill)
         self.assertIn("already a supercell", structure)
         self.assertIn("`supercell` / `supercell_size` to `[1,1,1]`", structure)
@@ -85,8 +91,9 @@ class TestApexSkill(unittest.TestCase):
             self.assertTrue(
                 any(n.startswith(f"{SKILL_NAME}/scripts/") for n in names)
             )
-            self.assertTrue(any(n.endswith("DPA2.pb") for n in names))
-            self.assertTrue(any(n.endswith("DPA_alloy.pb") for n in names))
+            self.assertTrue(
+                any(n.endswith("DPA-3.2-5M-OMat24.pth") for n in names)
+            )
             self.assertFalse(any(n.endswith(".pt") for n in names))
 
     def test_skill_agent_prompt(self):
@@ -211,7 +218,7 @@ class TestGenerateConfigProjectId(unittest.TestCase):
         interaction = self.gen.build_interaction(
             backend="lammps",
             potential="deepmd",
-            model="DPA2.pb",
+            model="DPA-3.2-5M-OMat24.pth",
         )
         self.assertEqual(interaction["type_map"], "auto")
 
