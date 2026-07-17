@@ -422,7 +422,7 @@ class TestPhonon(unittest.TestCase):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/OUT.ABACUS/running_scf.log"))
             self.assertEqual(calls[1], Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"))
-            self.assertFalse(any("--abacus" in command and command.startswith("phonopy band.conf") for command in calls))
+            self.assertFalse(any("--abacus" in command and "band.conf" in command for command in calls))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 

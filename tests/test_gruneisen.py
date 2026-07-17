@@ -472,7 +472,7 @@ class TestGruneisen(unittest.TestCase):
             ]),
             3,
         )
-        self.assertFalse(any(cmd == "phonopy band.conf --abacus" for _, cmd in calls))
+        self.assertFalse(any(cmd == "phonopy phonopy_disp.yaml --config band.conf --abacus" for _, cmd in calls))
         self.assertTrue((work_dir / "volume.000000" / "mesh.yaml").is_file())
         self.assertTrue((work_dir / "volume.000001" / "band.dat").is_file())
         self.assertTrue("Temperature(K)  SumGammaCv  Sign" in ptr)
