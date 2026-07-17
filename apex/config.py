@@ -60,7 +60,10 @@ class Config:
     pool_size: int = None
     upload_python_packages: list = field(default_factory=list)
     exclude_upload_files: list = field(default_factory=list)
-    lammps_image_name: str = None
+    lammps_image_name: str = (
+        "registry.dp.tech/dptech/dp/native/prod-397637/"
+        "deepmd-kit-phonolammps:3.1.3"
+    )
     lammps_run_command: str = None
     phonolammps_run_command: str = None
     vasp_image_name: str = None

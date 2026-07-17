@@ -8,7 +8,7 @@ Use from the agent skill or as a pre-check in generate_config.py.
 Usage:
     python validate_apex_combo.py list-combos --backend lammps --prefer gpu
     python validate_apex_combo.py check \\
-        --image registry.dp.tech/dptech/deepmd-kit:3.1.3 \\
+        --image registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3 \\
         --scass "c8_m31_1 * NVIDIA T4"
     python validate_apex_combo.py recommend --backend lammps --prefer cpu
 """
@@ -36,15 +36,22 @@ BLOCKED_SCASS = {
     "c12_m46_1 * NVIDIA T4": "machine type does not exist on Bohrium",
 }
 
+# Image × accelerator combinations that are known to be incompatible.
+# Match the accelerator name so every T4 machine size is covered.
+BLOCKED_IMAGE_ACCELERATORS = {
+    ("deepmd-kit:3.1.1", "NVIDIA T4"):
+        "DeepMD-kit 3.1.1 is incompatible with NVIDIA T4",
+}
+
 # Recommended allow-lists (short tags or full image refs)
 RECOMMENDED_LAMMPS_IMAGES = {
     "cpu": [
-        "registry.dp.tech/dptech/deepmd-kit:3.1.3",
+        "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
         "registry.dp.tech/dptech/deepmd-kit:3.1.1",
         "registry.dp.tech/dptech/deepmd-kit:2024Q1-d23cf3e",
     ],
     "gpu": [
-        "registry.dp.tech/dptech/deepmd-kit:3.1.3",
+        "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
         "registry.dp.tech/dptech/deepmd-kit:3.1.1",
         "registry.dp.tech/dptech/deepmd-kit:2024Q1-d23cf3e",
         "registry.dp.tech/dptech/deepmd-kit:3.1.0-cuda12.1",
@@ -108,6 +115,11 @@ def check_combo(
         errors.append(f"blocked image '{tag}': {BLOCKED_IMAGES[tag]}")
     if scass in BLOCKED_SCASS:
         errors.append(f"blocked scass_type '{scass}': {BLOCKED_SCASS[scass]}")
+    for (blocked_tag, accelerator), reason in BLOCKED_IMAGE_ACCELERATORS.items():
+        if tag == blocked_tag and accelerator in scass:
+            errors.append(
+                f"blocked image × accelerator '{tag}' × '{accelerator}': {reason}"
+            )
     if triclinic and tag in TRICLINIC_UNSAFE_TAGS:
         errors.append(
             f"image '{tag}' is unsafe for triclinic/non-orthogonal cells "
@@ -165,6 +177,10 @@ def list_combos(backend: str = "lammps", prefer: str = "cpu") -> dict:
         "recommended": rec,
         "blocked_images": BLOCKED_IMAGES,
         "blocked_scass": BLOCKED_SCASS,
+        "blocked_image_accelerators": {
+            f"{image} × {accelerator}": reason
+            for (image, accelerator), reason in BLOCKED_IMAGE_ACCELERATORS.items()
+        },
         "notes": [
             "Always validate image×scass before writing global.json / submitting.",
             "Outer Bohrium job should use c2_m4_cpu (or c2_m8_cpu), never GPU.",
@@ -189,6 +205,9 @@ def cmd_list_combos(args: argparse.Namespace) -> int:
         print("\nBlocked scass_type:")
         for k, v in BLOCKED_SCASS.items():
             print(f"  - {k}: {v}")
+        print("\nBlocked image x accelerator:")
+        for (image, accelerator), reason in BLOCKED_IMAGE_ACCELERATORS.items():
+            print(f"  - {image} x {accelerator}: {reason}")
     return 0
 
 

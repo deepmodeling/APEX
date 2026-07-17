@@ -116,7 +116,7 @@ Bohrium platform provides pre-configured environments, automated scheduling, and
     "password": "your_password",
     "program_id": 12345,
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
-    "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:3.1.1",
+    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
     "lammps_run_command": "lmp -in in.lammps",
     "scass_type": "c8_m31_1 * NVIDIA T4"
 }

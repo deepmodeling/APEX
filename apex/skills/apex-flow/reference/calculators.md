@@ -102,9 +102,11 @@ Each requires specific configuration in `param.json` under the `"interaction"` k
 
 ### ⚠️ LAMMPS Image Version
 
-Default image: `registry.dp.tech/dptech/deepmd-kit:3.1.3`
+Default image: `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`
 
-> ⚠️ **Do NOT use `deepmd-kit:3.1.1`** — it has a known segfault bug when handling triclinic cells (non-orthogonal boxes). Use `3.1.3` or later.
+> ⚠️ **Do NOT use `deepmd-kit:3.1.1` with GPU/T4** — known startup / triclinic issues. Prefer `3.1.3` or later.
+
+> **LAMMPS phonon and Grüneisen**: `apex submit` forces the validated default image above. It supports the tested NVIDIA T4 configuration and includes phonoLAMMPS.
 
 ### DPA-2 Multi-Head Model Preparation
 

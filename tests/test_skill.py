@@ -121,6 +121,28 @@ class TestValidateApexCombo(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("c4_m16_cpu" in e for e in errors))
 
+    def test_deepmd_311_blocked_on_all_t4_machine_sizes(self):
+        for scass in (
+            "c8_m31_1 * NVIDIA T4",
+            "c4_m15_1 * NVIDIA T4",
+            "c16_m62_1 * NVIDIA T4",
+        ):
+            with self.subTest(scass=scass):
+                ok, errors = self.combo.check_combo(
+                    "registry.dp.tech/dptech/deepmd-kit:3.1.1",
+                    scass,
+                )
+                self.assertFalse(ok)
+                self.assertTrue(any("NVIDIA T4" in e for e in errors))
+
+    def test_deepmd_311_cpu_remains_allowed(self):
+        ok, errors = self.combo.check_combo(
+            "deepmd-kit:3.1.1",
+            "c32_m64_cpu",
+        )
+        self.assertTrue(ok)
+        self.assertEqual(errors, [])
+
     def test_ok_combo(self):
         ok, errors = self.combo.check_combo(
             "registry.dp.tech/dptech/deepmd-kit:3.1.3",
@@ -198,6 +220,20 @@ class TestGenerateConfigProjectId(unittest.TestCase):
             get_skill_root() / "scripts" / "generate_config.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn('add_argument("--type-map"', source)
+
+    def test_lammps_default_uses_validated_phonolammps_image(self):
+        self.assertEqual(
+            self.gen.LAMMPS_IMAGE,
+            "registry.dp.tech/dptech/dp/native/prod-397637/"
+            "deepmd-kit-phonolammps:3.1.3",
+        )
+
+    def test_combo_validator_has_no_property_cli(self):
+        source = (
+            get_skill_root() / "scripts" / "validate_apex_combo.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('add_argument("--property"', source)
+        self.assertNotIn("BLOCKED_IMAGE_PROPERTIES", source)
 
 
 class TestGammaSurfaceSkillConfig(unittest.TestCase):

@@ -237,7 +237,7 @@ Create `global_bohrium.json` to submit workflows to the Bohrium cloud platform:
 
 ```json
 {
-  "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
+  "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
   "lammps_run_command":"lmp -in in.lammps",
   "scass_type":"c8_m31_1 * NVIDIA T4"
 }
@@ -790,7 +790,7 @@ adds vacuum along the selected fault normal for slab/free-surface calculations.
 
 APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) and wraps [Phonopy](https://github.com/phonopy/phonopy) / [phonoLAMMPS](https://github.com/abelcarreras/phonolammps). [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) automatically generates high-symmetry k-paths.
 
-> **Important:** Ensure the `run_image` (or local environment in debug mode) contains `phonoLAMMPS` when running LAMMPS-based phonon workflows.
+> **Important:** LAMMPS phonon and Grüneisen workflows always use `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`. During `apex submit`, APEX overrides any other configured LAMMPS image for these properties.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

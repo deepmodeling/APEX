@@ -27,7 +27,7 @@ APEX uses a **two-layer submission architecture**:
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Inner containers (managed by dflow on Bohrium)                 │
-│  - LAMMPS image: registry.dp.tech/dptech/deepmd-kit:3.1.3      │
+│  - LAMMPS image: deepmd-kit-phonolammps:3.1.3                  │
 │  - ABACUS image: registry.dp.tech/dptech/abacus:3.2.3          │
 │  - VASP image: (user-provided)                                  │
 │  - Machine type per task: scass_type in global.json             │
@@ -118,11 +118,13 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | Role | Image | Notes |
 |------|-------|-------|
 | **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0` | Lightweight; just runs `apex submit` |
-| **LAMMPS calculator** | `registry.dp.tech/dptech/deepmd-kit:3.1.3` | Used by dflow for LAMMPS tasks |
+| **LAMMPS calculator** | `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3` | Default; includes phonoLAMMPS |
 | **ABACUS calculator** | (same APEX image has ABACUS) | Or user-specified |
 | **VASP calculator** | User must provide | Commercial; confirm with user |
 
-> ⚠️ **Do NOT use `deepmd-kit:3.1.1`** — it has a known segfault bug when handling triclinic cells (non-orthogonal boxes). Use `3.1.3` or later.
+> ⚠️ **Do NOT combine `deepmd-kit:3.1.1` with any NVIDIA T4 machine**. It also has a known segfault bug when handling triclinic cells (non-orthogonal boxes), including on CPU. Use `3.1.3` or later.
+
+> LAMMPS phonon and Grüneisen tasks are forced to use `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`, which includes the required phonoLAMMPS executable.
 
 | Backend | scass_type (inner containers) | Notes |
 |---------|-------------------------------|-------|
@@ -151,7 +153,7 @@ project ID in examples or generated configs.
         "project_id": "<BOHRIUM_PROJECT_ID>"
     },
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
-    "lammps_image_name": "registry.dp.tech/dptech/deepmd-kit:3.1.3",
+    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
     "lammps_run_command": "lmp -in in.lammps",
     "scass_type": "c16_m32_cpu",
     "group_size": 1,

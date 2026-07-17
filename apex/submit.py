@@ -31,6 +31,12 @@ from apex.utils import (
 )
 
 
+LAMMPS_PHONON_IMAGE = (
+    "registry.dp.tech/dptech/dp/native/prod-397637/"
+    "deepmd-kit-phonolammps:3.1.3"
+)
+
+
 def validate_submit_paths(parameter_dicts: List[dict]) -> None:
     """
     dflow rejects structure path patterns containing '.'.
@@ -52,6 +58,22 @@ def validate_submit_paths(parameter_dicts: List[dict]) -> None:
             "Please rename the path/file and update param.json.\n"
             "Offending entries:\n- " + "\n- ".join(violations)
         )
+
+
+def _select_run_image(calculator: str, props_param: dict, run_image: str) -> str:
+    if calculator == "lammps" and props_param and any(
+            prop.get("type") in {"phonon", "gruneisen"}
+            for prop in props_param.get("properties", [])
+    ):
+        if run_image != LAMMPS_PHONON_IMAGE:
+            logging.warning(
+                "LAMMPS phonon/Gruneisen requires the validated phonoLAMMPS image; "
+                "overriding run image %r with %r.",
+                run_image,
+                LAMMPS_PHONON_IMAGE,
+            )
+        return LAMMPS_PHONON_IMAGE
+    return run_image
 
 
 def _with_lammps_retry_env(run_command: str, wf_config: Config) -> str:
@@ -563,6 +585,7 @@ def submit_workflow(
     run_image = wf_config.basic_config_dict[f"{calculator}_image_name"]
     if not run_image:
         run_image = wf_config.basic_config_dict["run_image_name"]
+    run_image = _select_run_image(calculator, props_param, run_image)
     run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config_dict["run_command"]
