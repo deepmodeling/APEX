@@ -80,14 +80,13 @@ Direct
 ### Preferred: APEX workflow submission
 ```
 image: registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0
-machine: c2_m4_cpu
-cmd: apex submit param.json -c global.json -f joint -s -n "mo-bcc-eos-elastic" > log 2>&1
+machine: c1_m2_cpu
+cmd: apex submit param.json -c global.json -f joint -n "mo-bcc-eos-elastic" > log 2>&1
 ```
 
 Use `apex submit` for production and Bohrium workflows. It delegates the
-calculation to dflow. For agent-managed runs, `-s` lets the lightweight outer
-job exit after submission; the agent must retain the workflow ID, monitor the
-inner workflow, and run `apex retrieve` after completion.
+calculation to dflow. For agent-managed runs, do not use `-s`; the outer job
+waits for completion and retrieves results automatically.
 
 ### Alternative: local step-by-step debugging
 ```bash
@@ -185,14 +184,14 @@ kspacing        0.15
 ### Preferred: APEX workflow submission
 ```
 image: registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0
-machine: c2_m4_cpu
-cmd: apex submit param.json -c global.json -f joint -s -n "cu-fcc-surface-vacancy" > log 2>&1
+machine: c1_m2_cpu
+cmd: apex submit param.json -c global.json -f joint -n "cu-fcc-surface-vacancy" > log 2>&1
 ```
 
 Use `apex submit` for production and Bohrium workflows. The calculator resources
 are configured for the inner dflow tasks in `global.json`; the outer submission
-client only needs a small CPU machine. For agent-managed runs, use `-s`, retain
-the workflow ID, monitor the inner workflow, and retrieve results explicitly.
+client only needs a small CPU machine. For agent-managed runs, omit `-s` so the
+client waits for completion and retrieves results automatically.
 
 ### Alternative: local step-by-step debugging
 ```bash

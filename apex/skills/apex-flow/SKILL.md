@@ -42,9 +42,9 @@ Options to offer via AskQuestion:
 ## High-Level Workflow (5 Steps)
 
 1. **Prepare inputs** — Check `BOHRIUM_ACCESS_KEY`, then generate `param.json` + `global.json` (including a fresh ticket) and copy structure/model files into a job directory using `scripts/generate_config.py`
-2. **Submit outer Bohrium job** — A thin client (`c2_m4_cpu`) that runs `apex submit ... -s` to connect to the dflow orchestration server, records the workflow ID, and exits
+2. **Submit outer Bohrium job** — A lightweight client (`c1_m2_cpu`, recommended) that runs `apex submit ...` without `-s`, connects to the dflow orchestration server, and waits for completion
 3. **dflow executes** — Inner containers (LAMMPS/ABACUS/VASP) run the actual calculations, managed by `workflows.deepmodeling.com`
-4. **Monitor and retrieve results** — The agent monitors the inner workflow by ID and runs `apex retrieve` after completion; parse `confs/<structure>/<prop>_00/result.json`
+4. **Monitor and retrieve results** — `apex submit` monitors the inner workflow and retrieves results after completion; parse `confs/<structure>/<prop>_00/result.json`
 5. **Present results** — Summarize in a table with physical units (GPa for elastic, J/m² for surface, eV for energies)
 
 
@@ -79,11 +79,9 @@ Options to offer via AskQuestion:
    Let the user approve or modify. **Skip ONLY if** the user provided explicit property parameters already.
    **If AskQuestion times out or fails**: display the parameters in your message and WAIT for confirmation before submitting.
 3. **Two-layer architecture.** The outer Bohrium job is a thin submission client only. Never attempt `apex do` for production workflows — use `apex submit` which delegates to dflow. See `reference/submission.md` for the full architecture diagram.
-  For agent-managed Bohrium runs, use `apex submit ... -s` by default so the
-   outer client exits after submission instead of consuming machine time while
-   dflow runs. Capture the workflow ID, monitor the inner workflow, and retrieve
-   results explicitly. Omit `-s` only when the user specifically wants a
-   blocking submission with automatic retrieval.
+  For agent-managed Bohrium runs, always use `apex submit ...` without `-s`.
+   The outer client must remain active while dflow runs so APEX can monitor the
+   workflow and retrieve results automatically.
    Immediately preserve the exact inner dflow workflow ID printed by
    `apex submit` and report it to the user. Keep this ID available for all later
    monitoring, retrieval, and workflow-control actions; do not confuse it with
@@ -91,8 +89,8 @@ Options to offer via AskQuestion:
    Use the returned workflow/step phases and durations to track progress. A
    long-running or failed step should be investigated by its step ID/key rather
    than treated as successful completion. After the workflow reaches
-   `Succeeded`, run explicit result retrieval as described in
-   `reference/submission.md`.
+   `Succeeded`, verify that automatic result retrieval completed as described
+   in `reference/submission.md`.
 4. **Kill = inner FIRST, outer SECOND.** If you only kill the outer Bohrium node, the dflow workflow continues consuming resources silently. Always terminate the inner dflow workflow first. See `reference/workflow-control.md`.
 5. **Generate the ticket before packaging the job; never refresh it in `run.sh`.**
   - First inspect the agent/local environment for `BOHRIUM_ACCESS_KEY`.
@@ -212,7 +210,7 @@ See `reference/submission.md` for the full validated template.
 3. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
 4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
 5. **Supercell sizing applies to unit-cell inputs only.** For defect calculations (vacancy, interstitial), a total cell equivalent to at least a [2,2,2] unit-cell expansion is normally needed. For phonon, [3,3,3] total size is recommended (phonoLAMMPS may fail with a smaller total cell). If the input is already a supercell and the user declines further expansion, use `[1,1,1]`; do not apply these factors again.
-6. **Outer job machine.** The outer Bohrium job only needs `c2_m4_cpu` since it just calls `apex submit`. Don't waste GPU resources on the submission client.
+6. **Outer job machine.** Use `c1_m2_cpu` for the outer Bohrium job since it only calls `apex submit` and waits. Don't waste larger CPU or GPU resources on the submission client.
 
 
 

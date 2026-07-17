@@ -711,7 +711,7 @@ def main():
 
     # Write a submission helper script
     submit_script = output_dir / "submit.sh"
-    cmd = f'apex submit param.json -c global.json -f {args.flow_type} -s -n "{workflow_name}"'
+    cmd = f'apex submit param.json -c global.json -f {args.flow_type} -n "{workflow_name}"'
     with open(submit_script, "w") as f:
         f.write("#!/bin/bash\n")
         f.write(f"# APEX submission command (run inside APEX container)\n")
@@ -738,7 +738,7 @@ def main():
     print(f"\nBohrium submit command (for outer job):")
     print(f"  cmd: {cmd}")
     print(f"\nOuter job image: {APEX_IMAGE}")
-    print(f"Outer job machine: c2_m4_cpu (thin client only)")
+    print(f"Outer job machine: c1_m2_cpu (recommended lightweight client)")
 
 
 if __name__ == "__main__":

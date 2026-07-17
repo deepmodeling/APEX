@@ -3,15 +3,17 @@
 ## Key Command
 
 ```bash
-apex submit param.json -c global.json -s -n "<workflow-name>"
+apex submit param.json -c global.json -n "<workflow-name>"
 ```
 
 | Flag | Meaning |
 |------|---------|
 | `-c global.json` | Workflow/machine configuration |
 | `-f joint\|props\|relax` | Flow type: `joint` (relax+props), `props` (props only), `relax` (relax only) |
-| `-s` | Submit-only (non-blocking); default for agent-managed Bohrium runs. Retain the workflow ID, monitor the inner workflow, and retrieve explicitly |
 | `-n "<name>"` | Workflow name — **MUST be RFC 1123 lowercase** (see `submission.md`) |
+
+Do not use `-s`; agent-managed submissions must wait for completion and automatic
+result retrieval.
 
 ## Stopping/Killing a Running APEX Workflow (CRITICAL)
 

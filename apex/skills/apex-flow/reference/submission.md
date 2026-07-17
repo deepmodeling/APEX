@@ -16,11 +16,11 @@ APEX uses a **two-layer submission architecture**:
                            │ Bohrium submit
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  Outer Bohrium Job (APEX image, c16_m32_cpu)                   │
+│  Outer Bohrium Job (APEX image, c1_m2_cpu)                     │
 │  1. pip install apex-flow (latest, no version pin)             │
-│  2. apex submit param.json -c global.json -s -n "<wf-name>"   │
+│  2. apex submit param.json -c global.json -n "<wf-name>"      │
 │  → Connects to workflows.deepmodeling.com                      │
-│  → Records the workflow ID and exits after submission          │
+│  → Waits for completion and retrieves results automatically    │
 │  → upload_packages sends new APEX code to all inner steps      │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ dflow orchestration
@@ -78,13 +78,13 @@ python3 -c "import apex; print(f'APEX version: {apex.__version__}')"
 # Authentication is already stored in global.json by generate_config.py.
 # Do not read BOHRIUM_ACCESS_KEY or refresh the ticket in this container.
 set +eo pipefail
-apex submit param.json -c global.json -s -n "<workflow-name>" 2>&1 | tee apex_submit.log
+apex submit param.json -c global.json -n "<workflow-name>" 2>&1 | tee apex_submit.log
 EXIT_CODE=${PIPESTATUS[0]}
 set -eo pipefail
 
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "=== APEX workflow submitted ==="
-    echo "Retain apex_submit.log and the workflow ID for monitoring/retrieval."
+    echo "=== APEX workflow completed and results retrieved ==="
+    echo "Retain apex_submit.log and the workflow ID."
     exit 0
 else
     echo "APEX failed (exit $EXIT_CODE)"
@@ -99,9 +99,8 @@ fi
 - `run.sh` does not access `BOHRIUM_ACCESS_KEY` or modify `global.json`
 - **单次执行，不重试** — 失败即退出，由用户决定是否重新提交
 - `-n` flag sets workflow name (NOT `-w` which is work directory)
-- `-s` is the default for agent-managed runs → the outer job exits after
-  submission; the agent must retain the workflow ID, monitor dflow, and retrieve
-  results explicitly
+- Do not use `-s` for agent-managed runs. The outer job must wait for dflow to
+  finish so `apex submit` retrieves results automatically
 
 ## RFC 1123 Workflow Name Constraint (CRITICAL)
 
@@ -133,7 +132,7 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | ABACUS | `c16_m32_cpu` | CPU |
 | VASP | User specifies | User's license |
 
-> **IMPORTANT**: The outer Bohrium job only needs a minimal machine (e.g. `c2_m4_cpu`) since it just submits to dflow. The heavy compute is in the inner containers specified by `scass_type` in `global.json`.
+> **IMPORTANT**: Use the minimal `c1_m2_cpu` machine for the outer Bohrium job since it only submits to dflow and waits. The heavy compute is in the inner containers specified by `scass_type` in `global.json`.
 
 ## Validated global.json Structure
 
@@ -166,33 +165,29 @@ project ID in examples or generated configs.
 
 ## Agent-Managed Submission Workflow (Complete Lifecycle)
 
-The default agent workflow uses `-s` so the thin outer job does not consume
-machine time while the inner dflow workflow runs:
+The default agent workflow omits `-s` so the outer job waits for the inner dflow
+workflow and retrieves its results automatically:
 
 1. **Prepare inputs locally** (Bash): run `scripts/generate_config.py` to generate `global.json` + `param.json` + copy structure/model files into a job directory.
 
-2. **Submit outer Bohrium job** (submit-only mode):
+2. **Submit outer Bohrium job** (blocking mode):
    ```python
    Bohrium(action="submit",
      input_dir="<job_dir>",
      image="registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0",
-     machine="c2_m4_cpu",
-     cmd='apex submit param.json -c global.json -f joint -s -n "cu-fcc-elastic" > log 2>&1')
+     machine="c1_m2_cpu",
+     cmd='apex submit param.json -c global.json -f joint -n "cu-fcc-elastic" > log 2>&1')
    ```
    Parse and retain the workflow ID printed in the submission log. The outer
-   Bohrium job exits while the inner dflow workflow continues.
+   Bohrium job remains active until the inner dflow workflow completes.
 
-3. **Monitor the inner workflow by ID** using APEX workflow query commands.
-   Do not interpret successful completion of the outer job as successful
-   completion of the calculation.
+3. **Monitor the inner workflow by ID** using APEX workflow query commands while
+   the outer job remains active.
 
-4. **Retrieve after the inner workflow finishes**:
-   ```bash
-   apex retrieve -i <workflow-id> -c global.json
-   ```
-   - **If Finished**: retrieve results → parse `confs/*/elastic_00/result.json`
+4. **Verify automatic retrieval after the inner workflow finishes**:
+   - **If Finished**: verify retrieved results, then parse `confs/*/elastic_00/result.json`
      (or equivalent property results) → summarize and present to user.
-   - **If Failed**: retrieve available logs → read `log` and any
+   - **If Failed**: read `log` and any
      `dpdispatcher.log` → analyze the failure and report suggested fixes.
 
 5. **Result parsing**: After retrieval, read the property result files:
@@ -203,13 +198,9 @@ machine time while the inner dflow workflow runs:
 
 6. **Present results**: Summarize in a table with physical units (GPa for elastic, J/m² for surface, eV for formation energies). Compare with literature values when available.
 
-> **Blocking alternative**: Omit `-s` only when automatic waiting and retrieval
-> are more important than outer-machine time. In that mode, the outer job remains
-> active until dflow completes.
-
-> **Agent responsibility**: A submit-only outer job finishing successfully means
-> only that dflow accepted the workflow. The agent must continue tracking the
-> inner workflow and retrieve its outputs.
+> **Agent responsibility**: Never add `-s` to the submission command. A
+> successful outer job means the inner workflow completed and APEX performed
+> automatic retrieval; verify the expected result files before reporting success.
 
 ## Expected Log Warnings (Non-Fatal)
 

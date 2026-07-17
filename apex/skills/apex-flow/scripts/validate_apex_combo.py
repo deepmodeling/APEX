@@ -74,7 +74,7 @@ RECOMMENDED_SCASS = {
     ],
     "abacus": ["c16_m32_cpu", "c32_m64_cpu", "c32_m128_cpu"],
     "vasp": ["c32_m128_cpu", "c16_m64_cpu", "c32_m64_cpu"],
-    "outer": ["c2_m4_cpu", "c2_m8_cpu"],
+    "outer": ["c1_m2_cpu", "c2_m4_cpu", "c2_m8_cpu"],
 }
 
 # Triclinic / non-orthogonal cells: avoid deepmd-kit:3.1.1 (segfault)
@@ -183,7 +183,7 @@ def list_combos(backend: str = "lammps", prefer: str = "cpu") -> dict:
         },
         "notes": [
             "Always validate image×scass before writing global.json / submitting.",
-            "Outer Bohrium job should use c2_m4_cpu (or c2_m8_cpu), never GPU.",
+            "Outer Bohrium job should use c1_m2_cpu, never GPU.",
             "For triclinic cells, avoid deepmd-kit:3.1.1; prefer 3.1.3.",
         ],
     }
