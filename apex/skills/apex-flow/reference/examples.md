@@ -210,13 +210,35 @@ apex do param.json post_props -c global.json
 **Scenario**: High-entropy alloy property screening using random solid solutions.
 
 ### Step 1: Generate RSS structures (run locally)
+
+Write `rss.json`:
+
+```json
+{
+    "parent_lattice": {
+        "type": "fcc",
+        "a": "auto",
+        "supercell": "auto"
+    },
+    "compositions": {
+        "all": {
+            "Co": 0.2,
+            "Cr": 0.2,
+            "Fe": 0.2,
+            "Mn": 0.2,
+            "Ni": 0.2
+        }
+    },
+    "composition_tolerance": 0.005,
+    "maximum_num_atoms": 200,
+    "num_configs": 5,
+    "seed": 21,
+    "output_structure": "confs/rss_fcc"
+}
+```
+
 ```bash
-# Generate 5 random configurations of equiatomic CoCrFeMnNi in FCC
-apex rss --composition "Co0.2Cr0.2Fe0.2Mn0.2Ni0.2" \
-         --prototype fcc \
-         --supercell 3 3 3 \
-         --n-configs 5 \
-         --output-dir confs/rss_fcc
+apex rss rss.json
 ```
 
 ### Step 2: Property calculation
@@ -224,7 +246,7 @@ apex rss --composition "Co0.2Cr0.2Fe0.2Mn0.2Ni0.2" \
 ### param.json
 ```json
 {
-    "structures": ["confs/rss_fcc"],
+    "structures": ["confs/rss_fcc/conf_*"],
     "interaction": {
         "type": "deepmd",
         "model": "CoCrFeMnNi.pb",

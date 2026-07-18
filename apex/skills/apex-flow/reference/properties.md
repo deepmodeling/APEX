@@ -584,15 +584,13 @@ VASP and ABACUS run the same temperature schedule with their native NpT integrat
 
 ---
 
-## 15. RSS (Random Solid Solution) — Structure Generation
+## RSS Structure Generation
 
-**type**: Not a property calculation per se. Use `apex rss` CLI command.
+Use `apex rss <rss.json>` to generate input structures.
 
-This generates random solid solution configurations for multi-component alloys. The generated structures are then used as input to property calculations above.
-
-```bash
-apex rss --composition "CoCrFeMnNi" --prototype bcc --supercell 3 3 3 --n-configs 10
-```
+It generates random-solid-solution configurations for multi-component alloys,
+high-entropy oxides, and related materials. Use the generated
+`conf_###/POSCAR` directories as inputs to the property calculations above.
 
 See `reference/rss_workflow.md` for full details.
 

@@ -89,6 +89,22 @@ def validate_global(global_config: dict) -> list:
                     "global.json with generate_config.py"
                 )
 
+        machine = global_config.get("machine")
+        if isinstance(machine, dict):
+            remote_profile = machine.get("remote_profile")
+            if isinstance(remote_profile, dict) and "program_id" in remote_profile:
+                nested_id = remote_profile["program_id"]
+                if not isinstance(nested_id, int) or isinstance(nested_id, bool):
+                    errors.append(
+                        "'machine.remote_profile.program_id' must be a JSON "
+                        "integer, not a quoted string"
+                    )
+                elif nested_id != program_id:
+                    errors.append(
+                        "'machine.remote_profile.program_id' must match "
+                        "'program_id'"
+                    )
+
         if not global_config.get("scass_type"):
             errors.append("Missing 'scass_type' in global.json")
 
@@ -314,6 +330,7 @@ def main():
 
     all_errors = []
     all_warnings = []
+    global_config = None
 
     # Load param.json
     param_path = Path(args.param)
@@ -379,6 +396,20 @@ def main():
         print(f"  Backend: {interaction_type}")
         print(f"  Properties: {[p.get('type') for p in properties]}")
         print(f"  Structures: {param_config.get('structures', [])}")
+        if global_config and "program_id" in global_config:
+            program_id = global_config["program_id"]
+            project_id = global_config.get(
+                "bohrium_config", {}
+            ).get("project_id")
+            print("  Hard project ID type check:")
+            print(
+                f"    program_id={program_id!r} "
+                f"type={type(program_id).__name__}"
+            )
+            print(
+                f"    bohrium_config.project_id={project_id!r} "
+                f"type={type(project_id).__name__}"
+            )
 
 
 if __name__ == "__main__":

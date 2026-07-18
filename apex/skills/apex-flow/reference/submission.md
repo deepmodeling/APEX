@@ -51,12 +51,16 @@ the job directory is packaged:
 1. Inspect the agent/local environment for `BOHRIUM_ACCESS_KEY`.
 2. If the variable is missing, stop and ask the user to provide/configure it.
    `generate_config.py` cannot obtain a ticket without an access key.
-3. If it is present, run `scripts/generate_config.py`; the script calls the ticket
-   API, validates the response, and writes a fresh ticket to `global.json`.
-4. Verify that `global.json` contains a non-empty `bohrium_config.ticket`.
+3. For a new task, run `scripts/generate_config.py create ...`; never hand-write
+   `param.json` or `global.json`.
+4. For an existing generated task, `cd` into its directory and run
+   `python <skill-root>/scripts/generate_config.py refresh-global --global global.json`.
+   This refreshes the ticket and integer project IDs atomically without changing
+   `param.json`.
+5. Verify that `global.json` contains a non-empty `bohrium_config.ticket`.
 
-> ⚠️ **Ticket 有效期约 1 周，会过期！** Generate a fresh `global.json` with
-> `generate_config.py` when preparing each new submission. Do not refresh the
+> ⚠️ **Ticket 有效期约 1 周，会过期！** Use `refresh-global` when preparing
+> an existing generated task for a new submission. Do not refresh the
 > ticket in `run.sh`: the outer APEX container may not receive
 > `BOHRIUM_ACCESS_KEY`, and ad-hoc response parsing there has no reliable error
 > handling.
@@ -140,8 +144,9 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 variable `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a personal
 project ID in examples or generated configs. **Do not write `global.json`
 manually and do not copy the placeholders below into a real file.** Run
-`scripts/generate_config.py`; it converts the environment string to an integer
-and writes both ID fields as JSON numbers.
+`scripts/generate_config.py create ...` or `scripts/generate_config.py
+refresh-global --global global.json`; both convert the environment string to an
+integer and write both ID fields as JSON numbers.
 
 The following is a type-annotated shape, not valid JSON:
 
@@ -166,13 +171,17 @@ The following is a type-annotated shape, not valid JSON:
 ```
 
 Quoted digits such as `"program_id": "..."` are invalid for DPDispatcher even
-though they look numeric. Before submission, always run:
+though they look numeric. From the task directory, always run:
 
 ```bash
-python scripts/validate_inputs.py --param param.json --global global.json
+cd <job-dir>
+python <skill-root>/scripts/validate_inputs.py \
+  --param param.json --global global.json
 ```
 
-Do not submit unless validation reports `Validation PASSED`.
+Do not upload or submit unless validation reports `Validation PASSED` and both
+project ID lines report `type=int`. Submit the newly validated directory as a
+new outer Bohrium job; retrying an old outer job reuses its old input snapshot.
 
 > For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c8_m31_1 * NVIDIA T4"`.
 > Before submitting, run `scripts/validate_apex_combo.py check` on the chosen image × scass_type.
@@ -182,7 +191,10 @@ Do not submit unless validation reports `Validation PASSED`.
 The default agent workflow omits `-s` so the outer job waits for the inner dflow
 workflow and retrieves its results automatically:
 
-1. **Prepare inputs locally** (Bash): run `scripts/generate_config.py` to generate `global.json` + `param.json` + copy structure/model files into a job directory.
+1. **Prepare inputs locally** (Bash): run `scripts/generate_config.py create ...`
+   to generate `global.json` + `param.json` + copy structure/model files into a
+   job directory. Never hand-write these files. If credentials must be refreshed
+   later, run `refresh-global --global global.json` from that job directory.
 
 2. **Submit outer Bohrium job** (blocking mode):
    ```python

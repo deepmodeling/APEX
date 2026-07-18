@@ -10,7 +10,7 @@ Environment variables:
     BOHRIUM_PROJECT_ID  — Bohrium project ID (required unless --project-id is set)
 
 Usage:
-    python generate_config.py \
+    python generate_config.py create \
         --structure POSCAR \
         --backend lammps \
         --potential eam_alloy \
@@ -19,6 +19,8 @@ Usage:
         --flow-type joint \
         --workflow-name "cu-fcc-elastic" \
         --output-dir ./job
+
+    python generate_config.py refresh-global --global ./job/global.json
 """
 
 import argparse
@@ -430,6 +432,95 @@ def build_global_json(backend: str, potential: str = None,
     return config
 
 
+def validate_project_id_types(config: dict) -> int:
+    """Hard-check every supported Bohrium project ID before submission."""
+    program_id = config.get("program_id")
+    if type(program_id) is not int or program_id <= 0:
+        raise ValueError(
+            "global.json program_id must be a positive, unquoted JSON integer"
+        )
+
+    bohrium_config = config.get("bohrium_config")
+    if not isinstance(bohrium_config, dict):
+        raise ValueError("global.json must contain a bohrium_config object")
+    project_id = bohrium_config.get("project_id")
+    if type(project_id) is not int or project_id <= 0:
+        raise ValueError(
+            "global.json bohrium_config.project_id must be a positive, "
+            "unquoted JSON integer"
+        )
+    if project_id != program_id:
+        raise ValueError(
+            "global.json program_id and bohrium_config.project_id must match"
+        )
+
+    machine = config.get("machine")
+    if isinstance(machine, dict):
+        remote_profile = machine.get("remote_profile")
+        if isinstance(remote_profile, dict) and "program_id" in remote_profile:
+            nested_id = remote_profile["program_id"]
+            if type(nested_id) is not int or nested_id <= 0:
+                raise ValueError(
+                    "global.json machine.remote_profile.program_id must be a "
+                    "positive, unquoted JSON integer"
+                )
+            if nested_id != program_id:
+                raise ValueError(
+                    "global.json machine.remote_profile.program_id must match "
+                    "program_id"
+                )
+    return program_id
+
+
+def refresh_global_json(global_path, access_key: str = None,
+                        project_id: int = None) -> dict:
+    """Refresh ticket and integer project IDs without touching param.json."""
+    path = Path(global_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"global.json not found: {path}")
+
+    with open(path, encoding="utf-8") as f:
+        config = json.load(f)
+    if not isinstance(config, dict):
+        raise ValueError("global.json must contain a JSON object")
+
+    pid = resolve_project_id(project_id)
+    key = access_key or os.environ.get("BOHRIUM_ACCESS_KEY")
+    if not key:
+        raise RuntimeError(
+            "BOHRIUM_ACCESS_KEY environment variable not set and --access-key "
+            "not provided. Cannot refresh dflow authentication."
+        )
+    ticket = get_bohrium_ticket(key)
+
+    config["program_id"] = pid
+    bohrium_config = config.setdefault("bohrium_config", {})
+    if not isinstance(bohrium_config, dict):
+        raise ValueError("global.json bohrium_config must be a JSON object")
+    bohrium_config["project_id"] = pid
+    bohrium_config["ticket"] = ticket
+
+    machine = config.get("machine")
+    if isinstance(machine, dict):
+        remote_profile = machine.get("remote_profile")
+        if isinstance(remote_profile, dict) and "program_id" in remote_profile:
+            remote_profile["program_id"] = pid
+
+    validate_project_id_types(config)
+
+    temp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=4)
+            f.write("\n")
+        os.chmod(temp_path, path.stat().st_mode)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            temp_path.unlink()
+    return config
+
+
 # =============================================================================
 # Interaction and param.json
 # =============================================================================
@@ -574,45 +665,95 @@ def parse_str_map(map_str: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate APEX configuration files (global.json + param.json) "
-                    "with dflow ticket authentication and RFC 1123 compliant names."
+        description="Create APEX configs or refresh an existing global.json."
     )
-    parser.add_argument("--structure", "-s", required=True,
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    create = subparsers.add_parser(
+        "create", help="Generate a complete APEX job directory"
+    )
+    create.add_argument("--structure", "-s", required=True,
                         help="Path to structure file (POSCAR/CIF)")
-    parser.add_argument("--backend", "-b", required=True,
+    create.add_argument("--backend", "-b", required=True,
                         choices=["lammps", "abacus", "vasp"],
                         help="Calculator backend")
-    parser.add_argument("--potential", "-p",
+    create.add_argument("--potential", "-p",
                         help="LAMMPS potential type (deepmd/mace/nep/eam_alloy/...)")
-    parser.add_argument("--model", "-m",
+    create.add_argument("--model", "-m",
                         help="Model/potential file path")
-    parser.add_argument("--properties", nargs="+", required=True,
+    create.add_argument("--properties", nargs="+", required=True,
                         help="Property types to calculate")
-    parser.add_argument("--flow-type", default="joint",
+    create.add_argument("--flow-type", default="joint",
                         choices=["joint", "relax", "props"],
                         help="Workflow type (default: joint)")
-    parser.add_argument("--workflow-name", "-n",
+    create.add_argument("--workflow-name", "-n",
                         help="Workflow name (auto-lowercased for RFC 1123 compliance)")
-    parser.add_argument("--output-dir", "-o", default="./apex_job",
+    create.add_argument("--output-dir", "-o", default="./apex_job",
                         help="Output directory for configs")
-    parser.add_argument("--access-key",
-                        help="Bohrium access key (or set BOHRIUM_ACCESS_KEY env var)")
-    parser.add_argument("--project-id", type=int,
-                        help="Bohrium project ID (required unless BOHRIUM_PROJECT_ID is set)")
-    parser.add_argument("--scass-type",
+    create.add_argument(
+        "--access-key",
+        help="Bohrium access key (or set BOHRIUM_ACCESS_KEY env var)",
+    )
+    create.add_argument(
+        "--project-id", type=int,
+        help="Bohrium project ID (or set BOHRIUM_PROJECT_ID)",
+    )
+    create.add_argument("--scass-type",
                         help="Override scass_type for inner dflow containers")
-    parser.add_argument("--run-command",
+    create.add_argument("--run-command",
                         help="Override calculator run command")
-    parser.add_argument("--incar",
+    create.add_argument("--incar",
                         help="INCAR/INPUT file path (for VASP/ABACUS)")
-    parser.add_argument("--potcar-prefix",
+    create.add_argument("--potcar-prefix",
                         help="POTCAR prefix directory (for VASP/ABACUS)")
-    parser.add_argument("--potcars",
-                        help="POTCAR mapping as 'Element1:potcar1,Element2:potcar2'")
-    parser.add_argument("--orb-files",
-                        help="Orbital files as 'Element1:file1,Element2:file2' (ABACUS)")
+    create.add_argument(
+        "--potcars",
+        help="POTCAR mapping as 'Element1:potcar1,Element2:potcar2'",
+    )
+    create.add_argument(
+        "--orb-files",
+        help="Orbital files as 'Element1:file1,Element2:file2' (ABACUS)",
+    )
+
+    refresh = subparsers.add_parser(
+        "refresh-global",
+        help="Refresh ticket and project IDs without changing param.json",
+    )
+    refresh.add_argument(
+        "--global", "-g", dest="global_json", required=True,
+        help="Existing global.json to update atomically",
+    )
+    refresh.add_argument(
+        "--access-key",
+        help="Bohrium access key (or set BOHRIUM_ACCESS_KEY env var)",
+    )
+    refresh.add_argument(
+        "--project-id", type=int,
+        help="Bohrium project ID (or set BOHRIUM_PROJECT_ID)",
+    )
 
     args = parser.parse_args()
+
+    if args.command == "refresh-global":
+        try:
+            config = refresh_global_json(
+                args.global_json,
+                access_key=args.access_key,
+                project_id=args.project_id,
+            )
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+        pid = validate_project_id_types(config)
+        print(f"Refreshed: {Path(args.global_json).resolve()}")
+        print("Hard type check passed:")
+        print(f"  program_id={pid!r} type={type(pid).__name__}")
+        project_id = config["bohrium_config"]["project_id"]
+        print(
+            "  bohrium_config.project_id="
+            f"{project_id!r} type={type(project_id).__name__}"
+        )
+        return
 
     # -------------------------------------------------------------------------
     # Parse complex arguments
@@ -655,6 +796,7 @@ def main():
         scass_type=args.scass_type,
         run_command=args.run_command,
     )
+    validate_project_id_types(global_config)
     print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
 
     # -------------------------------------------------------------------------
@@ -704,6 +846,14 @@ def main():
     with open(global_path, "w") as f:
         json.dump(global_config, f, indent=4)
     print(f"Written: {global_path}")
+    pid = validate_project_id_types(global_config)
+    print(
+        "Hard type check passed: "
+        f"program_id={pid!r} type={type(pid).__name__}; "
+        "bohrium_config.project_id="
+        f"{global_config['bohrium_config']['project_id']!r} "
+        f"type={type(global_config['bohrium_config']['project_id']).__name__}"
+    )
 
     param_path = output_dir / "param.json"
     with open(param_path, "w") as f:

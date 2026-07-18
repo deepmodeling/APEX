@@ -1,6 +1,6 @@
 ---
 name: apex-flow
-description: Batch multi-property materials calculations (EOS, 0K elastic constant, surface energy, phonon, finite temperature elastic constant, gamma surface, gamma line, coherent energy) via APEX calculator backends VASP/ABACUS/LAMMPS. The bundled DPA-3.2-5M OMat24 model is a DeePMD potential for LAMMPS. Use when the user mentions APEX, apex, alloy property, oxide, or multi-property DFT/MLIP screening, including EOS, 0K elastic constant, surface energy, phonon calculation, finite temperature elastic constant, gamma surface, gamma line, coherent energy.
+description: Batch multi-property materials calculations (EOS, 0K elastic constant, surface energy, phonon, finite temperature elastic constant, gamma surface, gamma line, cohesive energy) and random-solid-solution structure generation via APEX calculator backends VASP/ABACUS/LAMMPS. The bundled DPA-3.2-5M OMat24 model is a DeePMD potential for LAMMPS. Use when the user mentions APEX, apex, alloy property, generate/give random solid solution, generate/give solid solution, generate/give high-entropy alloy, generate/give high-entropy oxide, generate/give high-entropy material, or multi-property DFT/MLIP screening.
 ---
 
 # APEX Flow — Alloy Properties EXplorer
@@ -41,7 +41,7 @@ Options to offer via AskQuestion:
 
 ## High-Level Workflow (5 Steps)
 
-1. **Prepare inputs** — Check `BOHRIUM_ACCESS_KEY`, then generate `param.json` + `global.json` (including a fresh ticket) and copy structure/model files into a job directory using `scripts/generate_config.py`
+1. **Prepare inputs** — Check `BOHRIUM_ACCESS_KEY`, then generate `param.json` + `global.json` (including a fresh ticket) and copy structure/model files into a job directory using `scripts/generate_config.py create ...`. Never hand-write either JSON file.
 2. **Submit outer Bohrium job** — A lightweight client (`c1_m2_cpu`, recommended) that runs `apex submit ...` without `-s`, connects to the dflow orchestration server, and waits for completion
 3. **dflow executes** — Inner containers (LAMMPS/ABACUS/VASP) run the actual calculations, managed by `workflows.deepmodeling.com`
 4. **Monitor and retrieve results** — `apex submit` monitors the inner workflow and retrieves results after completion; parse `confs/<structure>/<prop>_00/result.json`
@@ -86,22 +86,40 @@ Options to offer via AskQuestion:
    Immediately preserve the exact inner dflow workflow ID printed by
    `apex submit` and report it to the user. Keep this ID available for all later
    monitoring, retrieval, and workflow-control actions; do not confuse it with
-   the outer Bohrium job ID. Query progress from the job directory with:
-   Use the returned workflow/step phases and durations to track progress. A
+   the outer Bohrium job ID. Follow the exact status-query and reporting
+   protocol in `reference/workflow-control.md`; never infer workflow identity
+   or material identity from the outer job name alone. Use the returned
+   workflow/step phases and durations to track progress. A
    long-running or failed step should be investigated by its step ID/key rather
    than treated as successful completion. After the workflow reaches
    `Succeeded`, verify that automatic result retrieval completed as described
    in `reference/submission.md`.
 4. **Kill = inner FIRST, outer SECOND.** If you only kill the outer Bohrium node, the dflow workflow continues consuming resources silently. Always terminate the inner dflow workflow first. See `reference/workflow-control.md`.
-5. **Generate the ticket before packaging the job; never refresh it in `run.sh`.**
+5. **MUST use `generate_config.py`; never hand-write `param.json` or `global.json`.**
+  - Create the complete job with `python <skill-root>/scripts/generate_config.py create ...`.
+  - To preserve an approved `param.json` while refreshing credentials, run
+    `python <skill-root>/scripts/generate_config.py refresh-global --global global.json`
+    from the task directory. This updates only `global.json`.
+  - Do not invent unsupported flags or call the ticket API directly.
+6. **Generate the ticket before packaging the job; never refresh it in `run.sh`.**
   - First inspect the agent/local environment for `BOHRIUM_ACCESS_KEY`.
   - If it is missing, STOP and ask the user to provide/configure it. `generate_config.py` cannot generate a ticket without an access key.
-  - If it exists, run `scripts/generate_config.py`; it converts the key to a fresh ticket and writes it to `global.json`.
+  - If it exists, use `create` for a new job or `refresh-global` for an existing job; both convert the key to a fresh ticket and write it to `global.json`.
   - Verify that `global.json` contains a non-empty `bohrium_config.ticket` before submission.
   - `run.sh` must only install/verify APEX and call `apex submit`. Do not add ticket API calls or depend on `BOHRIUM_ACCESS_KEY` inside the APEX container.
    See `reference/submission.md`.
-6. **Project ID from environment only.** `generate_config.py` reads `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a project ID (including old examples like `13529`) into `global.json`, docs, or prompts.
-7. **Screen image × machine before submit.** Before writing `global.json` or submitting, run:
+7. **Project ID from environment only.** `generate_config.py` reads `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a project ID (including old examples like `13529`) into `global.json`, docs, or prompts.
+8. **Hard-validate inside the task directory before every upload.** Run:
+  ```bash
+  cd <job-dir>
+  python <skill-root>/scripts/validate_inputs.py \
+    --param param.json --global global.json
+  ```
+  Do not upload or submit unless it prints `Validation PASSED` and reports both
+  `program_id` and `bohrium_config.project_id` with `type=int`. A quoted numeric
+  string is invalid. Upload the newly validated directory as a new outer job;
+  never retry an outer job whose input snapshot was invalid.
+9. **Screen image × machine before submit.** Before writing `global.json` or submitting, run:
   ```bash
    python scripts/validate_apex_combo.py list-combos --backend lammps --prefer gpu
    python scripts/validate_apex_combo.py check \
@@ -109,7 +127,7 @@ Options to offer via AskQuestion:
      --scass "c8_m31_1 * NVIDIA T4"
   ```
    Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, the combination `deepmd-kit:3.1.1` × `NVIDIA T4`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`. The default LAMMPS image is `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`; `apex submit` enforces it for LAMMPS phonon and Grüneisen workflows.
-8. **MUST use the bundled frozen DPA model under** `models/` **for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill ships
+10. **MUST use the bundled frozen DPA model under** `models/` **for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill ships
    `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`, a ready-to-run frozen
    DPA-3.2-5M OMat24 model. Copy it into the job directory before generating
    `param.json`. The multi-head source checkpoint is **not** in the skill zip —
@@ -117,7 +135,7 @@ Options to offer via AskQuestion:
    (`scripts/fetch_models.py --source-checkpoint` or
    `dp --pt pretrained download DPA-3.2-5M`) and freeze that head before use.
    See `models/README.md`.
-9. **Preserve the user's input cell and prevent accidental double expansion.**
+11. **Preserve the user's input cell and prevent accidental double expansion.**
   APEX does not require a conventional cell. Do not convert a primitive cell or
    user-provided supercell to a conventional cell merely because an example uses
    `confs/std-fcc` or another `std-*` name.
@@ -133,7 +151,7 @@ Options to offer via AskQuestion:
 
 
 
-## Supported Properties (15 types)
+## Supported Properties (14 types)
 
 
 | Type             | JSON `type` value  | Backend     | Description                               |
@@ -218,7 +236,11 @@ See `reference/submission.md` for the full validated template.
 
 ## RSS (Random Solid Solution) Workflow
 
-For high-entropy alloys/ceramics, use `apex rss` to generate structures, then run property calculations on them. See `reference/rss_workflow.md` for full details.
+For random solid solutions, solid solutions, high-entropy alloys, high-entropy
+oxides/ceramics, and other high-entropy materials, use `apex rss` to generate
+structures before property calculations. Read `reference/rss_workflow.md`
+before asking the user questions or writing `rss.json`; it defines the required
+QA, current JSON schema, output layout, and visualization fallback.
 
 ## Working Test Case (Reference)
 
@@ -235,7 +257,7 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 
 | Script                   | Purpose                                                                           |
 | ------------------------ | --------------------------------------------------------------------------------- |
-| `generate_config.py`     | Generate global.json + param.json with ticket auth; requires `BOHRIUM_PROJECT_ID` |
+| `generate_config.py`     | `create` a complete job or `refresh-global` credentials without changing param.json |
 | `validate_apex_combo.py` | List / check / recommend safe image × scass_type combos                           |
 | `fetch_models.py`        | Optional: download the DPA-3.2-5M multi-head source `.pt` for freezing another head |
 | `parse_results.py`       | Parse APEX output into summary                                                    |
@@ -250,8 +272,8 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 | File                             | Content                                                                                                                                               |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `reference/submission.md`        | Authentication (ticket API + refresh), run.sh template, Bohrium config (images/machines), global.json template, RFC 1123 naming, submission lifecycle |
-| `reference/workflow-control.md`  | Key commands table, stopping/killing procedure, pre-submission structure validation                                                                   |
-| `reference/properties.md`        | Complete parameter reference for all 15 property types                                                                                                |
+| `reference/workflow-control.md`  | Running-task status/count format, live Argo link, stopping/killing procedure, and structure validation                                                |
+| `reference/properties.md`        | Complete parameter reference for all 14 property types                                                                                                |
 | `reference/calculators.md`       | Detailed backend configuration (VASP, ABACUS, LAMMPS)                                                                                                 |
 | `reference/lammps_potentials.md` | LAMMPS potential type details and examples                                                                                                            |
 | `reference/rss_workflow.md`      | RSS structure generation workflow                                                                                                                     |

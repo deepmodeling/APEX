@@ -231,6 +231,7 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             model.write_text("model", encoding="utf-8")
             argv = [
                 "generate_config.py",
+                "create",
                 "--structure", str(structure),
                 "--backend", "lammps",
                 "--potential", "deepmd",
@@ -271,6 +272,7 @@ class TestGenerateConfigHelpers(unittest.TestCase):
     def test_main_rejects_invalid_config_before_ticket_request(self):
         argv = [
             "generate_config.py",
+            "create",
             "--structure", "POSCAR",
             "--backend", "vasp",
             "--properties", "finite_t_elastic",
@@ -281,6 +283,49 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             self.gen.main()
         self.assertEqual(raised.exception.code, 1)
         ticket.assert_not_called()
+
+    def test_refresh_global_subcommand_preserves_param_and_fixes_id_types(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            global_path = root / "global.json"
+            param_path = root / "param.json"
+            param_text = '{"properties": [{"type": "elastic"}]}\n'
+            param_path.write_text(param_text, encoding="utf-8")
+            global_path.write_text(json.dumps({
+                "program_id": "old",
+                "bohrium_config": {
+                    "project_id": "old",
+                    "ticket": "expired",
+                },
+                "machine": {
+                    "remote_profile": {"program_id": "old"},
+                },
+            }), encoding="utf-8")
+
+            argv = [
+                "generate_config.py",
+                "refresh-global",
+                "--global", str(global_path),
+                "--project-id", "42",
+                "--access-key", "key",
+            ]
+            stdout = io.StringIO()
+            with patch.object(sys, "argv", argv), patch.object(
+                self.gen, "get_bohrium_ticket", return_value="t" * 36
+            ), patch("sys.stdout", stdout):
+                self.gen.main()
+
+            config = json.loads(global_path.read_text(encoding="utf-8"))
+            self.assertIs(type(config["program_id"]), int)
+            self.assertIs(
+                type(config["bohrium_config"]["project_id"]), int
+            )
+            self.assertIs(
+                type(config["machine"]["remote_profile"]["program_id"]), int
+            )
+            self.assertEqual(config["bohrium_config"]["ticket"], "t" * 36)
+            self.assertEqual(param_path.read_text(encoding="utf-8"), param_text)
+            self.assertIn("Hard type check passed", stdout.getvalue())
 
 
 class TestValidateInputs(unittest.TestCase):
@@ -325,6 +370,9 @@ class TestValidateInputs(unittest.TestCase):
                 "ticket": "ticket",
                 "project_id": "42",
             },
+            "machine": {
+                "remote_profile": {"program_id": "42"},
+            },
             "scass_type": "c8_m31_1 * NVIDIA T4",
             "lammps_run_command": "lmp -in in.lammps",
         }
@@ -333,10 +381,14 @@ class TestValidateInputs(unittest.TestCase):
         self.assertTrue(
             any("'bohrium_config.project_id'" in error for error in errors)
         )
+        self.assertTrue(
+            any("'machine.remote_profile.program_id'" in error for error in errors)
+        )
         self.assertFalse(warnings)
 
         config["program_id"] = 42
         config["bohrium_config"]["project_id"] = 43
+        config["machine"]["remote_profile"]["program_id"] = 42
         errors, _ = self.validator.validate_global(config)
         self.assertTrue(any("must match" in error for error in errors))
 

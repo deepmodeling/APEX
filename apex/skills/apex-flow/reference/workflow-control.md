@@ -15,6 +15,120 @@ apex submit param.json -c global.json -n "<workflow-name>"
 Do not use `-s`; agent-managed submissions must wait for completion and automatic
 result retrieval.
 
+## Checking a Running Job (Required Format)
+
+Do not decide that an existing job matches the user's request from its name.
+Work from the outer job's submitted input directory and log.
+
+### 1. Identify the inner workflow
+
+1. Read the outer job log and capture the exact line:
+   `Workflow has been submitted (ID: <workflow-id>, UID: <workflow-uid>)`.
+2. Keep the outer Bohrium job ID, inner workflow ID, and inner workflow UID as
+   three separate values.
+3. From the submitted job directory, run:
+
+   ```bash
+   apex get -i <workflow-id> -c global.json
+   apex getsteps <workflow-id> -c global.json
+   ```
+
+   `getsteps` takes the workflow ID as its positional argument. Do not write
+   `apex getsteps -i <workflow-id>`.
+4. Confirm that `apex get` reports `Running` or `Pending` before describing the
+   workflow as running.
+
+### 2. Count relaxation and property tasks
+
+In the `getsteps` output, classify only the top-level task rows:
+
+- keys beginning with `relaxcal-` are per-structure relaxation tasks;
+- keys beginning with `propertycal-` are per-structure, per-property tasks;
+- `Succeeded` counts as successful;
+- `Failed` or `Error` counts as failed;
+- `Pending` or `Running` counts as unfinished.
+
+Report unexpected terminal phases separately instead of silently counting them
+as successful. Verify:
+
+```text
+property_success + property_failed + property_unfinished = property_total
+```
+
+For one structure requesting all properties, `property_total` is 14. For
+multiple structures, these are property-task counts, normally
+`number of structures × number of requested properties`, less explicitly
+skipped tasks.
+
+The outer log text `relax N, props M` reports counts still being monitored:
+
+- `relax 0` means no relaxation task remains; it does **not** mean relaxation
+  has not started or has not finished.
+- `props 1` means one property task remains unfinished.
+- These two counters alone do not reveal how many tasks failed, because failed
+  tasks are removed from the remaining list. Always use the top-level step
+  phases to count successes and failures.
+
+### 3. Give the live Argo location
+
+For a Bohrium workflow that is confirmed `Running` or `Pending`, report:
+
+```text
+https://workflows.deepmodeling.com/workflows/argo/<workflow-id>
+```
+
+`argo` is the managed Bohrium workflow namespace. Use the workflow **ID/name**,
+not the UID, in this live route. Never give an `/archived-workflows/...` URL for
+a running task. Also print the workflow ID and UID as plain text so the user can
+verify the target.
+
+### 4. Verify the submitted material
+
+Read `param.json`, resolve its `structures` entry inside the submitted job
+directory, and inspect the actual submitted POSCAR/STRU. Verify formula, atom
+count, lattice lengths, lattice angles, and—when needed—space group. A matching
+outer job name such as `srtio3-*` is not evidence that the correct structure was
+submitted.
+
+For the SrTiO3 case, the expected input is:
+
+```text
+SrTiO3; cubic perovskite; 5 atoms; a = b = c = 3.9316 Å;
+alpha = beta = gamma = 90 degrees
+```
+
+Report it as `SrTiO₃（立方钙钛矿，a=3.9316 Å，5 atoms）` only after the submitted
+file passes these checks. If it does not, report the observed structure and do
+not treat the existing job as a match.
+
+### 5. User-facing status template
+
+Use this exact field order:
+
+```text
+作业名称：<outer job name>
+材料：<formula, structure, lattice parameter, atom count; verified from submitted file>
+当前阶段：relax <N>, props <M>（剩余弛豫 <N>；剩余性质任务 <M>）
+性质进度：成功 <S>，失败 <F>，未完成 <M>，总计 <T>
+Argo workflow：https://workflows.deepmodeling.com/workflows/argo/<workflow-id>
+Workflow ID：<workflow-id>
+Workflow UID：<workflow-uid>
+```
+
+Example for the single-structure SrTiO3 all-properties run:
+
+```text
+作业名称：apex-srtio3-all-14props
+材料：SrTiO₃（立方钙钛矿，a=3.9316 Å，5 atoms；已核对提交的 POSCAR）
+当前阶段：relax 0, props 1（剩余弛豫 0；剩余性质任务 1）
+性质进度：成功 <以 propertycal-* 的 Succeeded 数为准>，失败 <以 Failed/Error 数为准>，未完成 1，总计 14
+Argo workflow：https://workflows.deepmodeling.com/workflows/argo/<workflow-id>
+Workflow ID：<workflow-id>
+Workflow UID：<workflow-uid>
+```
+
+Do not infer `成功 13，失败 0` merely from `props 1`; query the phases first.
+
 ## Stopping/Killing a Running APEX Workflow (CRITICAL)
 
 When the user wants to stop/kill an APEX job, **you MUST terminate the inner dflow/Argo workflow FIRST**, then kill the outer Bohrium node. If you only kill the Bohrium node, the dflow workflow on `workflows.deepmodeling.com` continues running and consuming resources silently.
