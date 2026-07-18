@@ -860,14 +860,54 @@ def main():
         json.dump(param_config, f, indent=4)
     print(f"Written: {param_path}")
 
-    # Write a submission helper script
-    submit_script = output_dir / "submit.sh"
+    # Write outer-job run.sh (force-upgrade APEX; bare pip install keeps the
+    # image-bundled older version and uploads that stale code to inner steps).
+    run_script = output_dir / "run.sh"
     cmd = f'apex submit param.json -c global.json -f {args.flow_type} -n "{workflow_name}"'
+    with open(run_script, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write("set -eo pipefail\n\n")
+        f.write("# Upgrade to latest apex-flow.\n")
+        f.write(
+            "python3 -m pip install --upgrade --no-cache-dir apex-flow "
+            "2>&1 | tail -5\n"
+        )
+        f.write(
+            'python3 -c "import apex; '
+            'print(f\'APEX version: {apex.__version__}\')"\n\n'
+        )
+        f.write(
+            "# Authentication is already stored in global.json by "
+            "generate_config.py.\n"
+        )
+        f.write("set +eo pipefail\n")
+        f.write(f"{cmd} 2>&1 | tee apex_submit.log\n")
+        f.write("EXIT_CODE=${PIPESTATUS[0]}\n")
+        f.write("set -eo pipefail\n\n")
+        f.write("if [ $EXIT_CODE -eq 0 ]; then\n")
+        f.write(
+            '    echo "=== APEX workflow completed and results retrieved ==="\n'
+        )
+        f.write('    echo "Retain apex_submit.log and the workflow ID."\n')
+        f.write("    exit 0\n")
+        f.write("else\n")
+        f.write('    echo "APEX failed (exit $EXIT_CODE)"\n')
+        f.write("    tail -50 apex_submit.log 2>/dev/null || true\n")
+        f.write("    exit 1\n")
+        f.write("fi\n")
+    os.chmod(run_script, 0o755)
+    print(f"Written: {run_script}")
+
+    # Keep a minimal submit.sh for local/debug use inside an already-upgraded env.
+    submit_script = output_dir / "submit.sh"
     with open(submit_script, "w") as f:
         f.write("#!/bin/bash\n")
-        f.write(f"# APEX submission command (run inside APEX container)\n")
+        f.write("# APEX submission command (run inside APEX container)\n")
         f.write(f"# Workflow name: {workflow_name}\n")
-        f.write(f"# Flow type: {args.flow_type}\n\n")
+        f.write(f"# Flow type: {args.flow_type}\n")
+        f.write(
+            "# Prefer run.sh for Bohrium outer jobs (it upgrades apex-flow).\n\n"
+        )
         f.write(f"{cmd}\n")
     os.chmod(submit_script, 0o755)
     print(f"Written: {submit_script}")

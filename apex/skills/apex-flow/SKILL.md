@@ -107,6 +107,7 @@ Options to offer via AskQuestion:
   - If it exists, use `create` for a new job or `refresh-global` for an existing job; both convert the key to a fresh ticket and write it to `global.json`.
   - Verify that `global.json` contains a non-empty `bohrium_config.ticket` before submission.
   - `run.sh` must only install/verify APEX and call `apex submit`. Do not add ticket API calls or depend on `BOHRIUM_ACCESS_KEY` inside the APEX container.
+  - Install with `python3 -m pip install --upgrade --no-cache-dir apex-flow`.
    See `reference/submission.md`.
 7. **Project ID from environment only.** `generate_config.py` reads `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a project ID (including old examples like `13529`) into `global.json`, docs, or prompts.
 8. **Hard-validate inside the task directory before every upload.** Run:

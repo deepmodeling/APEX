@@ -17,7 +17,7 @@ APEX uses a **two-layer submission architecture**:
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Outer Bohrium Job (APEX image, c1_m2_cpu)                     │
-│  1. pip install apex-flow (latest, no version pin)             │
+│  1. pip install --upgrade --no-cache-dir apex-flow             │
 │  2. apex submit param.json -c global.json -n "<wf-name>"      │
 │  → Connects to workflows.deepmodeling.com                      │
 │  → Waits for completion and retrieves results automatically    │
@@ -69,14 +69,11 @@ the job directory is packaged:
 
 ## Outer Job run.sh Template
 
-The outer Bohrium job always uses this pattern. **Do NOT pin apex-flow version** — this ensures the latest code (with bug fixes) is used and propagated to inner steps via `upload_packages`.
-
 ```bash
 #!/bin/bash
 set -eo pipefail
 
-# Always install latest apex-flow (DO NOT pin version)
-pip install apex-flow 2>&1 | tail -3
+python3 -m pip install --upgrade --no-cache-dir apex-flow 2>&1 | tail -5
 python3 -c "import apex; print(f'APEX version: {apex.__version__}')"
 
 # Authentication is already stored in global.json by generate_config.py.
@@ -98,7 +95,7 @@ fi
 ```
 
 **Key points:**
-- `pip install apex-flow` (no `==` pin) → always gets latest from PyPI
+- Must use `pip install --upgrade --no-cache-dir apex-flow` (no `==` pin).
 - The installed APEX code is automatically sent to inner dflow steps via `upload_packages`
 - `run.sh` does not access `BOHRIUM_ACCESS_KEY` or modify `global.json`
 - **单次执行，不重试** — 失败即退出，由用户决定是否重新提交
