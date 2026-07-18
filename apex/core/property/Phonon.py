@@ -5,6 +5,7 @@ import os
 import shutil
 import re
 import subprocess
+from fractions import Fraction
 from typing import List, Dict, Any
 
 import dpdata
@@ -46,6 +47,8 @@ class Phonon(Property):
         setup_command = Phonon.phonopy_setup_command(arguments)
         phonopy_command = Phonon.phonopy_command(arguments)
         if setup_command == phonopy_command:
+            return [setup_command]
+        if "--dim" in arguments:
             return [setup_command]
         return [setup_command, phonopy_command]
 
@@ -103,15 +106,17 @@ class Phonon(Property):
                     ),
                 )
             )
-            commands.append(
-                Phonon.phonopy_command(
-                    Phonon._join_phonopy_arguments(
-                        extra_args,
-                        '--dim=%s -c %s' % (Phonon._format_dim(supercell_size), cell_file),
-                        config_file,
+            if not shutil.which("phonopy-init"):
+                commands.append(
+                    Phonon.phonopy_command(
+                        Phonon._join_phonopy_arguments(
+                            extra_args,
+                            '--dim=%s -c %s'
+                            % (Phonon._format_dim(supercell_size), cell_file),
+                            config_file,
+                        )
                     )
                 )
-            )
         else:
             commands.append(
                 Phonon.phonopy_command(
@@ -137,9 +142,50 @@ class Phonon(Property):
 
     @staticmethod
     def primitive_axes_setup_argument(primitive_axes: str | None) -> str:
+        primitive_axes = Phonon.primitive_axes_config_value(primitive_axes)
         if not primitive_axes:
             return ""
         return f"--pa {primitive_axes}"
+
+    @staticmethod
+    def primitive_axes_config_value(primitive_axes: Any) -> str | None:
+        if primitive_axes is None:
+            return None
+        if isinstance(primitive_axes, str):
+            value = primitive_axes.strip()
+            if not value or value.upper() == "AUTO":
+                return None
+            if value.upper() == "P":
+                return "P"
+            tokens = value.replace(",", " ").split()
+        elif isinstance(primitive_axes, (list, tuple)):
+            tokens = []
+            for item in primitive_axes:
+                if isinstance(item, (list, tuple)):
+                    tokens.extend(item)
+                else:
+                    tokens.append(item)
+        else:
+            raise ValueError(
+                "PRIMITIVE_AXES must be 'P', 'AUTO', or a 3x3 numeric matrix"
+            )
+        if len(tokens) != 9:
+            raise ValueError(
+                "PRIMITIVE_AXES must be 'P', 'AUTO', or contain exactly 9 values"
+            )
+        try:
+            return " ".join(str(float(Fraction(str(token)))) for token in tokens)
+        except (ValueError, ZeroDivisionError) as exc:
+            raise ValueError("PRIMITIVE_AXES contains a non-numeric value") from exc
+
+    @staticmethod
+    def primitive_axes_phonolammps_argument(primitive_axes: Any) -> str:
+        config_value = Phonon.primitive_axes_config_value(primitive_axes)
+        if config_value is None:
+            return ""
+        if config_value == "P":
+            config_value = "1 0 0 0 1 0 0 0 1"
+        return f"-pa {config_value}"
 
     @staticmethod
     def run_first_success(commands: List[str], required_file: str | None = None) -> None:
@@ -154,6 +200,12 @@ class Phonon(Property):
                 return
             errors.append(FileNotFoundError(f"{required_file} was not created by: {command}"))
         if errors:
+            if required_file is not None:
+                attempted = "; ".join(commands)
+                raise RuntimeError(
+                    f"{required_file} was not created after trying: {attempted}. "
+                    f"Last error: {errors[-1]}"
+                ) from errors[-1]
             raise errors[-1]
 
     @staticmethod
@@ -253,16 +305,30 @@ class Phonon(Property):
     def _build_phonolammps_run_command(self) -> str:
         dim_x, dim_y, dim_z = self.supercell_size
         command_template = self.phonolammps_run_command
+        primitive_axes = self.primitive_axes_phonolammps_argument(
+            self.PRIMITIVE_AXES
+        )
         if not command_template:
-            return f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z} "
-        return command_template.format(
+            return self._join_phonopy_arguments(
+                f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z}",
+                primitive_axes,
+            )
+        command = command_template.format(
             input_file="in.lammps",
             poscar="POSCAR",
             dim=f"{dim_x} {dim_y} {dim_z}",
             dim_x=dim_x,
             dim_y=dim_y,
             dim_z=dim_z,
+            primitive_axes=primitive_axes,
         )
+        if (
+            primitive_axes
+            and "{primitive_axes}" not in command_template
+            and not re.search(r"(?:^|\s)(?:-pa|--primitive_axis)(?:\s|=)", command)
+        ):
+            command = self._join_phonopy_arguments(command, primitive_axes)
+        return command
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
@@ -408,8 +474,9 @@ class Phonon(Property):
                     ret += "MESH = %s %s %s\n" % (
                         self.MESH[0], self.MESH[1], self.MESH[2]
                     )
-                if self.PRIMITIVE_AXES:
-                    ret += "PRIMITIVE_AXES = %s\n" % self.PRIMITIVE_AXES
+                primitive_axes = self.primitive_axes_config_value(self.PRIMITIVE_AXES)
+                if primitive_axes:
+                    ret += "PRIMITIVE_AXES = %s\n" % primitive_axes
                 ret += "BAND = %s\n" % self.BAND
                 if self.BAND_LABELS:
                     ret += "BAND_LABELS = %s\n" % self.BAND_LABELS

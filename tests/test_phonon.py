@@ -115,10 +115,11 @@ class TestPhonon(unittest.TestCase):
         try:
             os.chdir(work_dir)
             Path("phonopy_disp.yaml").write_text("phonopy yaml\n")
-            commands = Phonon.phonopy_load_commands(
-                supercell_size=[2, 2, 2],
-                cell_file="POSCAR-unitcell",
-            )
+            with patch("apex.core.property.Phonon.shutil.which", return_value=None):
+                commands = Phonon.phonopy_load_commands(
+                    supercell_size=[2, 2, 2],
+                    cell_file="POSCAR-unitcell",
+                )
             self.assertEqual(commands[0], "phonopy phonopy_disp.yaml --config band.conf")
             self.assertIn(
                 'phonopy --dim="2 2 2" -c POSCAR-unitcell band.conf',
@@ -135,16 +136,22 @@ class TestPhonon(unittest.TestCase):
         cwd = os.getcwd()
         try:
             os.chdir(work_dir)
-            commands = Phonon.phonopy_load_commands(
-                supercell_size=[2, 2, 2],
-                cell_file="POSCAR",
-            )
+            with patch(
+                "apex.core.property.Phonon.shutil.which",
+                return_value="/usr/bin/phonopy-init",
+            ):
+                commands = Phonon.phonopy_load_commands(
+                    supercell_size=[2, 2, 2],
+                    cell_file="POSCAR",
+                )
             self.assertEqual(
                 commands[0],
-                Phonon.phonopy_setup_command('-d --dim="2 2 2" -c POSCAR')
+                'phonopy-init -d --dim="2 2 2" -c POSCAR'
                 + " && phonopy phonopy_disp.yaml --config band.conf",
             )
-            self.assertEqual(commands[-1], 'phonopy --dim="2 2 2" -c POSCAR band.conf')
+            self.assertFalse(
+                any(command.startswith("phonopy --dim") for command in commands)
+            )
         finally:
             os.chdir(cwd)
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -157,13 +164,20 @@ class TestPhonon(unittest.TestCase):
         try:
             os.chdir(work_dir)
             Path("phonopy_disp.yaml").write_text("phonopy yaml\n")
-            commands = Phonon.phonopy_writefc_load_commands(
-                '--dim="2 2 2" -c POSCAR-unitcell --writefc'
-            )
+            with patch(
+                "apex.core.property.Phonon.shutil.which",
+                return_value="/usr/bin/phonopy-init",
+            ):
+                commands = Phonon.phonopy_writefc_load_commands(
+                    '--dim="2 2 2" -c POSCAR-unitcell --writefc'
+                )
             self.assertEqual(commands[0], "phonopy phonopy_disp.yaml --writefc")
             self.assertIn(
-                Phonon.phonopy_setup_command('--dim="2 2 2" -c POSCAR-unitcell --writefc'),
+                'phonopy-init --dim="2 2 2" -c POSCAR-unitcell --writefc',
                 commands,
+            )
+            self.assertFalse(
+                any(command.startswith("phonopy --dim") for command in commands)
             )
         finally:
             os.chdir(cwd)
@@ -236,6 +250,45 @@ class TestPhonon(unittest.TestCase):
         finally:
             os.chdir(cwd)
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_run_first_success_reports_missing_required_output_and_commands(self):
+        with patch(
+            "apex.core.property.Phonon.subprocess.check_call",
+            side_effect=subprocess.CalledProcessError(2, "phonopy load"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "mesh.yaml was not created.*phonopy load",
+            ):
+                Phonon.run_first_success(
+                    ["phonopy load"],
+                    required_file="mesh.yaml",
+                )
+
+    def test_primitive_axes_render_consistently_for_phonolammps(self):
+        self.assertEqual(Phonon.primitive_axes_config_value("P"), "P")
+        self.assertEqual(
+            Phonon.primitive_axes_phonolammps_argument("P"),
+            "-pa 1 0 0 0 1 0 0 0 1",
+        )
+        self.assertIsNone(Phonon.primitive_axes_config_value("AUTO"))
+        self.assertEqual(
+            Phonon.primitive_axes_phonolammps_argument("AUTO"),
+            "",
+        )
+        axes = "0 1/2 1/2 1/2 0 1/2 1/2 1/2 0"
+        self.assertEqual(
+            Phonon.primitive_axes_phonolammps_argument(axes),
+            "-pa 0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0",
+        )
+
+    def test_phonolammps_command_includes_matching_primitive_axes(self):
+        phonon = Phonon({"type": "phonon", "supercell_size": [2, 2, 2]})
+        self.assertEqual(
+            phonon._build_phonolammps_run_command(),
+            "phonolammps in.lammps -c POSCAR --dim 2 2 2 "
+            "-pa 1 0 0 0 1 0 0 0 1",
+        )
 
     def test_write_band_dat_accepts_nonzero_exit_with_output(self):
         work_dir = Path("output/phonopy_bandplot_nonzero")

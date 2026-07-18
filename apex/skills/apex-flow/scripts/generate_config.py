@@ -127,6 +127,7 @@ PROPERTY_DEFAULTS = {
     "gruneisen": {
         "type": "gruneisen",
         "supercell_size": [2, 2, 2],
+        "MESH": [20, 20, 20],
         "volume_strains": [-0.02, -0.01, 0.0, 0.01, 0.02],
         "temperatures": [100, 200, 300, 400, 500],
         "alpha_mode": "full",

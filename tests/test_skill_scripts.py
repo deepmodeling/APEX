@@ -194,6 +194,10 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         )
         self.assertEqual(relax["relaxation"]["cal_setting"], {"etol": 1})
         self.assertNotIn("properties", relax)
+        self.assertEqual(
+            self.gen.PROPERTY_DEFAULTS["gruneisen"]["MESH"],
+            [20, 20, 20],
+        )
 
         dft = self.gen.build_param_json(
             "confs/input", {"type": "vasp"}, ["phonon"], "props"
@@ -404,6 +408,17 @@ class TestValidateInputs(unittest.TestCase):
         )
         self.assertTrue(any("include 0.0" in error for error in errors))
         self.assertTrue(any("≥3" in error for error in errors))
+
+        errors, _ = self.validator.validate_properties(
+            [{
+                "type": "gruneisen",
+                "volume_strains": [-0.01, 0.0, 0.01],
+                "temperatures": [300],
+                "MESH": [20, 0, 20],
+            }],
+            "lammps",
+        )
+        self.assertTrue(any("MESH" in error for error in errors))
 
         for prop, message in (
             ({"type": "gamma"}, "requires plane_miller"),

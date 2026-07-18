@@ -210,6 +210,22 @@ def validate_properties(properties: list, interaction_type: str) -> list:
                 errors.append(f"{prefix}: decohesive requires 'min_slab_size'")
 
         elif prop_type == "gruneisen":
+            mesh = prop.get("MESH")
+            if mesh is None:
+                mesh = [20, 20, 20]
+            if (
+                not isinstance(mesh, (list, tuple))
+                or len(mesh) != 3
+                or any(
+                    not isinstance(value, int)
+                    or isinstance(value, bool)
+                    or value <= 0
+                    for value in mesh
+                )
+            ):
+                errors.append(
+                    f"{prefix}: gruneisen 'MESH' must contain 3 positive integers"
+                )
             if "volume_strains" not in prop:
                 errors.append(f"{prefix}: gruneisen requires 'volume_strains'")
             else:

@@ -798,7 +798,7 @@ APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow
 | `approach` | String | `"linear"` | VASP phonon method: `"linear"` or `"displacement"`. |
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions. |
 | `MESH` | Sequence[Int] | `None` | Reciprocal-space mesh (e.g., `[8, 8, 8]`). |
-| `PRIMITIVE_AXES` | String | `None` | Custom primitive axes definition (`"0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0"`). |
+| `PRIMITIVE_AXES` | String | `"P"` | Primitive axes used consistently by phonopy and phonoLAMMPS; accepts `"P"`, `"AUTO"`, or a 3×3 matrix. |
 | `BAND` | String | `None` | Band path definition (falls back to SeeK-path when omitted). |
 | `BAND_LABELS` | String | `None` | Labels for band segments. |
 | `BAND_POINTS` | Integer | `51` | Number of sampling points per segment. |
@@ -822,8 +822,8 @@ APEX supports Grüneisen workflows based on phonon calculations at multiple stra
 | `primitive` | Bool | `false` | Reduce to primitive cell before phonon calculation. |
 | `approach` | String | `"linear"` | Phonon workflow approach; VASP Grüneisen currently uses linear response. |
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Phonon supercell dimensions. |
-| `MESH` | Sequence[Int] | `None` | Reciprocal-space mesh for mode summation. |
-| `PRIMITIVE_AXES` | String | `None` | Custom primitive axes definition. |
+| `MESH` | Sequence[Int] | `[20, 20, 20]` | Three positive reciprocal-space mesh dimensions for mode summation. |
+| `PRIMITIVE_AXES` | String | `"P"` | Primitive axes used consistently for displacement generation and post-processing. |
 | `BAND` | String | `None` | Band path definition (falls back to SeeK-path when omitted). |
 | `BAND_LABELS` | String | `None` | Labels for band segments. |
 | `BAND_POINTS` | Integer | `51` | Number of sampling points per segment. |

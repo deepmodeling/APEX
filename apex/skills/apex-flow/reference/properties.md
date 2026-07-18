@@ -233,7 +233,7 @@ These parameters appear in most property configurations:
 | `PRIMITIVE_AXES` | optional | str | `"P"` | Phonopy PRIMITIVE_AXES |
 | `BAND` | optional | str | `null` | Explicit band path |
 | `BAND_LABELS` | optional | list[str] | `null` | High-symmetry labels |
-| `phonolammps_run_command` | optional | str | `null` | Custom phonoLAMMPS command |
+| `phonolammps_run_command` | optional | str | `null` | Custom phonoLAMMPS command; supports `{primitive_axes}`, otherwise the matching `-pa` argument is appended |
 
 **cal_setting defaults**: `relax_pos=true`, `relax_shape=false`, `relax_vol=false`, `cal_type="static"`
 
@@ -494,15 +494,17 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 | Parameter | Required? | Type | Default | Description |
 |-----------|-----------|------|---------|-------------|
 | `supercell_size` | optional | list[int] | `[2,2,2]` | Phonon supercell |
+| `MESH` | optional | list[int] | `[20,20,20]` | Three positive reciprocal-space mesh dimensions used for mode summation |
 | `volume_strains` | **REQUIRED** | list[float] | `[-0.02,-0.01,0.0,0.01,0.02]` | Must include 0.0, ≥3 points |
 | `temperatures` | **REQUIRED** | list[float] | `[100,200,300,400,500]` | Temperature points for evaluation |
-| `alpha_mode` | optional | str | `"full"` | `"full"` or `"debye"` |
+| `alpha_mode` | optional | str | `"sign_only"` | `"sign_only"` or `"full"` |
 
 **Complete working default**:
 ```json
 {
     "type": "gruneisen",
     "supercell_size": [2, 2, 2],
+    "MESH": [20, 20, 20],
     "volume_strains": [-0.02, -0.01, 0.0, 0.01, 0.02],
     "temperatures": [100, 200, 300, 400, 500],
     "alpha_mode": "full"

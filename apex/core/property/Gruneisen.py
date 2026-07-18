@@ -32,6 +32,7 @@ DEFAULT_CAL_SETTING = {
 }
 
 DEFAULT_SUPERCELL = [2, 2, 2]
+DEFAULT_MESH = [20, 20, 20]
 THZ_TO_K = 47.99243073366221
 KB_EV_PER_K = 8.617333262145e-5
 
@@ -49,7 +50,8 @@ class Gruneisen(Property):
         self.seekpath_from_original = parameter["seekpath_from_original"]
         parameter["seekpath_param"] = parameter.get("seekpath_param", {})
         self.seekpath_param = parameter["seekpath_param"]
-        parameter["MESH"] = parameter.get("MESH", None)
+        mesh = parameter.get("MESH")
+        parameter["MESH"] = list(DEFAULT_MESH) if mesh is None else mesh
         self.MESH = parameter["MESH"]
         parameter["PRIMITIVE_AXES"] = parameter.get("PRIMITIVE_AXES", "P")
         self.PRIMITIVE_AXES = parameter["PRIMITIVE_AXES"]
@@ -88,6 +90,17 @@ class Gruneisen(Property):
         self._validate()
 
     def _validate(self):
+        if (
+            not isinstance(self.MESH, (list, tuple))
+            or len(self.MESH) != 3
+            or any(
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value <= 0
+                for value in self.MESH
+            )
+        ):
+            raise ValueError("gruneisen MESH must contain exactly 3 positive integers")
         if len(self.volume_strains) < 3:
             raise ValueError("volume_strains must contain at least 3 points")
         if len(self.temperatures) < 1:
@@ -326,8 +339,11 @@ class Gruneisen(Property):
                         "ATOM_NAME =%s\n"
                         % "".join(f" {name}" for name in vasp_utils.get_poscar_types("POSCAR"))
                     )
-                    if self.PRIMITIVE_AXES:
-                        fp.write(f"PRIMITIVE_AXES = {self.PRIMITIVE_AXES}\n")
+                    primitive_axes = Phonon.primitive_axes_config_value(
+                        self.PRIMITIVE_AXES
+                    )
+                    if primitive_axes:
+                        fp.write(f"PRIMITIVE_AXES = {primitive_axes}\n")
                 subprocess.check_call(
                     Phonon.phonopy_setup_command("setting.conf --abacus -d"),
                     shell=True,
@@ -682,10 +698,10 @@ class Gruneisen(Property):
                 self.supercell_size[2],
             )
         )
-        if self.MESH:
-            lines.append("MESH = %s %s %s" % (self.MESH[0], self.MESH[1], self.MESH[2]))
-        if self.PRIMITIVE_AXES:
-            lines.append(f"PRIMITIVE_AXES = {self.PRIMITIVE_AXES}")
+        lines.append("MESH = %s %s %s" % (self.MESH[0], self.MESH[1], self.MESH[2]))
+        primitive_axes = Phonon.primitive_axes_config_value(self.PRIMITIVE_AXES)
+        if primitive_axes:
+            lines.append(f"PRIMITIVE_AXES = {primitive_axes}")
         lines.append(f"BAND = {band_string}")
         if band_labels:
             lines.append(f"BAND_LABELS = {band_labels}")
@@ -801,6 +817,16 @@ if __name__ == "__main__":
             raise FileNotFoundError(f"FORCE_CONSTANTS not found in {task_dir}")
         if not os.path.isfile(band_conf):
             raise FileNotFoundError(f"band.conf not found in {task_dir}")
+        with open(band_conf, "r") as fp:
+            has_mesh = any(
+                line.partition("=")[0].strip().upper() == "MESH"
+                for line in fp
+            )
+        if not has_mesh:
+            raise ValueError(
+                f"band.conf in {task_dir} does not define MESH; "
+                f"Gruneisen requires MESH={self.MESH}. Regenerate the task inputs."
+            )
         if not os.path.isfile(poscar):
             raise FileNotFoundError(f"POSCAR not found in {task_dir}")
         os.chdir(task_dir)
