@@ -258,7 +258,13 @@ class Decohesive(Property):
         sorted_frac_coords, sorted_species = zip(*ordered)
 
         a_vec, b_vec, c_vec = slab.lattice.matrix
-        slab_height = abs(c_vec[2])
+        # ``reorient_lattice=False`` preserves the input orientation, so the
+        # slab-normal c vector is not necessarily aligned with Cartesian z.
+        # Using c_vec[2] therefore produces a zero divisor for valid surfaces
+        # such as bcc (100) and (110), yielding NaNs in the LAMMPS data file.
+        slab_height = np.linalg.norm(c_vec)
+        if slab_height <= np.finfo(float).eps:
+            raise RuntimeError("Generated slab has a zero-length c lattice vector")
         self.is_flip = c_vec[2] < 0
         elong_scale = 1 + (abs(vacuum_size) / slab_height)
 

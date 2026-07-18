@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 from monty.serialization import loadfn
-from pymatgen.core import Structure
+from pymatgen.core import Lattice, Structure
 from pymatgen.core.surface import SlabGenerator
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -99,6 +99,35 @@ class TestDecohesive(unittest.TestCase):
             # slb = sl.get_slab()
             st2 = Structure(sl.lattice, sl.species, sl.frac_coords)
             self.assertEqual(len(st1), len(st2))
+
+    def test_make_confs_with_c_vector_not_aligned_to_z(self):
+        bcc_mo = Structure(
+            Lattice.cubic(3.16),
+            ["Mo", "Mo"],
+            [[0, 0, 0], [0.5, 0.5, 0.5]],
+        )
+        bcc_mo.to(filename=os.path.join(self.equi_path, "CONTCAR"), fmt="poscar")
+        parameter = {
+            "type": "decohesive",
+            "min_slab_size": 15,
+            "max_vacuum_size": 1,
+            "vacuum_size_step": 1,
+            "miller_index": [1, 0, 0],
+            "cal_type": "static",
+        }
+
+        tasks = Decohesive(parameter).make_confs(self.target_path, self.equi_path)
+        zero_vacuum = Structure.from_file(os.path.join(tasks[0], "POSCAR.tmp"))
+        one_angstrom_vacuum = Structure.from_file(os.path.join(tasks[1], "POSCAR.tmp"))
+
+        self.assertTrue(np.isfinite(zero_vacuum.lattice.matrix).all())
+        self.assertTrue(np.isfinite(one_angstrom_vacuum.lattice.matrix).all())
+        self.assertAlmostEqual(
+            np.linalg.norm(one_angstrom_vacuum.lattice.matrix[2])
+            - np.linalg.norm(zero_vacuum.lattice.matrix[2]),
+            1.0,
+            places=8,
+        )
     
     def __gen_slab_pmg(self, structure: Structure,
                        plane_miller, slab_size, vacuum_size) -> Structure:
