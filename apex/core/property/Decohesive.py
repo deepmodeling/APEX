@@ -268,13 +268,40 @@ class Decohesive(Property):
         self.is_flip = c_vec[2] < 0
         elong_scale = 1 + (abs(vacuum_size) / slab_height)
 
-        new_lattice = [a_vec, b_vec, elong_scale * c_vec]
+        new_lattice = np.array([a_vec, b_vec, elong_scale * c_vec], dtype=float)
         new_frac_coords = []
         for frac in sorted_frac_coords:
-            coord = frac.copy()
+            coord = np.array(frac, dtype=float)
             coord[2] = coord[2] / elong_scale
             new_frac_coords.append(coord)
 
-        return Structure(
-            lattice=np.array(new_lattice), coords=new_frac_coords, species=sorted_species
+        # LAMMPS requires a right-handed box: det([a, b, c]) > 0.
+        # Slab construction (odd axis permutations / mirroring) can produce a
+        # left-handed cell; swapping a↔b restores chirality without changing
+        # the physical slab.
+        new_lattice, new_frac_coords = _ensure_right_handed_cell(
+            new_lattice, new_frac_coords
         )
+
+        return Structure(
+            lattice=new_lattice, coords=new_frac_coords, species=sorted_species
+        )
+
+
+def _ensure_right_handed_cell(lattice, frac_coords):
+    """Swap a↔b when det([a, b, c]) ≤ 0 so the cell is right-handed."""
+    lattice = np.array(lattice, dtype=float)
+    det = np.linalg.det(lattice)
+    if det > 0:
+        return lattice, [np.array(fc, dtype=float) for fc in frac_coords]
+    if abs(det) <= np.finfo(float).eps:
+        raise RuntimeError(
+            "Generated slab has a singular lattice (det ≈ 0); cannot convert to LAMMPS"
+        )
+    lattice = lattice[[1, 0, 2]]
+    fixed_frac = []
+    for frac in frac_coords:
+        coord = np.array(frac, dtype=float)
+        coord[0], coord[1] = coord[1], coord[0]
+        fixed_frac.append(coord)
+    return lattice, fixed_frac
