@@ -138,18 +138,23 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 
 `program_id` and `bohrium_config.project_id` **must** come from the environment
 variable `BOHRIUM_PROJECT_ID` (or `--project-id`). Never hardcode a personal
-project ID in examples or generated configs.
+project ID in examples or generated configs. **Do not write `global.json`
+manually and do not copy the placeholders below into a real file.** Run
+`scripts/generate_config.py`; it converts the environment string to an integer
+and writes both ID fields as JSON numbers.
 
-```json
+The following is a type-annotated shape, not valid JSON:
+
+```text
 {
     "dflow_host": "https://workflows.deepmodeling.com",
     "k8s_api_server": "https://workflows.deepmodeling.com",
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
-    "program_id": "<BOHRIUM_PROJECT_ID>",
+    "program_id": <BOHRIUM_PROJECT_ID as an unquoted integer>,
     "bohrium_config": {
         "ticket": "<UUID from API conversion — auto-filled by generate_config.py>",
-        "project_id": "<BOHRIUM_PROJECT_ID>"
+        "project_id": <the same unquoted integer>
     },
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
     "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
@@ -159,6 +164,15 @@ project ID in examples or generated configs.
     "pool_size": 1
 }
 ```
+
+Quoted digits such as `"program_id": "..."` are invalid for DPDispatcher even
+though they look numeric. Before submission, always run:
+
+```bash
+python scripts/validate_inputs.py --param param.json --global global.json
+```
+
+Do not submit unless validation reports `Validation PASSED`.
 
 > For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c8_m31_1 * NVIDIA T4"`.
 > Before submitting, run `scripts/validate_apex_combo.py check` on the chosen image × scass_type.

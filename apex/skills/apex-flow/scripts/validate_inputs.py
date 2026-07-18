@@ -40,21 +40,81 @@ def validate_global(global_config: dict) -> list:
     errors = []
     warnings = []
 
-    # Check machine config
-    if "machine" not in global_config:
-        errors.append("Missing 'machine' section in global.json")
+    # generate_config.py writes the current, top-level APEX schema. Keep
+    # accepting the older nested-machine schema for existing user configs.
+    is_current_schema = any(
+        key in global_config
+        for key in ("dflow_host", "context_type", "bohrium_config", "program_id")
+    )
+
+    if is_current_schema:
+        for key in ("batch_type", "context_type"):
+            if not global_config.get(key):
+                errors.append(f"Missing '{key}' in global.json")
+
+        program_id = global_config.get("program_id")
+        if not isinstance(program_id, int) or isinstance(program_id, bool):
+            errors.append(
+                "'program_id' must be an unquoted JSON integer, not a string; "
+                "generate global.json with "
+                "generate_config.py"
+            )
+        elif program_id <= 0:
+            errors.append("'program_id' must be a positive integer")
+
+        bohrium_config = global_config.get("bohrium_config")
+        if not isinstance(bohrium_config, dict):
+            errors.append("Missing 'bohrium_config' section in global.json")
+        else:
+            project_id = bohrium_config.get("project_id")
+            if not isinstance(project_id, int) or isinstance(project_id, bool):
+                errors.append(
+                    "'bohrium_config.project_id' must be a JSON integer, "
+                    "not a quoted string"
+                )
+            elif project_id <= 0:
+                errors.append(
+                    "'bohrium_config.project_id' must be a positive integer"
+                )
+            elif isinstance(program_id, int) and not isinstance(program_id, bool):
+                if project_id != program_id:
+                    errors.append(
+                        "'program_id' and 'bohrium_config.project_id' must match"
+                    )
+
+            ticket = bohrium_config.get("ticket")
+            if not isinstance(ticket, str) or not ticket.strip():
+                errors.append(
+                    "Missing non-empty 'bohrium_config.ticket'; regenerate "
+                    "global.json with generate_config.py"
+                )
+
+        if not global_config.get("scass_type"):
+            errors.append("Missing 'scass_type' in global.json")
+
+        run_commands = (
+            "lammps_run_command", "abacus_run_command", "vasp_run_command"
+        )
+        if not any(global_config.get(key) for key in run_commands):
+            errors.append(
+                "Missing calculator run command in global.json "
+                "(expected one of lammps_run_command, abacus_run_command, "
+                "vasp_run_command)"
+            )
     else:
-        machine = global_config["machine"]
-        if "batch_type" not in machine:
-            errors.append("Missing 'machine.batch_type'")
+        # Legacy nested-machine schema.
+        if "machine" not in global_config:
+            errors.append("Missing 'machine' section in global.json")
+        else:
+            machine = global_config["machine"]
+            if "batch_type" not in machine:
+                errors.append("Missing 'machine.batch_type'")
 
-    # Check resources
-    if "resources" not in global_config:
-        warnings.append("No 'resources' section - will use defaults")
+        if "resources" not in global_config:
+            warnings.append("No 'resources' section - will use defaults")
 
-    # Check run_command
-    if "run_command" not in global_config:
-        errors.append("Missing 'run_command' in global.json")
+        if "run_command" not in global_config:
+            errors.append("Missing 'run_command' in global.json")
 
     return errors, warnings
 

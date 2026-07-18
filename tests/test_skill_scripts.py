@@ -311,6 +311,34 @@ class TestValidateInputs(unittest.TestCase):
             ([], []),
         )
 
+    def test_validate_current_global_requires_integer_matching_project_ids(self):
+        config = {
+            "dflow_host": "https://workflows.deepmodeling.com",
+            "batch_type": "Bohrium",
+            "context_type": "Bohrium",
+            "program_id": "42",
+            "bohrium_config": {
+                "ticket": "ticket",
+                "project_id": "42",
+            },
+            "scass_type": "c8_m31_1 * NVIDIA T4",
+            "lammps_run_command": "lmp -in in.lammps",
+        }
+        errors, warnings = self.validator.validate_global(config)
+        self.assertTrue(any("'program_id'" in error for error in errors))
+        self.assertTrue(
+            any("'bohrium_config.project_id'" in error for error in errors)
+        )
+        self.assertFalse(warnings)
+
+        config["program_id"] = 42
+        config["bohrium_config"]["project_id"] = 43
+        errors, _ = self.validator.validate_global(config)
+        self.assertTrue(any("must match" in error for error in errors))
+
+        config["bohrium_config"]["project_id"] = 42
+        self.assertEqual(self.validator.validate_global(config), ([], []))
+
     def test_validate_interaction(self):
         cases = (
             ({}, "Missing 'interaction.type'"),
