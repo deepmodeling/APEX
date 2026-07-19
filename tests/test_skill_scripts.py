@@ -171,7 +171,7 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             "vasp", incar="CUSTOM", potcars={"Al": "Al"}
         )
         self.assertEqual(vasp["incar"], "CUSTOM")
-        self.assertEqual(vasp["potcar_prefix"], ".")
+        self.assertEqual(vasp["potcar_prefix"], "vasp_potcar")
         with self.assertRaisesRegex(ValueError, "Unknown backend"):
             self.gen.build_interaction("unknown")
 
