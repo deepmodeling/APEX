@@ -169,13 +169,12 @@ Options to offer via AskQuestion:
    causes `FileNotFoundError: .../Ti_pv/POTCAR` after upload.
    As soon as the user specifies a POTCAR library path:
    1. Confirm the path exists and is readable locally.
-   2. Confirm every structure element has a POTCAR file under that library
-      (potpaw: prefer `"Ti": "Ti_pv/POTCAR"`).
-   3. Create the job with `generate_config.py create ... --potcar-prefix <lib>
-      --potcars 'Ti:Ti_pv/POTCAR,...'` — the script **copies** needed files into
-      `vasp_potcar/` and rewrites `potcar_prefix` to the relative `vasp_potcar`.
-   4. Verify `param.json` uses `"potcar_prefix": "vasp_potcar"` (not `/share/...`)
-      and that `vasp_potcar/<entry>` exists in the uploaded directory; then run
+   2. Confirm every structure element has a POTCAR file under that library.
+   3. Stage into the **job root** as flat files (e.g. `POTCAR_Ti`, `POTCAR_V`)
+      via `generate_config.py create --potcar-prefix <lib> --potcars '...'`
+      (or Agent `cp`/`mv`). Set `"potcar_prefix": "."`.
+   4. Verify `param.json` uses `"potcar_prefix": "."` (not `/share/...`) and
+      that `POTCAR_<Element>` files exist in the job directory; then run
       `validate_inputs.py`.
    If the library is missing/incomplete: **STOP**, tell the user the path is
    unusable, and ask for the correct POTCAR location. Never submit with an

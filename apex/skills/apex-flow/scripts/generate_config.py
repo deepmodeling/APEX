@@ -563,7 +563,7 @@ def build_interaction(backend: str, potential: str = None,
         interaction = {
             "type": "vasp",
             "incar": incar or "INCAR",
-            "potcar_prefix": potcar_prefix or "vasp_potcar",
+            "potcar_prefix": potcar_prefix or ".",
         }
         if potcars:
             interaction["potcars"] = potcars
@@ -572,21 +572,14 @@ def build_interaction(backend: str, potential: str = None,
         raise ValueError(f"Unknown backend: {backend}")
 
 
-def resolve_source_potcar_file(prefix: Path, entry: str) -> tuple:
-    """Locate a readable POTCAR under prefix for a potcars entry.
-
-    Returns (source_file, relative_entry_for_param).
-    relative_entry is what APEX will join with potcar_prefix as a file path.
-    """
+def resolve_source_potcar_file(prefix: Path, entry: str) -> Path:
+    """Locate a readable POTCAR under prefix for a potcars entry."""
     direct = (prefix / entry).expanduser()
     if direct.is_file():
-        return direct.resolve(), entry.replace("\\", "/")
+        return direct.resolve()
     nested = (prefix / entry / "POTCAR").expanduser()
     if nested.is_file():
-        rel = entry.replace("\\", "/").rstrip("/")
-        if not rel.endswith("/POTCAR"):
-            rel = f"{rel}/POTCAR"
-        return nested.resolve(), rel
+        return nested.resolve()
     raise FileNotFoundError(
         f"POTCAR not found for entry '{entry}' under '{prefix}' "
         f"(tried '{direct}' and '{nested}')"
@@ -596,12 +589,12 @@ def resolve_source_potcar_file(prefix: Path, entry: str) -> tuple:
 def stage_vasp_potcars(
     output_dir: Path, source_prefix: str, potcars: dict
 ) -> tuple:
-    """Copy required POTCAR files into the job and return upload-safe paths.
+    """Copy required POTCAR files into the job root and return upload-safe paths.
 
     Bohrium/dflow containers do not see host absolute libraries such as
-    ``/share/PAW_PBE``. Stage into ``vasp_potcar/`` and rewrite
-    ``potcar_prefix`` to that relative directory so ``pack_upload_dir``
-    includes the files.
+    ``/share/PAW_PBE``. Stage flat files into the job directory and set
+    ``potcar_prefix`` to ``"."`` so ``pack_upload_dir`` uploads them as
+    ordinary job-root files (nested dirs under ``"."`` are not included).
     """
     if not source_prefix:
         raise ValueError(
@@ -619,19 +612,17 @@ def stage_vasp_potcars(
     if not os.access(src_root, os.R_OK):
         raise PermissionError(f"potcar_prefix not readable: {src_root}")
 
-    dest_root = output_dir / "vasp_potcar"
-    dest_root.mkdir(parents=True, exist_ok=True)
-
     staged = {}
     for element, entry in potcars.items():
-        src_file, rel_entry = resolve_source_potcar_file(src_root, entry)
-        dest_file = dest_root / rel_entry
-        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        src_file = resolve_source_potcar_file(src_root, entry)
+        # Flat job-root name so Bohrium upload packs the file (not a subdir).
+        flat_name = f"POTCAR_{element}"
+        dest_file = output_dir / flat_name
         shutil.copy2(src_file, dest_file)
-        staged[element] = rel_entry
+        staged[element] = flat_name
         print(f"Staged POTCAR {element}: {src_file} → {dest_file}")
 
-    return "vasp_potcar", staged
+    return ".", staged
 
 
 STRUCTURE_FILENAMES = {"POSCAR", "CONTCAR", "STRU"}
@@ -1044,8 +1035,9 @@ def main():
         except (OSError, ValueError, FileNotFoundError, PermissionError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             print(
-                "POTCAR must be readable locally and will be copied into "
-                "vasp_potcar/ for upload. Confirm --potcar-prefix and --potcars.",
+                "POTCAR must be readable locally and will be copied into the "
+                "job root as POTCAR_<Element> with potcar_prefix='.'. "
+                "Confirm --potcar-prefix and --potcars.",
                 file=sys.stderr,
             )
             sys.exit(1)

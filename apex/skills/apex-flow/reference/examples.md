@@ -321,8 +321,9 @@ apex rss rss.json
 
 **Scenario**: Phonon band structure for Si using VASP.
 
-> ⚠️ Requires user to provide VASP image. Stage POTCARs into the job
-> (`vasp_potcar/`); do not leave absolute host paths like `/share/PAW_PBE`.
+> ⚠️ Requires user to provide VASP image. Stage POTCARs into the job root
+> (`POTCAR_Si` + `"potcar_prefix": "."`); do not leave absolute host paths
+> like `/share/PAW_PBE`.
 
 ### param.json
 ```json
@@ -331,8 +332,8 @@ apex rss rss.json
     "interaction": {
         "type": "vasp",
         "incar": "INCAR",
-        "potcar_prefix": "vasp_potcar",
-        "potcars": {"Si": "Si/POTCAR"}
+        "potcar_prefix": ".",
+        "potcars": {"Si": "POTCAR_Si"}
     },
     "relaxation": {
         "cal_setting": {

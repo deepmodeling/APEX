@@ -431,11 +431,11 @@ When `interaction.type` is `abacus` or `vasp`, the skill auto-applies smaller su
     "interaction": {
         "type": "vasp",
         "incar": "INCAR",
-        "potcar_prefix": "vasp_potcar",
+        "potcar_prefix": ".",
         "potcars": {
-            "Mo": "Mo_sv/POTCAR",
-            "Al": "Al/POTCAR",
-            "Fe": "Fe_pv/POTCAR"
+            "Mo": "POTCAR_Mo",
+            "Al": "POTCAR_Al",
+            "Fe": "POTCAR_Fe"
         }
     }
 }
@@ -491,7 +491,7 @@ APEX concatenates files at:
 os.path.join(potcar_prefix, potcars[element])   # must be a readable FILE
 ```
 
-Typical VASP potpaw library layout and matching `potcars` values:
+Source potpaw libraries often look like:
 
 ```text
 /path/to/POTCAR_LIBRARY/
@@ -501,16 +501,19 @@ Typical VASP potpaw library layout and matching `potcars` values:
 └── ...
 ```
 
+For Bohrium upload, **copy flat files into the job root** and use:
+
 ```json
-"potcar_prefix": "/path/to/POTCAR_LIBRARY",
+"potcar_prefix": ".",
 "potcars": {
-    "Mo": "Mo_sv/POTCAR",
-    "Al": "Al/POTCAR",
-    "Fe": "Fe_pv/POTCAR"
+    "Mo": "POTCAR_Mo",
+    "Al": "POTCAR_Al",
+    "Fe": "POTCAR_Fe"
 }
 ```
 
-Flat files also work (e.g. `"Mo": "POTCAR.Mo"` under `potcar_prefix`).
+(`generate_config.py create` does this staging automatically. Nested
+`Ti_pv/POTCAR` under `potcar_prefix: "."` is **not** reliably uploaded.)
 
 ### Agent check (mandatory when user supplies a POTCAR path)
 
@@ -521,12 +524,10 @@ machine. After Bohrium/dflow upload they vanish →
 Before submit:
 
 1. Confirm the user library exists and is readable locally.
-2. For each element, confirm a readable POTCAR file (prefer
-   `"Ti": "Ti_pv/POTCAR"` for potpaw trees).
-3. Use `generate_config.py create --potcar-prefix <lib> --potcars '...'` so
-   POTCARs are **copied** into the job as `vasp_potcar/` and `param.json` gets
-   `"potcar_prefix": "vasp_potcar"` (relative). Never ship absolute `/share/...`.
-4. Confirm the job directory contains `vasp_potcar/.../POTCAR` before upload.
+2. For each element, confirm a readable POTCAR file.
+3. Stage into the job root as `POTCAR_<Element>` (via create or `cp`/`mv`) and
+   set `"potcar_prefix": "."`. Never ship absolute `/share/...`.
+4. Confirm the job directory contains those flat POTCAR files before upload.
 5. On failure: tell the user the path is unusable and ask for the correct
    library. Do not guess.
 

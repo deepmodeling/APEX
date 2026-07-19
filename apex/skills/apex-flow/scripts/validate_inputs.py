@@ -137,9 +137,8 @@ def validate_vasp_potcars(
         errors.append(
             f"VASP: potcar_prefix is an absolute host path ({prefix_raw}). "
             "Bohrium/dflow cannot see paths like /share/PAW_PBE after upload. "
-            "Re-run generate_config.py create so POTCARs are staged into "
-            "job-relative vasp_potcar/ (or copy them yourself and set "
-            "potcar_prefix to 'vasp_potcar')."
+            "Copy POTCAR_<Element> files into the job root and set "
+            "potcar_prefix to '.' (or re-run generate_config.py create)."
         )
         return errors, warnings
     if not prefix.exists():
