@@ -48,7 +48,7 @@ from urllib.error import URLError, HTTPError
 
 TICKET_API_URL = "https://openapi.dp.tech/openapi/v1/ticket/get"
 DFLOW_HOST = "https://workflows.deepmodeling.com"
-APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2"
+APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
 LAMMPS_IMAGE = (
     "registry.dp.tech/dptech/dp/native/prod-397637/"
     "deepmd-kit-phonolammps:3.1.3"

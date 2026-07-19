@@ -117,7 +117,7 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 
 | Role | Image | Notes |
 |------|-------|-------|
-| **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Lightweight; just runs `apex submit` |
+| **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Lightweight; just runs `apex submit` |
 | **LAMMPS calculator** | `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3` | Default; includes phonoLAMMPS |
 | **ABACUS calculator** | (same APEX image has ABACUS) | Or user-specified |
 | **VASP calculator** | User must provide | Commercial; confirm with user |
@@ -158,7 +158,7 @@ The following is a type-annotated shape, not valid JSON:
         "ticket": "<UUID from API conversion — auto-filled by generate_config.py>",
         "project_id": <the same unquoted integer>
     },
-    "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
+    "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
     "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
     "lammps_run_command": "lmp -in in.lammps",
     "scass_type": "c16_m32_cpu",
@@ -197,7 +197,7 @@ workflow and retrieves its results automatically:
    ```python
    Bohrium(action="submit",
      input_dir="<job_dir>",
-     image="registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
+     image="registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
      machine="c1_m2_cpu",
      cmd='apex submit param.json -c global.json -f joint -n "cu-fcc-elastic" > log 2>&1')
    ```

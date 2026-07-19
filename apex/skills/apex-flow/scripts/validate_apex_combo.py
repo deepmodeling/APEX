@@ -154,7 +154,7 @@ def recommend(
         return {
             "backend": backend,
             "prefer": "cpu",
-            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2",
+            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
             "scass_type": RECOMMENDED_SCASS["abacus"][0],
             "alternatives": {"scass_types": RECOMMENDED_SCASS["abacus"]},
             "outer_machine": RECOMMENDED_SCASS["outer"][0],

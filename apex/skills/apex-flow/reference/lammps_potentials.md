@@ -218,16 +218,16 @@ manual map.
 
 | Potential Type | Recommended Image | GPU? |
 |---------------|-------------------|------|
-| deepmd | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Yes |
-| mace | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Yes |
-| nep | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | Yes |
-| gap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No (CPU) |
-| snap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
-| rann | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
-| eam_alloy | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
-| eam_fs | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
-| meam | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
-| meam_spline | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post2` | No |
+| deepmd | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Yes |
+| mace | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Yes |
+| nep | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Yes |
+| gap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No (CPU) |
+| snap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
+| rann | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
+| eam_alloy | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
+| eam_fs | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
+| meam | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
+| meam_spline | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
 
 All potential types are supported by the unified APEX image. The APEX 1.3.0 image ships LAMMPS compiled with DeePMD, MACE, NEP, and standard LAMMPS potentials.
 
