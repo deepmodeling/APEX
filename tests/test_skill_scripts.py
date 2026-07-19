@@ -91,7 +91,7 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             ("lammps", "deepmd", self.gen.SCASS_TYPES["lammps_gpu"], "lmp"),
             ("lammps", "eam_alloy", self.gen.SCASS_TYPES["lammps_cpu"], "lmp"),
             ("abacus", None, self.gen.SCASS_TYPES["abacus"], "abacus"),
-            ("vasp", None, self.gen.SCASS_TYPES["vasp"], "vasp_std"),
+            ("vasp", None, self.gen.SCASS_TYPES["vasp"], "/opt/vasp.5.4.4/bin/vasp_std"),
             ("other", None, self.gen.SCASS_TYPES["lammps_cpu"], "lmp"),
         )
         with patch.object(
@@ -121,10 +121,24 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             vasp = self.gen.build_global_json(
                 "vasp", access_key="key", project_id=42
             )
+            vasp_with_image = self.gen.build_global_json(
+                "vasp",
+                access_key="key",
+                project_id=42,
+                vasp_image="registry.example/private/vasp:licensed",
+            )
         self.assertEqual(abacus["scass_type"], "custom")
         self.assertEqual(abacus["abacus_run_command"], "custom-abacus")
         self.assertIn("abacus_image_name", abacus)
-        self.assertEqual(vasp["vasp_run_command"], "mpirun -n 16 vasp_std")
+        self.assertIn("setvars.sh", vasp["vasp_run_command"])
+        self.assertIn("ulimit -s unlimited", vasp["vasp_run_command"])
+        self.assertIn("/opt/vasp.5.4.4/bin/vasp_std", vasp["vasp_run_command"])
+        self.assertIn("mpirun -n 32", vasp["vasp_run_command"])
+        self.assertNotIn("vasp_image_name", vasp)
+        self.assertEqual(
+            vasp_with_image["vasp_image_name"],
+            "registry.example/private/vasp:licensed",
+        )
 
     def test_build_global_json_requires_access_key_and_propagates_combo_error(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -328,6 +342,59 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             self.assertIn("Hard type check passed", stdout.getvalue())
 
 
+class TestListBohriumImages(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load_script("list_bohrium_images.py")
+
+    def test_filter_images_by_keyword_and_urls(self):
+        records = [
+            {
+                "id": 1,
+                "name": "my-vasp:5.4.4",
+                "description": "licensed VASP",
+                "url": "registry.dp.tech/user/my-vasp:5.4.4",
+            },
+            {
+                "id": 2,
+                "name": "lammps:latest",
+                "url": "registry.dp.tech/user/lammps:latest",
+            },
+        ]
+        payload = self.mod.filter_images(records, "vasp", max_results=20)
+        self.assertEqual(payload["total_found"], 1)
+        self.assertEqual(payload["returned"], 1)
+        self.assertTrue(payload["images"][0]["private"])
+        self.assertEqual(
+            self.mod.image_urls(payload),
+            ["registry.dp.tech/user/my-vasp:5.4.4"],
+        )
+
+    def test_main_require_exits_when_empty(self):
+        with patch.object(self.mod, "fetch_private_images", return_value=[]), patch.dict(
+            os.environ, {"BOHRIUM_ACCESS_KEY": "ak"}, clear=False
+        ):
+            code = self.mod.main(["--keyword", "vasp", "--require"])
+        self.assertEqual(code, 1)
+
+    def test_main_prints_matching_urls(self):
+        records = [
+            {
+                "id": 9,
+                "name": "priv-vasp:1",
+                "url": "registry.dp.tech/acct/priv-vasp:1",
+            }
+        ]
+        with patch.object(
+            self.mod, "fetch_private_images", return_value=records
+        ), patch.dict(os.environ, {"BOHRIUM_ACCESS_KEY": "ak"}, clear=False), patch(
+            "sys.stdout", new_callable=io.StringIO
+        ) as stdout:
+            code = self.mod.main(["--keyword", "vasp", "--urls-only"])
+        self.assertEqual(code, 0)
+        self.assertIn("registry.dp.tech/acct/priv-vasp:1", stdout.getvalue())
+
+
 class TestValidateInputs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -394,6 +461,48 @@ class TestValidateInputs(unittest.TestCase):
 
         config["bohrium_config"]["project_id"] = 42
         self.assertEqual(self.validator.validate_global(config), ([], []))
+
+    def test_validate_vasp_run_command_rejects_bare_mpirun(self):
+        errors, _ = self.validator.validate_vasp_run_command(
+            {"vasp_run_command": "mpirun -n 16 vasp_std"}
+        )
+        self.assertTrue(any("Bohrium template" in e for e in errors))
+
+        errors, warnings = self.validator.validate_vasp_run_command(
+            {
+                "vasp_run_command": (
+                    'bash -c "source /opt/intel/oneapi/setvars.sh && '
+                    "ulimit -s unlimited && "
+                    'mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std"'
+                )
+            }
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(warnings, [])
+
+    def test_validate_dft_kspacing_requires_vasp_kspacing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            incar = base / "INCAR"
+            incar.write_text("ENCUT = 400\n", encoding="utf-8")
+            errors, _ = self.validator.validate_dft_kspacing(
+                {},
+                base,
+                {"type": "vasp", "incar": "INCAR"},
+            )
+            self.assertTrue(any("KSPACING" in e for e in errors))
+
+            incar.write_text(
+                "ENCUT = 400\nKSPACING = 0.15\nKGAMMA = True\n",
+                encoding="utf-8",
+            )
+            errors, warnings = self.validator.validate_dft_kspacing(
+                {},
+                base,
+                {"type": "vasp", "incar": "INCAR"},
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual(warnings, [])
 
     def test_validate_interaction(self):
         cases = (

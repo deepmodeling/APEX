@@ -59,7 +59,7 @@ Options to offer via AskQuestion:
   - LAMMPS + MLIP (DeePMD / DPA / MACE / NEP): fast, GPU-friendly
   - LAMMPS + classical (EAM / MEAM / SNAP): fast, CPU
   - ABACUS (DFT)
-  - VASP (DFT; license + image required)
+  - VASP (DFT; license-gated — resolve image via Bohrium `list_images` keyword=`vasp` or a user-known authorized address; otherwise stop)
    **Step B — only if Step A is LAMMPS + DeePMD/DPA: use the model bundled with this skill.**
   - Copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth` into the job directory.
   - This is the frozen, single-task `OMat24` branch of DPA-3.2-5M. It is
@@ -179,6 +179,57 @@ Options to offer via AskQuestion:
    If the library is missing/incomplete: **STOP**, tell the user the path is
    unusable, and ask for the correct POTCAR location. Never submit with an
    absolute host POTCAR path hoping the container can see it.
+13. **MUST set DFT k-spacing; never rely on a hand-written KPOINTS/KPT file.**
+   APEX auto-generates the k-mesh from spacing; omitting it fails at make time.
+   - **VASP**: `INCAR` (or `cal_setting`) **must** contain `KSPACING`. Prefer also
+     setting `KGAMMA` (`True` = Gamma-centered, `False` = Monkhorst-Pack).
+     Do not hand-author per-task `KPOINTS`; APEX writes it from POSCAR + spacing.
+   - **ABACUS**: `INPUT` **must** contain `kspacing` (1/Bohr), **or** set
+     `cal_setting.K_POINTS` like `[nx, ny, nz, 0, 0, 0]`. APEX writes `KPT`.
+   - **Screening defaults** (APEX is screening-oriented, not publication-grade):
+     VASP `KSPACING=0.1–0.2` Å⁻¹; ABACUS `kspacing=0.20` (relax) / `0.15` (phonon SCF).
+     Smaller spacing → denser mesh and much higher cost (~8× from 0.20→0.10 on ABACUS).
+   - Confirm the spacing with the user before submit when they care about accuracy.
+     Details: `reference/calculators.md` → k-spacing sections.
+14. **STOP: Resolve VASP image via Bohrium `list_images` or a user-known authorized address — never invent a default.**
+   VASP is commercial. There is **no** default `vasp_image_name`. Before any
+   VASP `create` / submit, resolve an image by **exactly one** of these paths:
+   1. **Private image discovery (preferred):** query the user's own private
+      Bohrium Docker images filtered by keyword `vasp`:
+      - If the MatMaster / Bohrium tool is available:
+        `Bohrium(action="list_images", keyword="vasp")`
+        (tool description: *list the user's own private Docker images
+        (filtered by keyword)*).
+      - Otherwise run the skill helper (same OpenAPI):
+        ```bash
+        python <skill-root>/scripts/list_bohrium_images.py \
+          --keyword vasp --require
+        ```
+      Present matching image URL(s) to the user and get approval before use.
+   2. **User-known authorized address:** the user explicitly provides a
+      licensed/authorized VASP image path they are allowed to use.
+   **If neither path yields an image → TERMINATE the VASP workflow.** Do not
+   guess public tags (including `vasp:5.4.4-dflow`), do not submit, and tell
+   the user that a private VASP image or an authorized image address is
+   required. Only after a confirmed image exists, pass
+   `--vasp-image <url>` to `generate_config.py create` (writes
+   `vasp_image_name`).
+15. **MUST use a Bohrium-safe VASP `vasp_run_command` — never bare `vasp_std`.**
+   After a licensed VASP image is resolved (Rule 14), `global.json` should use a
+   command that sources Intel oneAPI, raises stack limit, and calls an absolute
+   binary. Typical Bohrium layout:
+   ```text
+   bash -c "source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n <N> /opt/vasp.5.4.4/bin/vasp_std"
+   ```
+   Constraints:
+   - Always `source /opt/intel/oneapi/setvars.sh` (Intel MPI / MKL env).
+   - Always `ulimit -s unlimited` (avoids stack overflow on large cells).
+   - Prefer absolute binary path (PATH `vasp_std` is unreliable); adjust path if
+     the user-approved image differs.
+   - Align `<N>` with `scass_type` CPU count (`c32_*` → `-n 32`, `c16_*` → `-n 16`).
+   - Do **not** use bare `mpirun -n 16 vasp_std`.
+   `generate_config.py` writes the run_command template for `--backend vasp`
+   and sets `vasp_image_name` only from `--vasp-image`.
 
 
 
@@ -306,13 +357,14 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 ## Scripts
 
 
-| Script                   | Purpose                                                                           |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `generate_config.py`     | `create` a complete job or `refresh-global` credentials without changing param.json |
-| `validate_apex_combo.py` | List / check / recommend safe image × scass_type combos                           |
-| `fetch_models.py`        | Optional: download the DPA-3.2-5M multi-head source `.pt` for freezing another head |
-| `parse_results.py`       | Parse APEX output into summary                                                    |
-| `validate_inputs.py`     | Validate configuration before submission                                          |
+| Script                     | Purpose                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| `generate_config.py`       | `create` a complete job or `refresh-global` credentials without changing param.json |
+| `list_bohrium_images.py`   | List private Bohrium images by keyword (MatMaster `list_images` equivalent)       |
+| `validate_apex_combo.py`   | List / check / recommend safe image × scass_type combos                           |
+| `fetch_models.py`          | Optional: download the DPA-3.2-5M multi-head source `.pt` for freezing another head |
+| `parse_results.py`         | Parse APEX output into summary                                                    |
+| `validate_inputs.py`       | Validate configuration before submission                                          |
 
 
 

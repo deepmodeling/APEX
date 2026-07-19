@@ -53,6 +53,11 @@ LAMMPS_IMAGE = (
     "registry.dp.tech/dptech/dp/native/prod-397637/"
     "deepmd-kit-phonolammps:3.1.3"
 )
+# Recommended Bohrium VASP run command pieces (Intel oneAPI + absolute vasp_std).
+# Do NOT auto-set vasp_image_name — VASP is commercial; only set an image after
+# the user confirms they have a license and provides/approves the image.
+# Bare `mpirun -n N vasp_std` fails in typical Bohrium VASP images.
+VASP_BIN = "/opt/vasp.5.4.4/bin/vasp_std"
 
 # Default parameters for each property type
 # These are TESTED stable defaults that prevent KeyError failures.
@@ -167,6 +172,24 @@ SCASS_TYPES = {
     "abacus": "c16_m32_cpu",
     "vasp": "c32_m128_cpu",
 }
+
+
+def _nprocs_from_scass(scass_type: str, default: int = 16) -> int:
+    """Extract CPU count from scass strings like ``c32_m128_cpu`` → 32."""
+    if not scass_type:
+        return default
+    match = re.search(r"\bc(\d+)_", scass_type)
+    if match:
+        return int(match.group(1))
+    return default
+
+
+def default_vasp_run_command(nprocs: int = 32) -> str:
+    """Recommended Bohrium VASP run_command (user must still supply a licensed image)."""
+    return (
+        'bash -c "source /opt/intel/oneapi/setvars.sh && '
+        f'ulimit -s unlimited && mpirun -n {nprocs} {VASP_BIN}"'
+    )
 
 # =============================================================================
 # DFT Calculation Defaults (fast/loose for APEX validation workflows)
@@ -356,7 +379,8 @@ def _validate_image_scass(image: str, scass: str) -> None:
 def build_global_json(backend: str, potential: str = None,
                       access_key: str = None, project_id: int = None,
                       scass_type: str = None,
-                      run_command: str = None) -> dict:
+                      run_command: str = None,
+                      vasp_image: str = None) -> dict:
     """
     Build global.json for APEX dflow submission.
 
@@ -399,7 +423,9 @@ def build_global_json(backend: str, potential: str = None,
     elif backend == "abacus":
         calc_run_command = "mpirun -n 16 abacus"
     elif backend == "vasp":
-        calc_run_command = "mpirun -n 16 vasp_std"
+        calc_run_command = default_vasp_run_command(
+            _nprocs_from_scass(inner_scass, default=32)
+        )
     else:
         calc_run_command = "lmp -in in.lammps"
 
@@ -434,8 +460,12 @@ def build_global_json(backend: str, potential: str = None,
         config["abacus_image_name"] = APEX_IMAGE
         config["abacus_run_command"] = calc_run_command
     elif backend == "vasp":
-        # VASP image must be provided by user
+        # Never invent a VASP image — commercial license required.
+        # Set only when caller passes an explicitly resolved/approved image
+        # (from Bohrium list_images or a user-known authorized address).
         config["vasp_run_command"] = calc_run_command
+        if vasp_image:
+            config["vasp_image_name"] = vasp_image.strip()
 
     return config
 
@@ -887,6 +917,14 @@ def main():
                         help="Override scass_type for inner dflow containers")
     create.add_argument("--run-command",
                         help="Override calculator run command")
+    create.add_argument(
+        "--vasp-image",
+        help=(
+            "Licensed VASP image URL/name for global.json vasp_image_name. "
+            "Required for --backend vasp. Resolve via Bohrium list_images "
+            "(keyword=vasp) or a user-known authorized address — never invent."
+        ),
+    )
     create.add_argument("--incar",
                         help="INCAR/INPUT file path (for VASP/ABACUS)")
     create.add_argument("--potcar-prefix",
@@ -991,6 +1029,16 @@ def main():
     # -------------------------------------------------------------------------
     # Build global.json (includes ticket conversion)
     # -------------------------------------------------------------------------
+    if args.backend == "vasp" and not (args.vasp_image or "").strip():
+        print(
+            "ERROR: --backend vasp requires --vasp-image. Resolve a licensed "
+            "image with Bohrium list_images (keyword=vasp) / "
+            "scripts/list_bohrium_images.py, or use a user-known authorized "
+            "address. If neither exists, stop the VASP workflow.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     print("Converting access_key to dflow ticket...")
     global_config = build_global_json(
         backend=args.backend,
@@ -999,6 +1047,7 @@ def main():
         project_id=args.project_id,
         scass_type=args.scass_type,
         run_command=args.run_command,
+        vasp_image=args.vasp_image,
     )
     validate_project_id_types(global_config)
     print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")

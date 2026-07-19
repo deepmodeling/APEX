@@ -12,6 +12,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -35,6 +36,11 @@ VALID_LAMMPS_TYPES = {
 
 # Valid backend types
 VALID_BACKENDS = {"vasp", "abacus"} | VALID_LAMMPS_TYPES
+
+# Bare PATH-based vasp_std is unreliable in Bohrium VASP images.
+_BARE_VASP_RUN_RE = re.compile(
+    r"^\s*mpirun\b.*\bvasp_std\s*$", re.IGNORECASE
+)
 
 
 def _resolve_under_base(path_str: str, base_dir: Path) -> Path:
@@ -195,6 +201,116 @@ def validate_vasp_potcars(
     return errors, warnings
 
 
+def _incar_has_kspacing(text: str) -> bool:
+    return bool(re.search(r"(?im)^\s*KSPACING\s*=", text))
+
+
+def _input_has_kspacing(text: str) -> bool:
+    return bool(re.search(r"(?im)^\s*kspacing\b", text))
+
+
+def validate_dft_kspacing(
+    param_config: dict, base_dir: Path, interaction: dict
+) -> tuple:
+    """Require VASP KSPACING / ABACUS kspacing (or K_POINTS) before submit."""
+    errors = []
+    warnings = []
+    int_type = interaction.get("type")
+
+    if int_type == "vasp":
+        incar_name = interaction.get("incar") or "INCAR"
+        incar_path = _resolve_under_base(incar_name, base_dir)
+        cal_setting = {}
+        relaxation = param_config.get("relaxation") or {}
+        if isinstance(relaxation, dict):
+            cal_setting = relaxation.get("cal_setting") or {}
+        has_cal_kspacing = "kspacing" in cal_setting or "KSPACING" in cal_setting
+        if incar_path.is_file():
+            text = incar_path.read_text(encoding="utf-8", errors="replace")
+            if not _incar_has_kspacing(text) and not has_cal_kspacing:
+                errors.append(
+                    "VASP: INCAR (or relaxation.cal_setting) must set KSPACING; "
+                    "APEX auto-generates KPOINTS from it and will fail without it"
+                )
+            elif not re.search(r"(?im)^\s*KGAMMA\s*=", text):
+                warnings.append(
+                    "VASP: KGAMMA not set in INCAR "
+                    "(recommend True=Gamma or False=Monkhorst-Pack)"
+                )
+        elif not has_cal_kspacing:
+            errors.append(
+                f"VASP: INCAR not found at '{incar_path}' and "
+                "cal_setting has no kspacing/KSPACING"
+            )
+
+    elif int_type == "abacus":
+        input_name = interaction.get("incar") or "INPUT"
+        input_path = _resolve_under_base(input_name, base_dir)
+        cal_setting = {}
+        relaxation = param_config.get("relaxation") or {}
+        if isinstance(relaxation, dict):
+            cal_setting = relaxation.get("cal_setting") or {}
+        has_k_points = "K_POINTS" in cal_setting
+        if input_path.is_file():
+            text = input_path.read_text(encoding="utf-8", errors="replace")
+            if not _input_has_kspacing(text) and not has_k_points:
+                errors.append(
+                    "ABACUS: INPUT must set kspacing (1/Bohr), or set "
+                    "cal_setting.K_POINTS like [nx,ny,nz,0,0,0]; "
+                    "APEX writes KPT from these"
+                )
+        elif not has_k_points:
+            warnings.append(
+                f"ABACUS: INPUT not found at '{input_path}'; ensure "
+                "kspacing or cal_setting.K_POINTS is set before submit"
+            )
+
+    return errors, warnings
+
+
+def validate_vasp_run_command(global_config: dict) -> tuple:
+    """Enforce Bohrium-safe VASP run_command when vasp_run_command is set."""
+    errors = []
+    warnings = []
+    cmd = global_config.get("vasp_run_command")
+    if not cmd:
+        return errors, warnings
+    if not isinstance(cmd, str):
+        errors.append("'vasp_run_command' must be a string")
+        return errors, warnings
+
+    bare = _BARE_VASP_RUN_RE.match(cmd)
+    missing_setvars = "setvars.sh" not in cmd
+    missing_ulimit = "ulimit" not in cmd
+    missing_abs = "/opt/vasp" not in cmd and "vasp.5" not in cmd
+
+    if bare or (missing_setvars and missing_abs):
+        errors.append(
+            "VASP: vasp_run_command must use the Bohrium template "
+            '(source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && '
+            "mpirun -n <N> /opt/vasp.5.4.4/bin/vasp_std); "
+            "bare 'mpirun -n N vasp_std' is not allowed"
+        )
+    else:
+        if missing_setvars:
+            errors.append(
+                "VASP: vasp_run_command must source "
+                "/opt/intel/oneapi/setvars.sh"
+            )
+        if missing_ulimit:
+            warnings.append(
+                "VASP: vasp_run_command should include "
+                "'ulimit -s unlimited'"
+            )
+        if missing_abs:
+            warnings.append(
+                "VASP: prefer absolute binary "
+                "/opt/vasp.5.4.4/bin/vasp_std in vasp_run_command"
+            )
+
+    return errors, warnings
+
+
 def validate_global(global_config: dict) -> list:
     """Validate global.json configuration."""
     errors = []
@@ -277,6 +393,10 @@ def validate_global(global_config: dict) -> list:
                 "(expected one of lammps_run_command, abacus_run_command, "
                 "vasp_run_command)"
             )
+
+        rc_errors, rc_warnings = validate_vasp_run_command(global_config)
+        errors.extend(rc_errors)
+        warnings.extend(rc_warnings)
     else:
         # Legacy nested-machine schema.
         if "machine" not in global_config:
@@ -548,6 +668,32 @@ def main():
                 print(f"  {w}")
             else:
                 all_warnings.append(w)
+
+    # DFT k-spacing (VASP KSPACING / ABACUS kspacing)
+    if interaction.get("type") in ("vasp", "abacus"):
+        errors, warnings = validate_dft_kspacing(
+            param_config, base_dir, interaction
+        )
+        all_errors.extend(errors)
+        all_warnings.extend(warnings)
+
+    # VASP image is license-gated: require an explicit user-provided image.
+    if interaction.get("type") == "vasp" and global_config is not None:
+        image = global_config.get("vasp_image_name")
+        if not isinstance(image, str) or not image.strip():
+            all_errors.append(
+                "VASP: missing 'vasp_image_name' in global.json. "
+                "VASP is commercial — do not invent a default image; "
+                "ask the user to confirm a license and provide the image"
+            )
+        elif any(
+            token in image.lower()
+            for token in ("user-provided", "your_", "example", "<", "todo")
+        ):
+            all_errors.append(
+                "VASP: 'vasp_image_name' looks like a placeholder. "
+                "Replace it with a user-confirmed licensed VASP image"
+            )
 
     # Report
     if all_warnings:

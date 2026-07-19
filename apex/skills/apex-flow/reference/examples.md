@@ -321,9 +321,10 @@ apex rss rss.json
 
 **Scenario**: Phonon band structure for Si using VASP.
 
-> ⚠️ Requires user to provide VASP image. Stage POTCARs into the job root
+> ⚠️ Confirm VASP license/image with the user. Stage POTCARs into the job root
 > (`POTCAR_Si` + `"potcar_prefix": "."`); do not leave absolute host paths
-> like `/share/PAW_PBE`.
+> like `/share/PAW_PBE`. INCAR **must** include `KSPACING`. Use the Bohrium
+> `vasp_run_command` template (never bare `mpirun ... vasp_std`).
 
 ### param.json
 ```json
@@ -363,6 +364,25 @@ NSW = 0
 ISMEAR = 0
 SIGMA = 0.05
 LREAL = .FALSE.
+KSPACING = 0.15
+KGAMMA = True
+```
+
+### Resolve VASP image first
+```bash
+# MatMaster: Bohrium(action="list_images", keyword="vasp")
+python <skill-root>/scripts/list_bohrium_images.py --keyword vasp --require
+# If empty and user has no authorized address → stop.
+# Else create with --vasp-image <approved-url>
+```
+
+### global.json (VASP keys)
+```json
+{
+    "vasp_image_name": "<from list_images or user-known authorized address>",
+    "vasp_run_command": "bash -c \"source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std\"",
+    "scass_type": "c32_m128_cpu"
+}
 ```
 
 ---

@@ -120,7 +120,7 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Lightweight; just runs `apex submit` |
 | **LAMMPS calculator** | `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3` | Default; includes phonoLAMMPS |
 | **ABACUS calculator** | (same APEX image has ABACUS) | Or user-specified |
-| **VASP calculator** | User must provide | Commercial; confirm with user |
+| **VASP calculator** | User must provide after confirming license | Commercial; **never invent a default image** |
 
 > ⚠️ **Do NOT combine `deepmd-kit:3.1.1` with any NVIDIA T4 machine**. It also has a known segfault bug when handling triclinic cells (non-orthogonal boxes), including on CPU. Use `3.1.3` or later.
 
@@ -131,7 +131,36 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | LAMMPS (DeePMD/MACE/NEP) | `c8_m31_1 * NVIDIA T4` | GPU beneficial |
 | LAMMPS (EAM/MEAM/SNAP) | `c16_m32_cpu` | CPU sufficient |
 | ABACUS | `c16_m32_cpu` | CPU |
-| VASP | User specifies | User's license |
+| VASP | `c32_m128_cpu` (default) | Align `mpirun -n <N>` with CPU count |
+
+### VASP image resolution + `vasp_run_command` (license-gated)
+
+**Image resolution (mandatory before VASP submit):**
+
+1. Query the user's **private** Bohrium images with keyword `vasp`:
+   - MatMaster tool: `Bohrium(action="list_images", keyword="vasp")`
+     (*list the user's own private Docker images (filtered by keyword)*)
+   - Or skill helper: `python scripts/list_bohrium_images.py --keyword vasp --require`
+2. Else use a **user-known authorized** VASP image address.
+3. If neither exists → **stop**. Do not invent `vasp:5.4.4-dflow` or any default.
+4. Pass the approved image as `--vasp-image` to `generate_config.py create`.
+
+**Run command:** do **not** use bare `mpirun -n 16 vasp_std`. Typical
+Bohrium-safe command (adjust binary path to the user-approved image):
+
+```text
+bash -c "source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std"
+```
+
+Must include: Intel `setvars.sh`, `ulimit -s unlimited`, absolute `vasp_std`,
+and `-n` matching `scass_type`. See `reference/calculators.md` and Critical
+Rules in `SKILL.md`.
+
+### DFT k-spacing (REQUIRED)
+
+- VASP: `INCAR` must set `KSPACING` (APEX auto-writes `KPOINTS`).
+- ABACUS: `INPUT` must set `kspacing`, or `cal_setting.K_POINTS`.
+- `validate_inputs.py` rejects missing spacing / bare VASP run commands.
 
 > **IMPORTANT**: Use the minimal `c1_m2_cpu` machine for the outer Bohrium job since it only submits to dflow and waits. The heavy compute is in the inner containers specified by `scass_type` in `global.json`.
 

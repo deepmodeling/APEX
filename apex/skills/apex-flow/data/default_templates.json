@@ -18,9 +18,9 @@
         },
         "vasp": {
             "image": null,
-            "machine": null,
-            "run_command": "mpirun -n 16 vasp_std",
-            "note": "User must provide image. VASP is commercial software."
+            "machine": "c32_m128_cpu",
+            "run_command": "bash -c \"source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std\"",
+            "note": "Commercial software. Resolve image via Bohrium list_images(keyword=vasp) or a user-known authorized address; if neither exists, stop. Never invent a default image. Never use bare mpirun ... vasp_std."
         }
     },
     "properties": {
