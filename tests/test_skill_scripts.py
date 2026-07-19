@@ -417,8 +417,8 @@ class TestValidateInputs(unittest.TestCase):
         errors, warnings = self.validator.validate_interaction(
             {"type": "vasp", "potcars": {}}
         )
-        self.assertFalse(errors)
-        self.assertTrue(any("potcar_prefix" in warning for warning in warnings))
+        self.assertTrue(any("potcar_prefix" in error for error in errors))
+        self.assertFalse(warnings)
 
     def test_validate_property_required_fields(self):
         cases = (
