@@ -638,12 +638,32 @@ Property selection behavior:
 
 ### 4.5 Decohesive energy line
 
+Decohesive builds a rigid-separation series on one user-specified Miller plane via pymatgen `SlabGenerator`. It does **not** auto-enumerate planes (unlike `surface`) and has **no** crystal-type nested overrides (unlike `gamma`). Any structure that can form that slab is supported; set `miller_index` explicitly.
+
+Recommended default planes by crystal family (JSON `miller_index` uses **3-index** Miller notation):
+
+| Crystal structure | Recommended planes | JSON `miller_index` examples |
+|-------------------|--------------------|------------------------------|
+| **FCC** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **BCC** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **Diamond** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **Zinc blende** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **Rocksalt** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **HCP** | $(0001)$, $(10\bar{1}0)$, $(11\bar{2}0)$ | `[0,0,1]`, `[1,0,0]`, `[1,1,0]` |
+| **Perovskite** | $(001)$, $(110)$, $(111)$ | `[0,0,1]`, `[1,1,0]`, `[1,1,1]` |
+
+Notes:
+
+- HCP must use the **3-index** values above. Four-index Miller–Bravais vectors (e.g. `[0,0,0,1]`) are **not** accepted by `decohesive` (no Bravais conversion).
+- Polar / multi-termination faces (common for zinc blende $(111)$ and some perovskite cuts) still generate; APEX takes the first matching slab termination from pymatgen.
+- If the user does not specify a plane, prefer a low-index face from the table for the detected lattice and confirm before submit.
+
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
 | `min_slab_size` | Integer | `10` | Minimum slab thickness. |
 | `max_vacuum_size` | Integer | `11` | Maximum vacuum width. |
 | `pert_xz` | Float | `0.01` | Perturbation along xz plane for surface energy. |
-| `miller_miller` | List[Int] | `[1, 1, 0]` | Miller indices of the target plane. |
+| `miller_index` | List[Int] | `[1, 1, 0]` | Miller indices of the target plane (**required**, 3-index). |
 
 ### 4.6 Elastic
 

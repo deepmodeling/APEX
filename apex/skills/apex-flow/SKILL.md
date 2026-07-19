@@ -73,10 +73,17 @@ Options to offer via AskQuestion:
    (e.g. “用 EAM”, “用 ABACUS 做 EOS”, “用 DPA-3.2-5M-OMat24.pth”).
    **If AskQuestion times out or fails**: state the intended APEX backend and bundled model selection (if LAMMPS+DPA) in plain text and WAIT. Never silently submit.
 2. **STOP: Confirm property parameters before submission — DO NOT PROCEED WITHOUT USER ANSWER.** Before submitting, present the full `properties` configuration (JSON) to the user. Show the defaults that will be used and highlight:
-  - Miller indices (for surface/gamma/decohesive)
+  - Miller indices / slip systems (for surface/gamma/gamma_surface/decohesive)
   - Supercell sizes (for vacancy/interstitial/phonon/gruneisen/finite-T)
   - Temperature ranges (for finite_t_latt/finite_t_elastic/annealing)
   - Number of deformation/step points
+   For crystallographic planes:
+  - `gamma` / `gamma_surface`: pick from the canonical FCC/BCC/HCP table in
+    repository **README §4.10** (see also `reference/properties.md` §8–9). Do not
+    invent slip systems; do not silently change an approved plane/direction.
+  - `decohesive`: pick `miller_index` from the crystal-family table in
+    **README §4.5** / `reference/properties.md` §10 (FCC/BCC/Diamond/ZB/Rocksalt/
+    HCP/Perovskite). HCP must use **3-index** only.
    Let the user approve or modify. **Skip ONLY if** the user provided explicit property parameters already.
    **If AskQuestion times out or fails**: display the parameters in your message and WAIT for confirmation before submitting.
 3. **Two-layer architecture.** The outer Bohrium job is a thin submission client only. Never attempt `apex do` for production workflows — use `apex submit` which delegates to dflow. See `reference/submission.md` for the full architecture diagram.
@@ -97,6 +104,7 @@ Options to offer via AskQuestion:
 4. **Kill = inner FIRST, outer SECOND.** If you only kill the outer Bohrium node, the dflow workflow continues consuming resources silently. Always terminate the inner dflow workflow first. See `reference/workflow-control.md`.
 5. **MUST use `generate_config.py`; never hand-write `param.json` or `global.json`.**
   - Create the complete job with `python <skill-root>/scripts/generate_config.py create ...`.
+  - For multiple structures, pass repeated/space-separated `--structure` and/or `--structure-dir` to `create` (it copies each into `confs/<name>/` and fills `structures`); do not hand-edit `structures` after create.
   - To preserve an approved `param.json` while refreshing credentials, run
     `python <skill-root>/scripts/generate_config.py refresh-global --global global.json`
     from the task directory. This updates only `global.json`.
@@ -136,19 +144,42 @@ Options to offer via AskQuestion:
    (`scripts/fetch_models.py --source-checkpoint` or
    `dp --pt pretrained download DPA-3.2-5M`) and freeze that head before use.
    See `models/README.md`.
-11. **Preserve the user's input cell and prevent accidental double expansion.**
+11. **STOP: Check atom count / cell size before property submit — decide whether to expand.**
   APEX does not require a conventional cell. Do not convert a primitive cell or
    user-provided supercell to a conventional cell merely because an example uses
    `confs/std-fcc` or another `std-*` name.
-  - Inspect the supplied structure and determine whether it is already a supercell.
-  - If it is a supercell, ask whether the user wants any additional replication.
-  - If the answer is no, explicitly set applicable volumetric `supercell` or
-  `supercell_size` parameters to `[1, 1, 1]` so APEX does not expand it again.
+  Before confirming property parameters, **always read the user's structure** and
+  report: formula, atom count, lattice lengths, and whether it looks like a
+  primitive / conventional / already-expanded supercell.
+  Then decide with the user whether further bulk expansion is needed:
+  - **Too small for the property** (typical primitive or tiny conventional cell)
+    → recommend expanding; do not silently submit with an undersized cell.
+  - **Already large enough / already a supercell** → ask whether to expand again;
+    if no, set applicable volumetric `supercell` / `supercell_size` to `[1,1,1]`
+    so APEX does not expand twice.
   - Keep `elastic.conventional` false unless the user explicitly requests a
-  conventional-cell elastic calculation.
-  - Slab construction parameters for surface/gamma/decohesive calculations are
-  property geometry controls; confirm them separately rather than treating them
-  as generic bulk expansion.
+    conventional-cell elastic calculation.
+  - Slab properties (`surface` / `gamma` / `decohesive`) use `min_slab_size` /
+    in-plane replication, not bulk `supercell`; confirm those separately.
+  Use the helper wording and size guidance in
+  `reference/workflow-control.md` → **Pre-Submission Structure Validation**.
+12. **STOP: When the user gives a VASP POTCAR path, verify it and stage it into the job.**
+   Host libraries such as `/share/PAW_PBE/...` are **not** available inside
+   Bohrium/dflow containers. Leaving an absolute `potcar_prefix` in `param.json`
+   causes `FileNotFoundError: .../Ti_pv/POTCAR` after upload.
+   As soon as the user specifies a POTCAR library path:
+   1. Confirm the path exists and is readable locally.
+   2. Confirm every structure element has a POTCAR file under that library
+      (potpaw: prefer `"Ti": "Ti_pv/POTCAR"`).
+   3. Create the job with `generate_config.py create ... --potcar-prefix <lib>
+      --potcars 'Ti:Ti_pv/POTCAR,...'` — the script **copies** needed files into
+      `vasp_potcar/` and rewrites `potcar_prefix` to the relative `vasp_potcar`.
+   4. Verify `param.json` uses `"potcar_prefix": "vasp_potcar"` (not `/share/...`)
+      and that `vasp_potcar/<entry>` exists in the uploaded directory; then run
+      `validate_inputs.py`.
+   If the library is missing/incomplete: **STOP**, tell the user the path is
+   unusable, and ask for the correct POTCAR location. Never submit with an
+   absolute host POTCAR path hoping the container can see it.
 
 
 
@@ -230,7 +261,15 @@ See `reference/submission.md` for the full validated template.
 2. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
 3. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
 4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
-5. **Supercell sizing applies to unit-cell inputs only.** For defect calculations (vacancy, interstitial), a total cell equivalent to at least a [2,2,2] unit-cell expansion is normally needed. For phonon, [3,3,3] total size is recommended (phonoLAMMPS may fail with a smaller total cell). If the input is already a supercell and the user declines further expansion, use `[1,1,1]`; do not apply these factors again.
+5. **Supercell sizing depends on the input atom count, not only the default JSON.**
+   Treat defaults as targets for **unit-cell inputs**. First inspect the user's
+   structure; if it is already large enough, prefer `[1,1,1]` after confirmation.
+   Rough total-size guidance (after any expansion):
+   - vacancy / interstitial: ≳ [2,2,2] conventional-cell equivalent
+   - phonon / gruneisen / finite-T: ≳ [3,3,3] (smaller cells often fail)
+   - surface / gamma / decohesive: ensure slab thickness / in-plane size, not bulk supercell
+   If the cell is too small, ask the user to expand before submit. See
+   `reference/workflow-control.md`.
 6. **Outer job machine.** Use `c1_m2_cpu` for the outer Bohrium job since it only calls `apex submit` and waits. Don't waste larger CPU or GPU resources on the submission client.
 
 
@@ -242,6 +281,18 @@ oxides/ceramics, and other high-entropy materials, use `apex rss` to generate
 structures before property calculations. Read `reference/rss_workflow.md`
 before asking the user questions or writing `rss.json`; it defines the required
 QA, current JSON schema, output layout, and visualization fallback.
+
+**Agent rules for RSS (mandatory):**
+- Always set `"show_progress": false` in `rss.json`. tqdm step bars (default
+  `max_steps=20000`) flood captured terminal output and waste context; do not
+  leave progress enabled “to see if it is working.”
+- After `apex rss`, judge success from files + metadata — not from live bars:
+  count `conf_*/POSCAR`, then read `rss_metadata.json` for convergence /
+  composition / duplicate warnings.
+- If zero configs are written, do **not** re-call `generate_rss` from Python to
+  bypass the CLI. Fix `rss.json` (`max_steps`, `interval`, `num_configs`,
+  compositions, cell size) and re-run `apex rss` once; report the metadata
+  diagnosis to the user.
 
 ## Working Test Case (Reference)
 

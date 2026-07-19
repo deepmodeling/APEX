@@ -103,9 +103,26 @@ Core optional keys are:
 | `allow_vacancies` | `false` | Permit vacancy aliases, normalized to `X` |
 | `num_configs` | `1` | Number of unique structures |
 | `interval` | `100` | Candidate-cache update interval |
+| `show_progress` | TTY→`true`, else `false` | tqdm Monte Carlo bar; **agents must set `false`** |
 | `seed` | unset | Reproducible random seed |
 | `metadata` | `true` | Write `rss_metadata.json` |
 | `output_structure` | `"RSS"` | Output root relative to `rss.json` |
+
+### Agent / non-interactive runs (tqdm)
+
+`show_progress` defaults to `true` only when stdout is an interactive TTY.
+Captured agent/CI runs default to off. **Still set `"show_progress": false`
+explicitly in every agent-written `rss.json`** so tqdm never fills the
+transcript (each bar refresh is a new log line; `max_steps=20000` is huge).
+
+Do not diagnose RSS by “watching tqdm.” After `apex rss`:
+
+1. List `output_structure/conf_*/POSCAR` (expect `num_configs` files).
+2. Read `rss_metadata.json` for RMSE / composition / duplicate warnings.
+3. If nothing was written: adjust JSON (`max_steps` ≥ a few×`interval` when
+   `num_configs > 1`, cell size, compositions) and re-run `apex rss` — do not
+   bypass the CLI with a direct Python `generate_rss(...)` call unless the user
+   asks for a code-level debug.
 
 Minimal single-sublattice example:
 
@@ -123,6 +140,7 @@ Minimal single-sublattice example:
     "maximum_num_atoms": 200,
     "num_configs": 5,
     "seed": 21,
+    "show_progress": false,
     "output_structure": "RSS_HEA"
 }
 ```

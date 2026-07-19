@@ -20,6 +20,14 @@ Usage:
         --workflow-name "cu-fcc-elastic" \
         --output-dir ./job
 
+    # Multiple structures (repeat --structure and/or pass --structure-dir)
+    python generate_config.py create \
+        --structure pristine.vasp Ti_hcp.vasp V_bcc.vasp \
+        --structure-dir ./defects/ \
+        --backend lammps --potential deepmd --model DPA.pth \
+        --properties elastic --flow-type relax \
+        --output-dir ./job
+
     python generate_config.py refresh-global --global ./job/global.json
 """
 
@@ -555,7 +563,7 @@ def build_interaction(backend: str, potential: str = None,
         interaction = {
             "type": "vasp",
             "incar": incar or "INCAR",
-            "potcar_prefix": potcar_prefix or ".",
+            "potcar_prefix": potcar_prefix or "vasp_potcar",
         }
         if potcars:
             interaction["potcars"] = potcars
@@ -564,12 +572,189 @@ def build_interaction(backend: str, potential: str = None,
         raise ValueError(f"Unknown backend: {backend}")
 
 
-def build_param_json(structure_path: str, interaction: dict,
+def resolve_source_potcar_file(prefix: Path, entry: str) -> tuple:
+    """Locate a readable POTCAR under prefix for a potcars entry.
+
+    Returns (source_file, relative_entry_for_param).
+    relative_entry is what APEX will join with potcar_prefix as a file path.
+    """
+    direct = (prefix / entry).expanduser()
+    if direct.is_file():
+        return direct.resolve(), entry.replace("\\", "/")
+    nested = (prefix / entry / "POTCAR").expanduser()
+    if nested.is_file():
+        rel = entry.replace("\\", "/").rstrip("/")
+        if not rel.endswith("/POTCAR"):
+            rel = f"{rel}/POTCAR"
+        return nested.resolve(), rel
+    raise FileNotFoundError(
+        f"POTCAR not found for entry '{entry}' under '{prefix}' "
+        f"(tried '{direct}' and '{nested}')"
+    )
+
+
+def stage_vasp_potcars(
+    output_dir: Path, source_prefix: str, potcars: dict
+) -> tuple:
+    """Copy required POTCAR files into the job and return upload-safe paths.
+
+    Bohrium/dflow containers do not see host absolute libraries such as
+    ``/share/PAW_PBE``. Stage into ``vasp_potcar/`` and rewrite
+    ``potcar_prefix`` to that relative directory so ``pack_upload_dir``
+    includes the files.
+    """
+    if not source_prefix:
+        raise ValueError(
+            "VASP requires --potcar-prefix pointing to a readable POTCAR library"
+        )
+    if not potcars:
+        raise ValueError(
+            "VASP requires --potcars mapping, e.g. "
+            "'Ti:Ti_pv/POTCAR,V:V_sv/POTCAR'"
+        )
+
+    src_root = Path(source_prefix).expanduser()
+    if not src_root.exists():
+        raise FileNotFoundError(f"potcar_prefix not accessible: {src_root}")
+    if not os.access(src_root, os.R_OK):
+        raise PermissionError(f"potcar_prefix not readable: {src_root}")
+
+    dest_root = output_dir / "vasp_potcar"
+    dest_root.mkdir(parents=True, exist_ok=True)
+
+    staged = {}
+    for element, entry in potcars.items():
+        src_file, rel_entry = resolve_source_potcar_file(src_root, entry)
+        dest_file = dest_root / rel_entry
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_file, dest_file)
+        staged[element] = rel_entry
+        print(f"Staged POTCAR {element}: {src_file} → {dest_file}")
+
+    return "vasp_potcar", staged
+
+
+STRUCTURE_FILENAMES = {"POSCAR", "CONTCAR", "STRU"}
+STRUCTURE_SUFFIXES = {".vasp", ".cif", ".xyz"}
+
+
+def sanitize_conf_name(name: str) -> str:
+    """Make a filesystem-safe confs/ directory name."""
+    cleaned = re.sub(r"[^a-zA-Z0-9._-]+", "_", name.strip())
+    cleaned = cleaned.strip("._-")
+    return cleaned or "input"
+
+
+def unique_conf_name(stem: str, used: set) -> str:
+    """Return a unique conf name, appending _2, _3, ... on collision."""
+    base = sanitize_conf_name(stem)
+    name = base
+    idx = 2
+    while name in used:
+        name = f"{base}_{idx}"
+        idx += 1
+    used.add(name)
+    return name
+
+
+def collect_structures_from_dir(dir_path: Path) -> list:
+    """Collect structure files from a directory.
+
+    Includes:
+    - direct files named POSCAR/CONTCAR/STRU or with .vasp/.cif/.xyz
+    - immediate child directories that contain POSCAR/CONTCAR/STRU
+    """
+    root = Path(dir_path)
+    if not root.is_dir():
+        raise ValueError(f"--structure-dir is not a directory: {dir_path}")
+
+    found = []
+    for entry in sorted(root.iterdir(), key=lambda p: p.name):
+        if entry.is_file():
+            if entry.name in STRUCTURE_FILENAMES or entry.suffix.lower() in STRUCTURE_SUFFIXES:
+                found.append(entry.resolve())
+        elif entry.is_dir():
+            for candidate in ("POSCAR", "CONTCAR", "STRU"):
+                nested = entry / candidate
+                if nested.is_file():
+                    found.append(nested.resolve())
+                    break
+    return found
+
+
+def resolve_structure_sources(structure_args, structure_dir_args) -> list:
+    """Resolve --structure / --structure-dir into an ordered list of source files."""
+    sources = []
+    seen = set()
+
+    for path_str in structure_args or []:
+        path = Path(path_str)
+        if not path.is_file():
+            raise ValueError(f"--structure file not found: {path_str}")
+        resolved = path.resolve()
+        if resolved not in seen:
+            sources.append(resolved)
+            seen.add(resolved)
+
+    for dir_str in structure_dir_args or []:
+        for path in collect_structures_from_dir(Path(dir_str)):
+            if path not in seen:
+                sources.append(path)
+                seen.add(path)
+
+    if not sources:
+        raise ValueError(
+            "No structure files found. Pass --structure FILE [FILE ...] "
+            "and/or --structure-dir DIR [DIR ...]."
+        )
+    return sources
+
+
+def plan_structure_layout(sources: list) -> list:
+    """Map source files to job-relative conf dirs and param.json patterns.
+
+    Single structure → confs/input (backward compatible).
+    Multiple → confs/<stem>/POSCAR with an explicit structures list.
+    """
+    if len(sources) == 1:
+        return [{
+            "source": sources[0],
+            "conf_name": "input",
+            "rel_dir": "confs/input",
+            "dest_name": "POSCAR",
+        }]
+
+    used = set()
+    layout = []
+    for source in sources:
+        stem = source.stem
+        if source.name in STRUCTURE_FILENAMES:
+            # Prefer parent directory name when the file itself is POSCAR/etc.
+            parent = source.parent.name
+            stem = parent if parent not in (".", "") else "input"
+        conf_name = unique_conf_name(stem, used)
+        layout.append({
+            "source": source,
+            "conf_name": conf_name,
+            "rel_dir": f"confs/{conf_name}",
+            "dest_name": "POSCAR",
+        })
+    return layout
+
+
+def build_param_json(structure_paths, interaction: dict,
                      properties: list, flow_type: str = "joint",
                      relaxation_settings: dict = None) -> dict:
-    """Build param.json configuration."""
+    """Build param.json configuration.
+
+    structure_paths: one path string or a list of path strings for `structures`.
+    """
+    if isinstance(structure_paths, str):
+        structures = [structure_paths]
+    else:
+        structures = list(structure_paths)
     param = {
-        "structures": [structure_path],
+        "structures": structures,
         "interaction": interaction,
     }
 
@@ -672,8 +857,17 @@ def main():
     create = subparsers.add_parser(
         "create", help="Generate a complete APEX job directory"
     )
-    create.add_argument("--structure", "-s", required=True,
-                        help="Path to structure file (POSCAR/CIF)")
+    create.add_argument(
+        "--structure", "-s", nargs="+", action="extend", default=[],
+        help="Structure file(s) (POSCAR/CIF/VASP). Repeatable / space-separated.",
+    )
+    create.add_argument(
+        "--structure-dir", nargs="+", action="extend", default=[],
+        help=(
+            "Directory(ies) of structures. Collects POSCAR/CONTCAR/STRU and "
+            "*.vasp/*.cif/*.xyz, plus immediate child dirs that contain those files."
+        ),
+    )
     create.add_argument("--backend", "-b", required=True,
                         choices=["lammps", "abacus", "vasp"],
                         help="Calculator backend")
@@ -762,6 +956,23 @@ def main():
     orb_files = parse_str_map(args.orb_files)
 
     # -------------------------------------------------------------------------
+    # Resolve structures (--structure and/or --structure-dir)
+    # -------------------------------------------------------------------------
+    try:
+        structure_sources = resolve_structure_sources(
+            args.structure, args.structure_dir
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+    structure_layout = plan_structure_layout(structure_sources)
+    structure_paths = [item["rel_dir"] for item in structure_layout]
+    print(
+        f"Resolved {len(structure_layout)} structure(s): "
+        + ", ".join(structure_paths)
+    )
+
+    # -------------------------------------------------------------------------
     # Validate
     # -------------------------------------------------------------------------
     errors = validate_config(args.backend, args.potential, args.properties)
@@ -778,10 +989,12 @@ def main():
         if workflow_name != args.workflow_name:
             print(f"Workflow name sanitized: '{args.workflow_name}' → '{workflow_name}'")
     else:
-        # Auto-generate from structure basename and properties
-        struct_stem = Path(args.structure).stem.lower()
+        # Auto-generate from first structure basename and properties
+        first_stem = structure_layout[0]["conf_name"].lower()
+        if len(structure_layout) > 1:
+            first_stem = f"{first_stem}-n{len(structure_layout)}"
         props_str = "-".join(args.properties[:3])  # First 3 properties
-        workflow_name = sanitize_workflow_name(f"{struct_stem}-{props_str}")
+        workflow_name = sanitize_workflow_name(f"{first_stem}-{props_str}")
         print(f"Auto-generated workflow name: '{workflow_name}'")
 
     # -------------------------------------------------------------------------
@@ -800,44 +1013,70 @@ def main():
     print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
 
     # -------------------------------------------------------------------------
-    # Build interaction
-    # -------------------------------------------------------------------------
-    interaction = build_interaction(
-        backend=args.backend,
-        potential=args.potential,
-        model=args.model,
-        incar=args.incar,
-        potcar_prefix=args.potcar_prefix,
-        potcars=potcars,
-        orb_files=orb_files,
-    )
-
-    # -------------------------------------------------------------------------
-    # Build param.json
-    # -------------------------------------------------------------------------
-    struct_dir = "confs/input"
-    param_config = build_param_json(
-        struct_dir, interaction, args.properties, args.flow_type
-    )
-
-    # -------------------------------------------------------------------------
     # Create output directory and copy files
     # -------------------------------------------------------------------------
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "confs" / "input").mkdir(parents=True, exist_ok=True)
 
-    # Copy structure file
-    struct_dest = output_dir / "confs" / "input" / "POSCAR"
-    if os.path.exists(args.structure):
-        shutil.copy2(args.structure, struct_dest)
-        print(f"Copied structure to {struct_dest}")
+    for item in structure_layout:
+        dest_dir = output_dir / item["rel_dir"]
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = dest_dir / item["dest_name"]
+        shutil.copy2(item["source"], dest_file)
+        print(f"Copied structure to {dest_file}")
 
     # Copy model file if specified
     if args.model and os.path.exists(args.model):
         model_dest = output_dir / os.path.basename(args.model)
         shutil.copy2(args.model, model_dest)
         print(f"Copied model to {model_dest}")
+
+    # Stage VASP POTCAR (+ INCAR) into the job. Absolute host libraries such as
+    # /share/PAW_PBE are invisible inside Bohrium/dflow containers.
+    staged_prefix = args.potcar_prefix
+    staged_potcars = potcars
+    staged_incar = args.incar
+    if args.backend == "vasp":
+        try:
+            staged_prefix, staged_potcars = stage_vasp_potcars(
+                output_dir, args.potcar_prefix, potcars
+            )
+        except (OSError, ValueError, FileNotFoundError, PermissionError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            print(
+                "POTCAR must be readable locally and will be copied into "
+                "vasp_potcar/ for upload. Confirm --potcar-prefix and --potcars.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if args.incar and os.path.isfile(args.incar):
+            incar_dest = output_dir / "INCAR"
+            shutil.copy2(args.incar, incar_dest)
+            staged_incar = "INCAR"
+            print(f"Copied INCAR to {incar_dest}")
+        else:
+            staged_incar = "INCAR"
+            print(
+                "WARNING: no --incar file copied; place INCAR in the job dir "
+                "before submit",
+                file=sys.stderr,
+            )
+
+    # -------------------------------------------------------------------------
+    # Build interaction + param.json (after staging so paths are job-relative)
+    # -------------------------------------------------------------------------
+    interaction = build_interaction(
+        backend=args.backend,
+        potential=args.potential,
+        model=args.model,
+        incar=staged_incar,
+        potcar_prefix=staged_prefix,
+        potcars=staged_potcars,
+        orb_files=orb_files,
+    )
+    param_config = build_param_json(
+        structure_paths, interaction, args.properties, args.flow_type
+    )
 
     # -------------------------------------------------------------------------
     # Write configs
@@ -859,6 +1098,11 @@ def main():
     with open(param_path, "w") as f:
         json.dump(param_config, f, indent=4)
     print(f"Written: {param_path}")
+    if args.backend == "vasp":
+        print(
+            "VASP potcar_prefix rewritten to job-relative "
+            f"'{staged_prefix}' (do not keep absolute /share/... paths)."
+        )
 
     # Write outer-job run.sh (force-upgrade APEX; bare pip install keeps the
     # image-bundled older version and uploads that stale code to inner steps).
@@ -921,6 +1165,7 @@ def main():
     print(f"Backend:        {args.backend}")
     if args.potential:
         print(f"Potential:      {args.potential}")
+    print(f"Structures:     {len(structure_paths)} ({', '.join(structure_paths)})")
     print(f"Properties:     {', '.join(args.properties)}")
     print(f"Flow type:      {args.flow_type}")
     print(f"Workflow name:  {workflow_name}")

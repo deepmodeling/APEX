@@ -37,6 +37,7 @@ from apex.core.lib.rss import (
 )
 from apex.rss import (
     _auto_assign_sublattices,
+    _resolve_show_progress,
     rss_from_args,
     run_rss_config,
 )
@@ -807,6 +808,19 @@ class TestRSSRunner(unittest.TestCase):
         with patch("apex.rss.run_rss_config") as mocked:
             rss_from_args("dummy.json")
             mocked.assert_called_once_with("dummy.json")
+
+    def test_resolve_show_progress_prefers_explicit_and_tty_default(self):
+        class _Stream:
+            def __init__(self, tty):
+                self._tty = tty
+
+            def isatty(self):
+                return self._tty
+
+        self.assertFalse(_resolve_show_progress({"show_progress": False}, _Stream(True)))
+        self.assertTrue(_resolve_show_progress({"show_progress": True}, _Stream(False)))
+        self.assertTrue(_resolve_show_progress({}, _Stream(True)))
+        self.assertFalse(_resolve_show_progress({}, _Stream(False)))
 
     def test_auto_assign_sublattices_helper_branches(self):
         base_parent = Structure(Lattice.cubic(3.0), ["Na", "Cl"], [[0, 0, 0], [0.5, 0.5, 0.5]])

@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 
 from pymatgen.core import Structure
@@ -16,6 +17,21 @@ from apex.core.lib.crys import (
     tetragonal,
 )
 from apex.core.lib.rss import generate_rss, resolve_parent_lattice_auto
+
+
+def _resolve_show_progress(config: dict, stdout=None) -> bool:
+    """Resolve RSS progress-bar flag.
+
+    Explicit ``show_progress`` in rss.json always wins. Otherwise enable tqdm
+    only on an interactive TTY so agent/CI captured runs do not flood logs.
+    """
+    if "show_progress" in config:
+        return bool(config["show_progress"])
+    stream = sys.stdout if stdout is None else stdout
+    try:
+        return bool(stream.isatty())
+    except Exception:
+        return False
 
 
 def _jsonable(value):
@@ -235,7 +251,7 @@ def run_rss_config(config_file: str) -> None:
         "allow_vacancies": config.get("allow_vacancies", False),
         "num_configs": config.get("num_configs", 1),
         "interval": config.get("interval", 100),
-        "show_progress": config.get("show_progress", True),
+        "show_progress": _resolve_show_progress(config),
         "patience": config.get("patience"),
         "return_metadata": write_metadata,
     }

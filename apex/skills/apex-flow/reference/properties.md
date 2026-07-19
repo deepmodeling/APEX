@@ -287,23 +287,23 @@ These parameters appear in most property configurations:
 
 ⚠️ **CRITICAL CONSTRAINT**: The `slip_direction` **must be a vector ON the slip plane** (dot product with `plane_miller` must equal zero).
 
-**Valid FCC (111) slip systems**:
-| plane_miller | slip_direction | System name |
+**Canonical slip systems (FCC / BCC / HCP):** use the predefined table in the
+APEX repository **README §4.10 Gamma line/surface** — do not invent planes or
+directions outside that table without explicit user confirmation. Nested
+`fcc` / `bcc` / `hcp` blocks in `param.json` override top-level
+`plane_miller` / `slip_direction` for the matching lattice type (see README).
+
+Quick primary picks when the user has not specified a system (still confirm):
+
+| Structure | plane_miller | slip_direction |
 |---|---|---|
-| `[1,1,1]` | `[-1,1,0]` | `111x-110` |
-| `[1,1,1]` | `[1,-1,0]` | `111x1-10` |
-| `[1,1,1]` | `[1,1,-2]` | `111x11-2` |
+| FCC {111} | `[1,1,1]` | `[-1,1,0]` |
+| BCC {110} | `[1,1,0]` | `[-1,1,1]` |
+| HCP basal | see README §4.10 (Miller–Bravais OK for `gamma`) | see README §4.10 |
 
 **INVALID examples** (will produce wrong results or error):
 - `[1,1,1]` + `[1,1,0]` → dot product = 2 ≠ 0, **NOT on the plane**
 - `[1,1,1]` + `[0,0,1]` → dot product = 1 ≠ 0, **NOT on the plane**
-
-**Common slip systems for other structures**:
-| Structure | plane_miller | slip_direction |
-|---|---|---|
-| BCC {110} | `[1,1,0]` | `[-1,1,1]` |
-| BCC {112} | `[1,1,2]` | `[-1,1,1]` |
-| HCP {0001} | `[0,0,0,1]` | `[1,1,-2,0]` (use 3-index) |
 
 ---
 
@@ -345,7 +345,8 @@ With `closed_loop=true`, `slip_length` and `slip_length_y` must be omitted.
 APEX records the periodic basis vectors and the true Cartesian displacement of
 every grid point; use this mode for oblique or disordered supercells.
 
-⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with `plane_miller`. See valid systems table in §8.
+⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with
+`plane_miller`. Canonical FCC/BCC/HCP systems: **README §4.10** (same table as `gamma`).
 
 **Notes**:
 - The y-direction is automatically computed as `plane_miller × slip_direction`.
@@ -360,7 +361,7 @@ every grid point; use this mode for oblique or disordered supercells.
 
 | Parameter | Required? | Type | Default | Description |
 |-----------|-----------|------|---------|-------------|
-| `miller_index` | **REQUIRED** | list[int] | `[1,1,1]` | Specific Miller plane for cleavage |
+| `miller_index` | **REQUIRED** | list[int] | `[1,1,1]` | Specific Miller plane for cleavage (**3-index only**) |
 | `min_slab_size` | **REQUIRED** | float | `40` | Minimum slab thickness (Å) |
 | `max_vacuum_size` | optional | float | `15` | Maximum vacuum to open (Å) |
 | `vacuum_size_step` | optional | float | `1.0` | Vacuum increment (Å) |
@@ -383,9 +384,25 @@ every grid point; use this mode for oblique or disordered supercells.
 
 ⚠️ **`miller_index` is REQUIRED.** Without it → `KeyError: 'miller_index'` at runtime.
 
+**Supported crystal families & recommended planes** (aligned with README §4.5).
+Decohesive has **no** auto plane enumeration and **no** `fcc`/`bcc`/`hcp` nested
+overrides — detect the lattice, pick from this table, and confirm with the user.
+
+| Crystal structure | Recommended planes | JSON `miller_index` |
+|---|---|---|
+| FCC | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| BCC | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| Diamond | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| Zinc blende | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| Rocksalt | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| HCP | $(0001)$, $(10\bar{1}0)$, $(11\bar{2}0)$ | `[0,0,1]`, `[1,0,0]`, `[1,1,0]` |
+| Perovskite | $(001)$, $(110)$, $(111)$ | `[0,0,1]`, `[1,1,0]`, `[1,1,1]` |
+
 **Notes**:
 - Unlike `surface` (which auto-enumerates all planes), `decohesive` requires a specific plane.
-- Common choices: `[1,1,1]` (close-packed, lowest surface energy), `[1,1,0]`, `[1,0,0]`.
+- HCP: use **3-index only** (`[0,0,1]` not `[0,0,0,1]`). Four-index Miller–Bravais fails at slab generation.
+- Polar / multi-termination faces (e.g. zinc blende $(111)$) still run; APEX keeps the first pymatgen match.
+- Do not silently change an approved `miller_index`.
 - 15 vacuum steps at 1 Å spacing = 15 single-point calculations.
 - All calculations are fully static (no relaxation) — measuring rigid separation.
 
@@ -623,8 +640,8 @@ Before submitting any APEX property calculation, verify:
 
 1. ✅ **All REQUIRED parameters present** — check the table above
 2. ✅ **Crystallographic constraints satisfied**:
-   - `gamma` / `gamma_surface`: `dot(plane_miller, slip_direction) == 0`
-   - `decohesive`: `miller_index` explicitly specified
+   - `gamma` / `gamma_surface`: `dot(plane_miller, slip_direction) == 0`; system from README §4.10
+   - `decohesive`: `miller_index` explicitly specified (3-index); plane from README §4.5 table for the crystal family
 3. ✅ **Supercell sizes adequate**:
    - Vacancy/interstitial: ≥ [2,2,2], prefer [3,3,3]
    - Phonon: ≥ [3,3,3] for LAMMPS

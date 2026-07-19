@@ -431,11 +431,11 @@ When `interaction.type` is `abacus` or `vasp`, the skill auto-applies smaller su
     "interaction": {
         "type": "vasp",
         "incar": "INCAR",
-        "potcar_prefix": "/path/to/POTCAR_LIBRARY",
+        "potcar_prefix": "vasp_potcar",
         "potcars": {
-            "Mo": "Mo_sv",
-            "Al": "Al",
-            "Fe": "Fe_pv"
+            "Mo": "Mo_sv/POTCAR",
+            "Al": "Al/POTCAR",
+            "Fe": "Fe_pv/POTCAR"
         }
     }
 }
@@ -485,14 +485,52 @@ LREAL = Auto
 
 ### VASP POTCAR Handling
 
-APEX expects POTCAR to be assembled from `potcar_prefix` using the element names in `potcars`. The directory structure should be:
+APEX concatenates files at:
+
+```text
+os.path.join(potcar_prefix, potcars[element])   # must be a readable FILE
 ```
+
+Typical VASP potpaw library layout and matching `potcars` values:
+
+```text
 /path/to/POTCAR_LIBRARY/
 ├── Mo_sv/POTCAR
 ├── Al/POTCAR
 ├── Fe_pv/POTCAR
 └── ...
 ```
+
+```json
+"potcar_prefix": "/path/to/POTCAR_LIBRARY",
+"potcars": {
+    "Mo": "Mo_sv/POTCAR",
+    "Al": "Al/POTCAR",
+    "Fe": "Fe_pv/POTCAR"
+}
+```
+
+Flat files also work (e.g. `"Mo": "POTCAR.Mo"` under `potcar_prefix`).
+
+### Agent check (mandatory when user supplies a POTCAR path)
+
+**Critical:** absolute host paths (e.g. `/share/PAW_PBE`) work only on that
+machine. After Bohrium/dflow upload they vanish →
+`FileNotFoundError: '/share/PAW_PBE/Ti_pv/POTCAR'`.
+
+Before submit:
+
+1. Confirm the user library exists and is readable locally.
+2. For each element, confirm a readable POTCAR file (prefer
+   `"Ti": "Ti_pv/POTCAR"` for potpaw trees).
+3. Use `generate_config.py create --potcar-prefix <lib> --potcars '...'` so
+   POTCARs are **copied** into the job as `vasp_potcar/` and `param.json` gets
+   `"potcar_prefix": "vasp_potcar"` (relative). Never ship absolute `/share/...`.
+4. Confirm the job directory contains `vasp_potcar/.../POTCAR` before upload.
+5. On failure: tell the user the path is unusable and ask for the correct
+   library. Do not guess.
+
+`scripts/validate_inputs.py` checks that staged relative POTCAR files exist.
 
 ---
 

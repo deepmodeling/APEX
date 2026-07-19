@@ -9,7 +9,9 @@ Usage:
 """
 
 import argparse
+import glob
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +35,165 @@ VALID_LAMMPS_TYPES = {
 
 # Valid backend types
 VALID_BACKENDS = {"vasp", "abacus"} | VALID_LAMMPS_TYPES
+
+
+def _resolve_under_base(path_str: str, base_dir: Path) -> Path:
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    return path
+
+
+def _elements_from_poscar(poscar_path: Path) -> list:
+    """Best-effort VASP5 species line parse (no pymatgen required)."""
+    try:
+        lines = poscar_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    if len(lines) < 6:
+        return []
+    # VASP 5+: line index 5 is element symbols when tokens start with a letter
+    tokens = lines[5].split()
+    if tokens and all(tok and tok[0].isalpha() for tok in tokens):
+        return tokens
+    return []
+
+
+def _iter_structure_poscars(param_config: dict, base_dir: Path) -> list:
+    """Resolve structures patterns to POSCAR/CONTCAR/STRU files."""
+    found = []
+    for pattern in param_config.get("structures", []) or []:
+        search = pattern if os.path.isabs(pattern) else str(base_dir / pattern)
+        matches = sorted(glob.glob(search))
+        if not matches and not any(ch in pattern for ch in "*?[]"):
+            # literal directory that exists but was not glob-expanded
+            candidate = _resolve_under_base(pattern, base_dir)
+            if candidate.exists():
+                matches = [str(candidate)]
+        for match in matches:
+            path = Path(match)
+            if path.is_file():
+                found.append(path)
+                continue
+            if path.is_dir():
+                for name in ("POSCAR", "CONTCAR", "STRU"):
+                    nested = path / name
+                    if nested.is_file():
+                        found.append(nested)
+                        break
+                else:
+                    found.extend(sorted(path.glob("conf_*/POSCAR")))
+    return found
+
+
+def collect_structure_elements(param_config: dict, base_dir: Path) -> set:
+    elements = set()
+    for poscar in _iter_structure_poscars(param_config, base_dir):
+        elements.update(_elements_from_poscar(poscar))
+    return elements
+
+
+def resolve_vasp_potcar_file(prefix: Path, potcar_entry: str) -> tuple:
+    """Resolve POTCAR file the same way APEX VASP.py opens it.
+
+    Returns (path_or_None, hint_for_agent).
+    APEX uses ``os.path.join(prefix, potcars[element])`` as a file path.
+    """
+    direct = (prefix / potcar_entry).expanduser()
+    if direct.is_file():
+        return direct.resolve(), None
+    nested = (prefix / potcar_entry / "POTCAR").expanduser()
+    if nested.is_file():
+        return None, (
+            f"found potpaw-style file at '{nested}', but APEX opens "
+            f"join(potcar_prefix, potcars[el]) as a file — set potcars "
+            f"entry to '{potcar_entry}/POTCAR' (not '{potcar_entry}')"
+        )
+    return None, None
+
+
+def validate_vasp_potcars(
+    interaction: dict, base_dir: Path, required_elements: set = None
+) -> tuple:
+    """Check potcar_prefix accessibility and required POTCAR files."""
+    errors = []
+    warnings = []
+
+    prefix_raw = interaction.get("potcar_prefix")
+    potcars = interaction.get("potcars") or {}
+    if not prefix_raw:
+        errors.append(
+            "VASP: 'potcar_prefix' missing — ask the user for a readable "
+            "POTCAR library path"
+        )
+        return errors, warnings
+    if not potcars:
+        errors.append("VASP: 'potcars' mapping missing")
+        return errors, warnings
+
+    prefix = _resolve_under_base(str(prefix_raw), base_dir)
+    # Absolute host libraries are invisible inside Bohrium/dflow containers.
+    if Path(str(prefix_raw)).expanduser().is_absolute():
+        errors.append(
+            f"VASP: potcar_prefix is an absolute host path ({prefix_raw}). "
+            "Bohrium/dflow cannot see paths like /share/PAW_PBE after upload. "
+            "Re-run generate_config.py create so POTCARs are staged into "
+            "job-relative vasp_potcar/ (or copy them yourself and set "
+            "potcar_prefix to 'vasp_potcar')."
+        )
+        return errors, warnings
+    if not prefix.exists():
+        errors.append(
+            f"VASP: potcar_prefix not accessible (path does not exist): {prefix}"
+        )
+        return errors, warnings
+    if not os.access(prefix, os.R_OK):
+        errors.append(f"VASP: potcar_prefix exists but is not readable: {prefix}")
+        return errors, warnings
+    if not prefix.is_dir():
+        warnings.append(
+            f"VASP: potcar_prefix is not a directory ({prefix}); "
+            "continuing file checks anyway"
+        )
+
+    check_elements = set(required_elements or [])
+    check_elements.update(potcars.keys())
+    if not check_elements:
+        warnings.append(
+            "VASP: no structure elements parsed and potcars is empty — "
+            "cannot verify POTCAR files"
+        )
+        return errors, warnings
+
+    missing = []
+    for element in sorted(check_elements):
+        if element not in potcars:
+            missing.append(f"{element} (no potcars mapping)")
+            continue
+        entry = potcars[element]
+        path, hint = resolve_vasp_potcar_file(prefix, entry)
+        if path is None:
+            expected = prefix / entry
+            if hint:
+                missing.append(f"{element} → {hint}")
+            else:
+                missing.append(f"{element} → missing file {expected}")
+
+    if missing:
+        errors.append(
+            "VASP: POTCAR location unusable or incomplete for required "
+            f"elements under '{prefix}'. Missing/invalid:\n  - "
+            + "\n  - ".join(missing)
+            + "\nAsk the user to confirm the correct POTCAR library path "
+            "and potpaw folder names."
+        )
+    else:
+        mapped = ", ".join(
+            f"{el}:{potcars[el]}" for el in sorted(check_elements) if el in potcars
+        )
+        warnings.append(f"VASP: POTCAR files OK ({mapped})")
+
+    return errors, warnings
 
 
 def validate_global(global_config: dict) -> list:
@@ -164,12 +325,12 @@ def validate_interaction(interaction: dict) -> list:
         if "orb_files" not in interaction:
             warnings.append("ABACUS: 'orb_files' not specified (required for LCAO)")
 
-    # VASP-specific checks
+    # VASP-specific checks (filesystem checks run in validate_vasp_potcars)
     elif int_type == "vasp":
         if "potcars" not in interaction:
             errors.append("VASP requires 'potcars' mapping")
         if "potcar_prefix" not in interaction:
-            warnings.append("VASP: 'potcar_prefix' not specified")
+            errors.append("VASP requires 'potcar_prefix' (POTCAR library path)")
 
     return errors, warnings
 
@@ -355,6 +516,7 @@ def main():
 
     # Validate interaction
     interaction = param_config.get("interaction", {})
+    base_dir = param_path.parent
     if not interaction:
         all_errors.append("Missing 'interaction' in param.json")
     else:
@@ -370,9 +532,23 @@ def main():
     all_warnings.extend(warnings)
 
     # Validate structures
-    errors, warnings = validate_structures(param_config, param_path.parent)
+    errors, warnings = validate_structures(param_config, base_dir)
     all_errors.extend(errors)
     all_warnings.extend(warnings)
+
+    # VASP POTCAR filesystem check (prefix + per-element files)
+    if interaction.get("type") == "vasp":
+        required_elements = collect_structure_elements(param_config, base_dir)
+        errors, warnings = validate_vasp_potcars(
+            interaction, base_dir, required_elements=required_elements
+        )
+        all_errors.extend(errors)
+        # "POTCAR files OK" is informational; keep as warning only when useful
+        for w in warnings:
+            if w.startswith("VASP: POTCAR files OK"):
+                print(f"  {w}")
+            else:
+                all_warnings.append(w)
 
     # Report
     if all_warnings:

@@ -159,26 +159,70 @@ All commands require `-c global.json`:
 ## Pre-Submission Structure Validation (MANDATORY)
 
 Before generating param.json, **always inspect the input structure** to determine
-cell type and set parameters accordingly. APEX accepts primitive cells,
-conventional cells, and user-provided supercells; a conventional cell is not
-required.
+cell type, atom count, and whether further expansion is needed. APEX accepts
+primitive cells, conventional cells, and user-provided supercells; a
+conventional cell is not required.
 
-1. **Read the STRU/POSCAR** — check atom count and lattice vectors
+1. **Read the STRU/POSCAR** — atom count, species, lattice vectors / lengths
 2. **Classify the input** — primitive, conventional, or an already-expanded supercell
 3. **Preserve the input cell** — do not standardize or reduce it unless the user asks
-4. **If it is already a supercell, ask whether to expand it again**
-5. **If no further expansion is requested**, set applicable bulk-property
+4. **Decide whether the cell is large enough for the requested properties**
+   (see size guidance below). Do **not** blindly apply default `supercell` /
+   `supercell_size` values from templates.
+5. **If already a supercell / already large enough**, ask whether to expand again
+6. **If no further expansion is requested**, set applicable bulk-property
    `supercell` / `supercell_size` values to `[1,1,1]`; do not reapply unit-cell defaults
-6. **Set or omit PRIMITIVE_AXES based on cell type** (see `calculators.md`)
-7. **Verify consistency** — ensure param.json parameters match the actual structure
+7. **Set or omit PRIMITIVE_AXES based on cell type** (see `calculators.md`)
+8. **Verify consistency** — ensure param.json parameters match the actual structure
+
+### Size guidance: when to recommend expansion
+
+| Property family | Typical undersized input | Recommended total size (after expansion) |
+| --- | --- | --- |
+| vacancy / interstitial | 1–4 atom unit cell | ≳ conventional `[2,2,2]` equivalent |
+| phonon / gruneisen / finite-T | unit cell or tiny supercell | ≳ `[3,3,3]` (smaller often fails) |
+| elastic / EOS / cohesive | unit cell is usually OK | expand only if user wants finite-size check |
+| surface / gamma / decohesive | very small in-plane cell | thicken with `min_slab_size`; confirm in-plane replication separately — **not** bulk `supercell` |
+
+Rules of thumb:
+
+- Primitive metal cell (1–2 atoms) for defect/phonon/finite-T → **recommend expand**.
+- Conventional FCC/BCC (4 / 2 atoms) for phonon → still recommend `[3,3,3]` unless the user already supplied a large supercell.
+- User supercell with tens–hundreds of atoms that already meets the table → prefer `[1,1,1]` after confirmation; do not expand twice.
+- Expanding a tiny cell can also make slab construction more robust for tilted surfaces (e.g. bcc (110)), but it is **not** a substitute for correct APEX slab/handedness handling.
+
+### Helper words (AskQuestion / confirmation)
+
+Present a short structure summary, then ask in plain language. Example:
+
+```
+当前结构：Mo BCC 原胞，2 atoms，a≈3.16 Å（看起来是原胞，不是超胞）。
+
+计划性质：decohesive (110)、phonon。
+- decohesive 主要靠 slab 厚度 / 面内尺寸控制，不是 bulk supercell。
+- phonon 建议总尺寸达到约 [3,3,3]；当前原子数偏少，建议先扩包。
+
+请确认：
+1) 保持原胞提交（phonon 可能不稳定）
+2) 扩到 [2,2,2] / [3,3,3] 后再算
+3) 你已有更大超胞，请提供新结构，并把 supercell 设为 [1,1,1]
+```
+
+If the input is already large:
+
+```
+当前结构：Cu FCC 超胞，108 atoms（已是约 3×3×3）。
+缺陷/声子类参数将默认设为 supercell=[1,1,1]，避免二次扩包。
+是否还要再扩一层？
+```
 
 ### Example Check Logic
 
-- FCC 1 atom + non-orthogonal vectors → primitive → NO `PRIMITIVE_AXES`
-- FCC 4 atoms + cubic vectors → conventional → SET `PRIMITIVE_AXES`
+- FCC 1 atom + non-orthogonal vectors → primitive → NO `PRIMITIVE_AXES`; for phonon/defect recommend expand
+- FCC 4 atoms + cubic vectors → conventional → SET `PRIMITIVE_AXES`; phonon still usually needs `[3,3,3]`
 - User-provided 108-atom FCC supercell + no further expansion → preserve it and
   set applicable `supercell` / `supercell_size` to `[1,1,1]`
-- When in doubt → OMIT `PRIMITIVE_AXES` (safer default)
+- When in doubt → OMIT `PRIMITIVE_AXES` (safer default) and ask about expansion
 
 > ⚠️ Getting this wrong causes phonopy `RuntimeError: Remapping of atoms by TrimmedCell failed` at Post step — after all expensive DFT calculations have already completed.
 
