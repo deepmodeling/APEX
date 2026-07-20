@@ -16,7 +16,7 @@ from pymatgen.core.operations import SymmOp
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import lammps_utils
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from apex.core.structure import StructureInfo
@@ -539,22 +539,28 @@ class Interstitial(Property):
 
             for idid, ii in enumerate(all_tasks, start=0): # skip task.000000
                 structure_dir = os.path.basename(ii)
-                task_result = loadfn(all_res[idid])
                 interstitial_type = loadfn(os.path.join(ii, 'interstitial_type.json'))
-                natoms = sum(task_result["atom_numbs"])
-                evac = task_result["energies"][-1] - equi_epa * natoms
-                supercell_index = loadfn(os.path.join(ii, "supercell.json"))
                 # insert_ele = loadfn(os.path.join(ii, 'task.json'))['insert_ele'][0]
                 insert_ele = fc[idid]
+                task_result = loadfn(all_res[idid])
+                if is_failed_task_result(task_result):
+                    evac = float("nan")
+                    task_energy = float("nan")
+                    equi_energy = float("nan")
+                else:
+                    natoms = sum(task_result["atom_numbs"])
+                    task_energy = task_result["energies"][-1]
+                    equi_energy = equi_epa * natoms
+                    evac = task_energy - equi_energy
                 ptr_data += "%s: \t%7.3f  \t%7.3f \t%7.3f \n" % (
                     insert_ele + "_" + str(interstitial_type) + "_" + structure_dir,
                     evac,
-                    task_result["energies"][-1],
-                    equi_epa * natoms,
+                    task_energy,
+                    equi_energy,
                 )
                 res_data[
                     insert_ele + "_" + str(interstitial_type) + "_" + structure_dir
-                    ] = [evac, task_result["energies"][-1], equi_epa * natoms]
+                    ] = [evac, task_energy, equi_energy]
 
         else:
             if "init_data_path" not in self.parameter:

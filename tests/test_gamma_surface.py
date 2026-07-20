@@ -476,6 +476,69 @@ def test_gamma_surface_compute_lower_with_synthetic_results(tmp_path):
     assert (prop_dir / "result.json").is_file()
 
 
+def test_gamma_surface_compute_lower_nan_for_failed_task(tmp_path):
+    prop_dir = tmp_path / "conf" / "gamma_surface_00"
+    task0 = prop_dir / "task.000000"
+    task1 = prop_dir / "task.000001"
+    equi_dir = tmp_path / "conf" / "relaxation" / "relax_task"
+    task0.mkdir(parents=True)
+    task1.mkdir(parents=True)
+    equi_dir.mkdir(parents=True)
+
+    cell = np.eye(3).tolist()
+    dumpfn({"energies": [-2.0], "atom_numbs": [2]}, equi_dir / "result.json")
+    dumpfn(
+        {"energies": [-2.0], "atom_numbs": [2], "cells": [cell]},
+        task0 / "result_task.json",
+    )
+    dumpfn({"failed": True}, task1 / "result_task.json")
+    for task, frac_x, frac_y in [(task0, 0.0, 0.0), (task1, 0.5, 0.0)]:
+        dumpfn([0, 0, 1], task / "miller.json")
+        dumpfn({"frac_x": frac_x, "frac_y": frac_y}, task / "displacement.json")
+    dumpfn(2.0, task0 / "slip_length_x.json")
+    dumpfn(3.0, task0 / "slip_length_y.json")
+
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+        }
+    )
+    res_data, _ = prop._compute_lower(
+        str(prop_dir / "result.json"),
+        [str(task0), str(task1)],
+        {},
+    )
+    assert res_data["0.000000,0.000000"][2] == 0.0
+    assert np.isnan(res_data["0.500000,0.000000"][2])
+    assert np.isnan(res_data["0.500000,0.000000"][3])
+
+
+def test_gamma_surface_compute_lower_fails_if_reference_task_failed(tmp_path):
+    prop_dir = tmp_path / "conf" / "gamma_surface_00"
+    task0 = prop_dir / "task.000000"
+    equi_dir = tmp_path / "conf" / "relaxation" / "relax_task"
+    task0.mkdir(parents=True)
+    equi_dir.mkdir(parents=True)
+    dumpfn({"energies": [-2.0], "atom_numbs": [2]}, equi_dir / "result.json")
+    dumpfn({"failed": True}, task0 / "result_task.json")
+    dumpfn([0, 0, 1], task0 / "miller.json")
+    dumpfn({"frac_x": 0.0, "frac_y": 0.0}, task0 / "displacement.json")
+    dumpfn(2.0, task0 / "slip_length_x.json")
+    dumpfn(3.0, task0 / "slip_length_y.json")
+
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+        }
+    )
+    with pytest.raises(RuntimeError, match="reference task"):
+        prop._compute_lower(str(prop_dir / "result.json"), [str(task0)], {})
+
+
 def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(tmp_path):
     prop_dir = tmp_path / "conf" / "gamma_surface_00"
     task = prop_dir / "task.000000"
@@ -659,6 +722,14 @@ class TestGammaSurfaceCoverage(unittest.TestCase):
     def test_gamma_surface_compute_lower_with_synthetic_results(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_gamma_surface_compute_lower_with_synthetic_results(Path(tmp))
+
+    def test_gamma_surface_compute_lower_nan_for_failed_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_compute_lower_nan_for_failed_task(Path(tmp))
+
+    def test_gamma_surface_compute_lower_fails_if_reference_task_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_compute_lower_fails_if_reference_task_failed(Path(tmp))
 
     def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(self):
         with tempfile.TemporaryDirectory() as tmp:

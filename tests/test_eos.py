@@ -2,11 +2,13 @@ import glob
 import os
 import shutil
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 import dpdata
 import numpy as np
-from monty.serialization import loadfn
+from monty.serialization import dumpfn, loadfn
 from pymatgen.io.vasp import Incar
 from apex.core.property.EOS import EOS
 
@@ -107,3 +109,26 @@ class TestEOS(unittest.TestCase):
         )
         with self.assertRaises(RuntimeError):
             self.eos.make_confs(self.target_path, self.equi_path)
+
+    def test_compute_lower_nan_for_failed_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prop_dir = Path(tmp) / "eos_00"
+            task0 = prop_dir / "task.000000"
+            task1 = prop_dir / "task.000001"
+            task0.mkdir(parents=True)
+            task1.mkdir(parents=True)
+            dumpfn({"volume": 10.0}, task0 / "eos.json")
+            dumpfn({"volume": 12.0}, task1 / "eos.json")
+            dumpfn(
+                {"energies": [-2.0], "atom_numbs": [2]},
+                task0 / "result_task.json",
+            )
+            dumpfn({"failed": True}, task1 / "result_task.json")
+
+            res_data, _ = self.eos._compute_lower(
+                str(prop_dir / "result.json"),
+                [str(task0), str(task1)],
+                [str(task0 / "result_task.json"), str(task1 / "result_task.json")],
+            )
+            self.assertEqual(res_data[10.0], -1.0)
+            self.assertTrue(np.isnan(res_data[12.0]))

@@ -17,7 +17,7 @@ from apex.core.lib.slab_orientation import SlabSlipSystem
 from apex.core.lib.trans_tools import direction_miller_bravais_to_miller
 from apex.core.lib.trans_tools import plane_miller_bravais_to_miller
 from apex.core.lib.trans_tools import trans_mat_basis
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro
 from apex.core.reproduce import post_repro
@@ -766,6 +766,11 @@ class GammaSurface(Property):
             )
             all_tasks.sort()
             task_result_slab_equi = loadfn(os.path.join(all_tasks[0], "result_task.json"))
+            if is_failed_task_result(task_result_slab_equi):
+                raise RuntimeError(
+                    "gamma_surface reference task "
+                    f"{os.path.basename(all_tasks[0])} failed; cannot compute SFE"
+                )
             slip_length_x = loadfn(os.path.join(all_tasks[0], "slip_length_x.json"))
             slip_length_y = loadfn(os.path.join(all_tasks[0], "slip_length_y.json"))
             slip_vector_x_path = os.path.join(all_tasks[0], "slip_vector_x.json")
@@ -788,26 +793,15 @@ class GammaSurface(Property):
             )
             equi_result = loadfn(os.path.join(equi_path, "result.json"))
             equi_epa = equi_result["energies"][-1] / np.sum(equi_result["atom_numbs"])
+            ref_energy = task_result_slab_equi["energies"][-1]
+            ref_natoms = np.sum(task_result_slab_equi["atom_numbs"])
+            equi_epa_slab = ref_energy / ref_natoms
 
             for ii in all_tasks:
-                task_result = loadfn(os.path.join(ii, "result_task.json"))
-                natoms = np.sum(task_result["atom_numbs"])
-                epa = task_result["energies"][-1] / natoms
-                equi_epa_slab = task_result_slab_equi["energies"][-1] / natoms
-                area = np.linalg.norm(
-                    np.cross(task_result["cells"][-1][0], task_result["cells"][-1][1])
-                )
-
                 structure_dir = os.path.basename(ii)
                 disp_info = loadfn(os.path.join(ii, "displacement.json"))
                 frac_x = float(disp_info["frac_x"])
                 frac_y = float(disp_info["frac_y"])
-                cf = 1.60217657e-16 / 1e-20 * 0.001
-                sfe = (
-                    (task_result["energies"][-1] - task_result_slab_equi["energies"][-1])
-                    / area
-                    * cf
-                )
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
                 path_x = slip_length_x * frac_x
                 path_y = slip_length_y * frac_y
@@ -818,6 +812,20 @@ class GammaSurface(Property):
                     ),
                     dtype=float,
                 )
+                task_result = loadfn(os.path.join(ii, "result_task.json"))
+                if is_failed_task_result(task_result):
+                    sfe = float("nan")
+                    epa = float("nan")
+                else:
+                    natoms = np.sum(task_result["atom_numbs"])
+                    epa = task_result["energies"][-1] / natoms
+                    area = np.linalg.norm(
+                        np.cross(
+                            task_result["cells"][-1][0], task_result["cells"][-1][1]
+                        )
+                    )
+                    cf = 1.60217657e-16 / 1e-20 * 0.001
+                    sfe = (task_result["energies"][-1] - ref_energy) / area * cf
                 ptr_data += (
                     "%-25s  %7.3f  %7.3f  %7.3f  %7.3f  "
                     "%7.3f  %7.3f  %7.3f  %7.3f  %8.3f %8.3f\n"

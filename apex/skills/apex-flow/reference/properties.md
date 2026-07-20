@@ -348,6 +348,16 @@ every grid point; use this mode for oblique or disordered supercells.
 ⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with
 `plane_miller`. Canonical FCC/BCC/HCP systems: **README §4.10** (same table as `gamma`).
 
+⚠️ **Mandatory pre-submit check**: run `apex preview <param.json>` before submitting
+any `gamma_surface` job. Preview builds the displacement slabs and, if any atom
+pair is closer than `0.2` Å, prints to stderr:
+
+`Generated Gamma surface contains overlapping atoms.`
+
+If that warning appears, do not submit until geometry/parameters are fixed.
+Agents must check this stderr message only — **do not open or read the GIF**
+(the GIF is optional for humans).
+
 **Notes**:
 - The y-direction is automatically computed as `plane_miller × slip_direction`.
 - Total calculation count = (n_steps_x+1) × (n_steps_y+1) = 121 for 10×10 grid. Expensive with DFT!

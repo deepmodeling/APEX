@@ -9,7 +9,7 @@ from monty.serialization import dumpfn, loadfn
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.calculator.lib import abacus_scf
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
@@ -225,13 +225,12 @@ class EOS(Property):
                 # vol = self.vol_start + ii * self.vol_step
                 vol = loadfn(os.path.join(all_tasks[ii], "eos.json"))["volume"]
                 task_result = loadfn(all_res[ii])
-                res_data[vol] = task_result["energies"][-1] / sum(
-                    task_result["atom_numbs"]
-                )
-                ptr_data += "%7.3f  %8.4f \n" % (
-                    vol,
-                    task_result["energies"][-1] / sum(task_result["atom_numbs"]),
-                )
+                if is_failed_task_result(task_result):
+                    epa = float("nan")
+                else:
+                    epa = task_result["energies"][-1] / sum(task_result["atom_numbs"])
+                res_data[vol] = epa
+                ptr_data += "%7.3f  %8.4f \n" % (vol, epa)
 
         else:
             if "init_data_path" not in self.parameter:

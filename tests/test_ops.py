@@ -14,10 +14,16 @@ from dflow.python import (
     Artifact,
     TransientError,
 )
-from monty.serialization import loadfn
+from monty.serialization import dumpfn, loadfn
 
 from apex.op.relaxation_ops import RelaxMake, _check_relaxation_outputs
-from apex.op.property_ops import PropsMake, PropsPost, PropsRepairStatusCheck, _is_failed_task_status
+from apex.op.property_ops import (
+    PropsMake,
+    PropsPost,
+    PropsRepairStatusCheck,
+    TASK_FAILURE_TOLERANT_TYPES,
+    _is_failed_task_status,
+)
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.task_failure import (
@@ -176,7 +182,7 @@ class TestTaskStatusHelpers(unittest.TestCase):
             root = Path(tmpdir)
             input_all = root / "all"
             input_post = root / "post"
-            prop_dir = input_post / "confs" / "std-bcc" / "eos_00"
+            prop_dir = input_post / "confs" / "std-bcc" / "elastic_00"
             task_dir = prop_dir / "task.000000"
             (input_all / "confs").mkdir(parents=True)
             task_dir.mkdir(parents=True)
@@ -189,11 +195,53 @@ class TestTaskStatusHelpers(unittest.TestCase):
                     PropsPost().execute(OPIO({
                         "input_post": input_post,
                         "input_all": input_all,
+                        "prop_param": {"type": "elastic"},
+                        "inter_param": {"type": "deepmd", "model": "model.pb"},
+                        "task_names": ["confs/std-bcc/elastic_00/task.000000"],
+                        "path_to_prop": "confs/std-bcc/elastic_00",
+                    }))
+            finally:
+                os.chdir(cwd)
+
+    def test_props_post_tolerates_failed_tasks_for_eos(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = os.getcwd()
+            root = Path(tmpdir)
+            input_all = root / "all"
+            input_post = root / "post"
+            prop_dir = input_post / "confs" / "std-bcc" / "eos_00"
+            task_dir = prop_dir / "task.000000"
+            (input_all / "confs").mkdir(parents=True)
+            task_dir.mkdir(parents=True)
+            (task_dir / "apex_task_status.json").write_text(
+                '{"state": "failed", "reason": "nonzero_exit", "exit_code": 7}'
+            )
+
+            class FakeProp:
+                parameter = {"type": "eos"}
+
+                def compute(self, output_file, print_file, path_to_work):
+                    dumpfn({10.0: float("nan")}, output_file)
+                    Path(print_file).write_text("ok\n")
+
+            self.assertIn("eos", TASK_FAILURE_TOLERANT_TYPES)
+            try:
+                with patch(
+                    "apex.core.common_prop.make_property_instance",
+                    return_value=FakeProp(),
+                ):
+                    PropsPost().execute(OPIO({
+                        "input_post": input_post,
+                        "input_all": input_all,
                         "prop_param": {"type": "eos"},
                         "inter_param": {"type": "deepmd", "model": "model.pb"},
                         "task_names": ["confs/std-bcc/eos_00/task.000000"],
                         "path_to_prop": "confs/std-bcc/eos_00",
                     }))
+                candidates = list(Path(tmpdir).rglob("failed_lammps_tasks.json"))
+                self.assertTrue(candidates, "failed_lammps_tasks.json was not written")
+                payload = loadfn(candidates[0])
+                self.assertEqual(len(payload["failed_tasks"]), 1)
             finally:
                 os.chdir(cwd)
 

@@ -230,6 +230,22 @@ Options to offer via AskQuestion:
    - Do **not** use bare `mpirun -n 16 vasp_std`.
    `generate_config.py` writes the run_command template for `--backend vasp`
    and sets `vasp_image_name` only from `--vasp-image`.
+16. **STOP: Before submitting `gamma_surface`, run `apex preview` to check for overlapping atoms.**
+   Disordered / RSS / non-standard cells often produce slab displacements with
+   unphysically close atom pairs. Preview generates the displacement POSCARs
+   and prints a text warning when any pair distance is `< 0.2` Å:
+   ```bash
+   apex preview param.json
+   ```
+   - **Must check stderr** for exactly:
+     `Generated Gamma surface contains overlapping atoms.`
+   - If that line appears → **STOP**, report it to the user, and do not submit
+     until the slip system / cell / `supercell_size` / `closed_loop` choice is
+     fixed and preview is clean.
+   - **Do not open, read, or visually inspect the generated GIF.** The Agent
+     only needs the stderr overlap warning (or its absence). The GIF is for
+     optional human viewing only.
+   Skip ONLY if the job has no `gamma_surface` property.
 
 
 

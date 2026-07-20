@@ -13,7 +13,7 @@ from pymatgen.analysis.diffraction.tem import TEMCalculator
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from apex.core.structure import StructureInfo
@@ -537,6 +537,11 @@ class Gamma(Property):
             all_tasks.sort()
             n_steps = len(all_tasks) - 1
             task_result_slab_equi = loadfn(os.path.join(all_tasks[0], "result_task.json"))
+            if is_failed_task_result(task_result_slab_equi):
+                raise RuntimeError(
+                    "gamma reference task "
+                    f"{os.path.basename(all_tasks[0])} failed; cannot compute SFE"
+                )
             slip_length = loadfn(os.path.join(all_tasks[0], "slip_length.json"))
             equi_path = os.path.abspath(
                 os.path.join(
@@ -547,27 +552,25 @@ class Gamma(Property):
             equi_epa = equi_result["energies"][-1] / np.sum(
                 equi_result["atom_numbs"]
             )
+            ref_energy = task_result_slab_equi["energies"][-1]
+            ref_natoms = np.sum(task_result_slab_equi["atom_numbs"])
+            equi_epa_slab = ref_energy / ref_natoms
             for ii in all_tasks:
-                task_result = loadfn(os.path.join(ii, "result_task.json"))
-                natoms = np.sum(task_result["atom_numbs"])
-                epa = task_result["energies"][-1] / natoms
-                equi_epa_slab = task_result_slab_equi["energies"][-1] / natoms
-                AA = np.linalg.norm(
-                    np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
-                )
-               
                 structure_dir = os.path.basename(ii)
-                Cf = 1.60217657e-16 / 1e-20 * 0.001
-                sfe = (
-                        (
-                                task_result["energies"][-1]
-                                - task_result_slab_equi["energies"][-1]
-                        )
-                        / AA
-                        * Cf
-                )
                 frac = int(ii[-4:]) / n_steps
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
+                task_result = loadfn(os.path.join(ii, "result_task.json"))
+                if is_failed_task_result(task_result):
+                    sfe = float("nan")
+                    epa = float("nan")
+                else:
+                    natoms = np.sum(task_result["atom_numbs"])
+                    epa = task_result["energies"][-1] / natoms
+                    AA = np.linalg.norm(
+                        np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
+                    )
+                    Cf = 1.60217657e-16 / 1e-20 * 0.001
+                    sfe = (task_result["energies"][-1] - ref_energy) / AA * Cf
                 ptr_data += "%-25s    %7.2f   %7.3f  %7.3f    %8.3f %8.3f\n" % (
                     str(miller_index) + "-" + structure_dir + ":",
                     frac,

@@ -21,6 +21,18 @@ from apex.task_failure import (
 upload_packages.append(__file__)
 
 
+TASK_FAILURE_TOLERANT_TYPES = {
+    "gamma_surface",
+    "gamma",
+    "eos",
+    "surface",
+    "vacancy",
+    "interstitial",
+    "cohesive",
+    "decohesive",
+}
+
+
 def _load_task_status(status_path: Path):
     if not status_path.is_file():
         return None
@@ -329,13 +341,21 @@ class PropsPost(OP):
                 abs_path_to_prop / "failed_lammps_tasks.json",
                 indent=4,
             )
-            raise RuntimeError(
-                "LAMMPS failed for property task(s): "
-                + ", ".join(item["task"] for item in lammps_failures)
-                + ". Retrieved task directories contain apex_task_status.json "
-                "with failed status records, .debug.log, log.lammps, outlog, "
-                "and any partial output files."
-            )
+            failed_task_names = ", ".join(item["task"] for item in lammps_failures)
+            if prop_param.get("type") in TASK_FAILURE_TOLERANT_TYPES:
+                logging.warning(
+                    "LAMMPS failed for property task(s): %s. "
+                    "Continuing post-process with NaN placeholders for failed points.",
+                    failed_task_names,
+                )
+            else:
+                raise RuntimeError(
+                    "LAMMPS failed for property task(s): "
+                    + failed_task_names
+                    + ". Retrieved task directories contain apex_task_status.json "
+                    "with failed status records, .debug.log, log.lammps, outlog, "
+                    "and any partial output files."
+                )
 
         prop = make_property_instance(prop_param, inter_param)
         param_json = os.path.join(abs_path_to_prop, "param.json")

@@ -295,6 +295,31 @@ def _arrange_gamma_surface_tasks(task_list: List[str]) -> List[str]:
     return [task_dir for _, _, _, task_dir in sorted(indexed_tasks, key=surface_slide_key)]
 
 
+def _min_pair_distance(structure) -> float:
+    dmat = structure.distance_matrix
+    n = dmat.shape[0]
+    if n < 2:
+        return float("inf")
+    iu = np.triu_indices(n, k=1)
+    return float(dmat[iu].min())
+
+
+def _warn_gamma_surface_overlaps(task_list: List[str], threshold: float = 0.2) -> None:
+    from pymatgen.core import Structure
+
+    for task_dir in task_list:
+        poscar = os.path.join(task_dir, "POSCAR")
+        if not os.path.isfile(poscar):
+            continue
+        structure = Structure.from_file(poscar)
+        if _min_pair_distance(structure) < threshold:
+            print(
+                "Generated Gamma surface contains overlapping atoms.",
+                file=sys.stderr,
+            )
+            return
+
+
 def _derive_output_gif_path(parameter_path: Path, structures_count: int, prop_label: str) -> Path:
     if structures_count == 1 and prop_label == "":
         return parameter_path.with_suffix(".gif")
@@ -401,8 +426,8 @@ def preview_parameter_file(
                 task_list = prop_obj.make_confs(
                     str(work_dir), equi_dir, refine=do_refine, **make_kwargs
                 )
-                prop_obj.post_process(task_list)
                 if prop.get("type") == "gamma_surface":
+                    _warn_gamma_surface_overlaps(task_list)
                     task_list = _arrange_gamma_surface_tasks(task_list)
 
                 poscar_files = [os.path.join(task_dir, "POSCAR") for task_dir in task_list]

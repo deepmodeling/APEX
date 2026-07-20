@@ -13,7 +13,7 @@ from monty.serialization import dumpfn, loadfn
 from apex.core.calculator.lib import abacus_scf
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 
@@ -214,6 +214,12 @@ class Cohesive(Property):
 
             # Use the last result as the single-atom reference.
             last_res = loadfn(all_res[-1])
+            if is_failed_task_result(last_res):
+                raise RuntimeError(
+                    "cohesive reference task "
+                    f"{os.path.basename(all_tasks[-1])} failed; "
+                    "cannot compute cohesive energies"
+                )
             single_atom_energy = last_res["energies"][-1] / sum(last_res["atom_numbs"])
 
             for ii, task_path in enumerate(all_tasks):
@@ -221,12 +227,14 @@ class Cohesive(Property):
                 latt = conf["lattice"]
                 scale = conf["scale"]
                 task_result = loadfn(all_res[ii])
-
-                total_energy = task_result["energies"][-1]
-                total_atoms = sum(task_result["atom_numbs"])
-
-                e_per_atom = total_energy / total_atoms
-                cohesive_energy = e_per_atom - single_atom_energy
+                if is_failed_task_result(task_result):
+                    e_per_atom = float("nan")
+                    cohesive_energy = float("nan")
+                else:
+                    total_energy = task_result["energies"][-1]
+                    total_atoms = sum(task_result["atom_numbs"])
+                    e_per_atom = total_energy / total_atoms
+                    cohesive_energy = e_per_atom - single_atom_energy
 
                 if getattr(self, "latt_abs", False):
                     ptr_data += "%7.3f  %8.4f  %8.4f\n" % (latt, e_per_atom, cohesive_energy)
