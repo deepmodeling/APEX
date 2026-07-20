@@ -237,7 +237,7 @@ Create `global_bohrium.json` to submit workflows to the Bohrium cloud platform:
 
 ```json
 {
-  "lammps_image_name": "registry.dp.tech/dptech/prod-11045/deepmdkit-phonolammps:2.1.1",
+  "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
   "lammps_run_command":"lmp -in in.lammps",
   "scass_type":"c8_m31_1 * NVIDIA T4"
 }
@@ -455,7 +455,7 @@ When you run `apex submit -c global_bohrium.json`, APEX auto-fills these default
 - `k8s_api_server`: `https://workflows.deepmodeling.com`
 - `batch_type`: `Bohrium`
 - `context_type`: `Bohrium`
-- `apex_image_name`: `registry.dp.tech/dptech/dp/native/prod-397637/apex:1.3.0`
+- `apex_image_name`: `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`
 
 Priority rule: values in your `-c` json file override account defaults.
 
@@ -638,12 +638,31 @@ Property selection behavior:
 
 ### 4.5 Decohesive energy line
 
+Decohesive builds a rigid-separation series on one user-specified Miller plane via pymatgen `SlabGenerator`. It does **not** auto-enumerate planes (unlike `surface`) and has **no** crystal-type nested overrides (unlike `gamma`). Any structure that can form that slab is supported; set `miller_index` explicitly.
+
+Recommended default planes by crystal family (JSON `miller_index` uses **3-index** Miller notation):
+
+| Crystal structure | Recommended planes | JSON `miller_index` examples |
+|-------------------|--------------------|------------------------------|
+| **FCC** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **BCC** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **Diamond** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **Zinc blende** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **Rocksalt** | $(100)$, $(110)$, $(111)$ | `[1,0,0]`, `[1,1,0]`, `[1,1,1]` |
+| **HCP** | $(0001)$, $(10\bar{1}0)$, $(11\bar{2}0)$ | `[0,0,1]`, `[1,0,0]`, `[1,1,0]` |
+| **Perovskite** | $(001)$, $(110)$, $(111)$ | `[0,0,1]`, `[1,1,0]`, `[1,1,1]` |
+
+Notes:
+
+- HCP must use the **3-index** values above. Four-index Miller–Bravais vectors (e.g. `[0,0,0,1]`) are **not** accepted by `decohesive` (no Bravais conversion).
+- Polar / multi-termination faces (common for zinc blende $(111)$ and some perovskite cuts) still generate; APEX takes the first matching slab termination from pymatgen.
+
 | Key | Type | Example | Description |
 |-----|------|---------|-------------|
 | `min_slab_size` | Integer | `10` | Minimum slab thickness. |
 | `max_vacuum_size` | Integer | `11` | Maximum vacuum width. |
 | `pert_xz` | Float | `0.01` | Perturbation along xz plane for surface energy. |
-| `miller_miller` | List[Int] | `[1, 1, 0]` | Miller indices of the target plane. |
+| `miller_index` | List[Int] | `[1, 1, 0]` | Miller indices of the target plane (**required**, 3-index). |
 
 ### 4.6 Elastic
 
@@ -733,6 +752,7 @@ Key parameters:
 | `vacuum_size` | Float | `0` | Added vacuum layer thickness (Å). |
 | `supercell_size` | Sequence[Int] | `[1, 1, 5]` | Slab supercell size. |
 | `add_fix` | Sequence[String] | `["true","true","false"]` | Position constraints along x/y/z. |
+| `closed_loop` | Bool | `false` |  when `true`, derive two periodic in-plane translation vectors from the generated slab. and slip_length or slip_length_y will be **ignored** |
 
 Example:
 
@@ -778,6 +798,7 @@ adds vacuum along the selected fault normal for slab/free-surface calculations.
             "slip_direction": [1, -1, -1],
             "supercell_size": [1, 1, 20],
             "vacuum_size": 15,
+            "closed_loop": false,
             "add_fix": ["true", "true", "false"],
             "n_steps_x": 20,
             "n_steps_y": 20
@@ -788,7 +809,7 @@ adds vacuum along the selected fault normal for slab/free-surface calculations.
 
 APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) and wraps [Phonopy](https://github.com/phonopy/phonopy) / [phonoLAMMPS](https://github.com/abelcarreras/phonolammps). [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) automatically generates high-symmetry k-paths.
 
-> **Important:** Ensure the `run_image` (or local environment in debug mode) contains `phonoLAMMPS` when running LAMMPS-based phonon workflows.
+> **Important:** LAMMPS phonon and Grüneisen workflows always use `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`. During `apex submit`, APEX overrides any other configured LAMMPS image for these properties.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -796,7 +817,7 @@ APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow
 | `approach` | String | `"linear"` | VASP phonon method: `"linear"` or `"displacement"`. |
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions. |
 | `MESH` | Sequence[Int] | `None` | Reciprocal-space mesh (e.g., `[8, 8, 8]`). |
-| `PRIMITIVE_AXES` | String | `None` | Custom primitive axes definition (`"0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0"`). |
+| `PRIMITIVE_AXES` | String | `"P"` | Primitive axes used consistently by phonopy and phonoLAMMPS; accepts `"P"`, `"AUTO"`, or a 3×3 matrix. |
 | `BAND` | String | `None` | Band path definition (falls back to SeeK-path when omitted). |
 | `BAND_LABELS` | String | `None` | Labels for band segments. |
 | `BAND_POINTS` | Integer | `51` | Number of sampling points per segment. |
@@ -820,8 +841,8 @@ APEX supports Grüneisen workflows based on phonon calculations at multiple stra
 | `primitive` | Bool | `false` | Reduce to primitive cell before phonon calculation. |
 | `approach` | String | `"linear"` | Phonon workflow approach; VASP Grüneisen currently uses linear response. |
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Phonon supercell dimensions. |
-| `MESH` | Sequence[Int] | `None` | Reciprocal-space mesh for mode summation. |
-| `PRIMITIVE_AXES` | String | `None` | Custom primitive axes definition. |
+| `MESH` | Sequence[Int] | `[20, 20, 20]` | Three positive reciprocal-space mesh dimensions for mode summation. |
+| `PRIMITIVE_AXES` | String | `"P"` | Primitive axes used consistently for displacement generation and post-processing. |
 | `BAND` | String | `None` | Band path definition (falls back to SeeK-path when omitted). |
 | `BAND_LABELS` | String | `None` | Labels for band segments. |
 | `BAND_POINTS` | Integer | `51` | Number of sampling points per segment. |

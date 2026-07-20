@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 import apex.submit as submit_module
 from apex.submit import (
+    LAMMPS_PHONON_IMAGE,
+    _select_run_image,
     _with_lammps_retry_env,
     submit_workflow,
     validate_submit_paths,
@@ -15,6 +17,31 @@ from apex.submit import (
 
 
 class TestSubmitPathValidation(unittest.TestCase):
+    def test_lammps_phonon_forces_validated_image(self):
+        selected = _select_run_image(
+            "lammps",
+            {"properties": [{"type": "phonon"}]},
+            "registry.dp.tech/dptech/deepmd-kit:3.1.3",
+        )
+        self.assertEqual(selected, LAMMPS_PHONON_IMAGE)
+
+    def test_lammps_gruneisen_forces_validated_image(self):
+        selected = _select_run_image(
+            "lammps",
+            {"properties": [{"type": "gruneisen"}]},
+            "registry.dp.tech/dptech/deepmd-kit:3.1.3",
+        )
+        self.assertEqual(selected, LAMMPS_PHONON_IMAGE)
+
+    def test_non_phonon_keeps_configured_lammps_image(self):
+        configured = "registry.example/custom-lammps:latest"
+        selected = _select_run_image(
+            "lammps",
+            {"properties": [{"type": "eos"}]},
+            configured,
+        )
+        self.assertEqual(selected, configured)
+
     def test_with_lammps_retry_env_handles_empty_existing_and_new_commands(self):
         class DummyConfig:
             lammps_header_retry_attempts = 4

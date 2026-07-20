@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="apex-flow",
-    version="1.3.0.post1",
+    version="1.3.0.post5",
     author="Zhuoyuan Li, Tongqi Wen",
     author_email="zhuoyli@outlook.com",
     description="Alloy Properties EXplorer using simulations",
@@ -13,6 +13,18 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/deepmodeling/APEX.git",
     packages=setuptools.find_packages(),
+    package_data={
+        "apex": [
+            "skills/apex-flow/SKILL.md",
+            "skills/apex-flow/plugin.yaml",
+            "skills/apex-flow/data/*",
+            "skills/apex-flow/models/*",
+            "skills/apex-flow/models/*/*",
+            "skills/apex-flow/reference/*",
+            "skills/apex-flow/scripts/*",
+        ],
+    },
+    include_package_data=True,
     install_requires=[
         "numpy<2.0.0",
         "pydflow>=1.7.83",

@@ -615,6 +615,25 @@ def parse_args():
     parser_account.add_argument("--program-id", dest="program_id", type=int, default=None)
     parser_account.add_argument("--apex-image-name", dest="apex_image_name", type=str, default=None)
 
+    ##########################################
+    # Agent skill
+    parser_skill = subparsers.add_parser(
+        "skill",
+        help="Print an Agent prompt for installing apex-flow, or build a zip file for uploading to MatMaster",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser_skill.add_argument(
+        "--zip",
+        action="store_true",
+        help="Write a zip of the bundled apex-flow",
+    )
+    parser_skill.add_argument(
+        "-o", "--output",
+        type=str,
+        default=None,
+        help="Output zip path when using --zip (default: ./apex-flow.zip)",
+    )
+
     parsed_args = parser.parse_args()
     # print help if no parser
     if not parsed_args.cmd:
@@ -1546,6 +1565,10 @@ def main():
         from apex.preview import preview_from_args
 
         preview_from_args(args)
+    elif args.cmd == 'skill':
+        from apex.skill import skill_from_args
+
+        skill_from_args(args)
     else:
         raise RuntimeError(
             f"unknown command {args.cmd}\n{parser.print_help()}"

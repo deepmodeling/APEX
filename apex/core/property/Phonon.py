@@ -5,6 +5,7 @@ import os
 import shutil
 import re
 import subprocess
+from fractions import Fraction
 from typing import List, Dict, Any
 
 import dpdata
@@ -25,6 +26,8 @@ upload_packages.append(__file__)
 
 
 class Phonon(Property):
+    PHONOPY_LOAD_YAML_CANDIDATES = ("phonopy_disp.yaml", "phonopy.yaml")
+
     @staticmethod
     def phonopy_setup_command(arguments: str) -> str:
         executable = "phonopy-init" if shutil.which("phonopy-init") else "phonopy"
@@ -35,12 +38,154 @@ class Phonon(Property):
         return f"phonopy {arguments}"
 
     @staticmethod
+    def sorted_displacement_files(pattern: str) -> List[str]:
+        """Return phonopy displacement files in displacement order."""
+        return sorted(glob.glob(pattern))
+
+    @staticmethod
     def phonopy_writefc_commands(arguments: str) -> List[str]:
         setup_command = Phonon.phonopy_setup_command(arguments)
         phonopy_command = Phonon.phonopy_command(arguments)
         if setup_command == phonopy_command:
             return [setup_command]
+        if "--dim" in arguments:
+            return [setup_command]
         return [setup_command, phonopy_command]
+
+    @staticmethod
+    def _join_phonopy_arguments(*arguments: str) -> str:
+        return " ".join(argument for argument in arguments if argument)
+
+    @staticmethod
+    def _format_dim(supercell_size: List[int]) -> str:
+        return '"%s %s %s"' % (
+            supercell_size[0],
+            supercell_size[1],
+            supercell_size[2],
+        )
+
+    @staticmethod
+    def phonopy_load_commands(
+        config_file: str = "band.conf",
+        supercell_size: List[int] | None = None,
+        cell_file: str | None = None,
+        extra_args: str = "",
+        yaml_files: tuple[str, ...] | None = None,
+    ) -> List[str]:
+        yaml_files = yaml_files or Phonon.PHONOPY_LOAD_YAML_CANDIDATES
+        commands = []
+        for yaml_file in yaml_files:
+            if os.path.isfile(yaml_file):
+                commands.append(
+                    Phonon.phonopy_command(
+                        Phonon._join_phonopy_arguments(
+                            extra_args,
+                            yaml_file,
+                            "--config",
+                            config_file,
+                        )
+                    )
+                )
+
+        if supercell_size is not None and cell_file is not None:
+            setup_command = Phonon.phonopy_setup_command(
+                '-d --dim=%s -c %s'
+                % (Phonon._format_dim(supercell_size), cell_file)
+            )
+            commands.append(
+                "%s && %s"
+                % (
+                    setup_command,
+                    Phonon.phonopy_command(
+                        Phonon._join_phonopy_arguments(
+                            extra_args,
+                            "phonopy_disp.yaml",
+                            "--config",
+                            config_file,
+                        )
+                    ),
+                )
+            )
+            if not shutil.which("phonopy-init"):
+                commands.append(
+                    Phonon.phonopy_command(
+                        Phonon._join_phonopy_arguments(
+                            extra_args,
+                            '--dim=%s -c %s'
+                            % (Phonon._format_dim(supercell_size), cell_file),
+                            config_file,
+                        )
+                    )
+                )
+        else:
+            commands.append(
+                Phonon.phonopy_command(
+                    Phonon._join_phonopy_arguments(extra_args, config_file)
+                )
+            )
+
+        return list(dict.fromkeys(commands))
+
+    @staticmethod
+    def phonopy_writefc_load_commands(
+        legacy_arguments: str,
+        yaml_files: tuple[str, ...] | None = None,
+    ) -> List[str]:
+        yaml_files = yaml_files or Phonon.PHONOPY_LOAD_YAML_CANDIDATES
+        commands = [
+            Phonon.phonopy_command(f"{yaml_file} --writefc")
+            for yaml_file in yaml_files
+            if os.path.isfile(yaml_file)
+        ]
+        commands.extend(Phonon.phonopy_writefc_commands(legacy_arguments))
+        return list(dict.fromkeys(commands))
+
+    @staticmethod
+    def primitive_axes_setup_argument(primitive_axes: str | None) -> str:
+        primitive_axes = Phonon.primitive_axes_config_value(primitive_axes)
+        if not primitive_axes:
+            return ""
+        return f"--pa {primitive_axes}"
+
+    @staticmethod
+    def primitive_axes_config_value(primitive_axes: Any) -> str | None:
+        if primitive_axes is None:
+            return None
+        if isinstance(primitive_axes, str):
+            value = primitive_axes.strip()
+            if not value or value.upper() == "AUTO":
+                return None
+            if value.upper() == "P":
+                return "P"
+            tokens = value.replace(",", " ").split()
+        elif isinstance(primitive_axes, (list, tuple)):
+            tokens = []
+            for item in primitive_axes:
+                if isinstance(item, (list, tuple)):
+                    tokens.extend(item)
+                else:
+                    tokens.append(item)
+        else:
+            raise ValueError(
+                "PRIMITIVE_AXES must be 'P', 'AUTO', or a 3x3 numeric matrix"
+            )
+        if len(tokens) != 9:
+            raise ValueError(
+                "PRIMITIVE_AXES must be 'P', 'AUTO', or contain exactly 9 values"
+            )
+        try:
+            return " ".join(str(float(Fraction(str(token)))) for token in tokens)
+        except (ValueError, ZeroDivisionError) as exc:
+            raise ValueError("PRIMITIVE_AXES contains a non-numeric value") from exc
+
+    @staticmethod
+    def primitive_axes_phonolammps_argument(primitive_axes: Any) -> str:
+        config_value = Phonon.primitive_axes_config_value(primitive_axes)
+        if config_value is None:
+            return ""
+        if config_value == "P":
+            config_value = "1 0 0 0 1 0 0 0 1"
+        return f"-pa {config_value}"
 
     @staticmethod
     def run_first_success(commands: List[str], required_file: str | None = None) -> None:
@@ -55,6 +200,12 @@ class Phonon(Property):
                 return
             errors.append(FileNotFoundError(f"{required_file} was not created by: {command}"))
         if errors:
+            if required_file is not None:
+                attempted = "; ".join(commands)
+                raise RuntimeError(
+                    f"{required_file} was not created after trying: {attempted}. "
+                    f"Last error: {errors[-1]}"
+                ) from errors[-1]
             raise errors[-1]
 
     @staticmethod
@@ -154,16 +305,30 @@ class Phonon(Property):
     def _build_phonolammps_run_command(self) -> str:
         dim_x, dim_y, dim_z = self.supercell_size
         command_template = self.phonolammps_run_command
+        primitive_axes = self.primitive_axes_phonolammps_argument(
+            self.PRIMITIVE_AXES
+        )
         if not command_template:
-            return f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z} "
-        return command_template.format(
+            return self._join_phonopy_arguments(
+                f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z}",
+                primitive_axes,
+            )
+        command = command_template.format(
             input_file="in.lammps",
             poscar="POSCAR",
             dim=f"{dim_x} {dim_y} {dim_z}",
             dim_x=dim_x,
             dim_y=dim_y,
             dim_z=dim_z,
+            primitive_axes=primitive_axes,
         )
+        if (
+            primitive_axes
+            and "{primitive_axes}" not in command_template
+            and not re.search(r"(?:^|\s)(?:-pa|--primitive_axis)(?:\s|=)", command)
+        ):
+            command = self._join_phonopy_arguments(command, primitive_axes)
+        return command
 
     def make_confs(self, path_to_work, path_to_equi, refine=False):
         path_to_work = os.path.abspath(path_to_work)
@@ -309,8 +474,9 @@ class Phonon(Property):
                     ret += "MESH = %s %s %s\n" % (
                         self.MESH[0], self.MESH[1], self.MESH[2]
                     )
-                if self.PRIMITIVE_AXES:
-                    ret += "PRIMITIVE_AXES = %s\n" % self.PRIMITIVE_AXES
+                primitive_axes = self.primitive_axes_config_value(self.PRIMITIVE_AXES)
+                if primitive_axes:
+                    ret += "PRIMITIVE_AXES = %s\n" % primitive_axes
                 ret += "BAND = %s\n" % self.BAND
                 if self.BAND_LABELS:
                     ret += "BAND_LABELS = %s\n" % self.BAND_LABELS
@@ -347,7 +513,8 @@ class Phonon(Property):
                     with open("band.conf", "a") as fp:
                         fp.write(ret)
                     # generate task.000*
-                    stru_list = glob.glob("STRU-0*")
+                    # Keep task numbering aligned with phonopy_disp.yaml.
+                    stru_list = self.sorted_displacement_files("STRU-0*")
                     for ii in range(len(stru_list)):
                         task_path = os.path.join(path_to_work, 'task.%06d' % ii)
                         os.makedirs(task_path, exist_ok=True)
@@ -366,7 +533,15 @@ class Phonon(Property):
 
                 # ------------make for vasp and lammps------------
                 if self.primitive:
-                    subprocess.call(self.phonopy_setup_command("--symmetry"), shell=True)
+                    subprocess.call(
+                        self.phonopy_setup_command(
+                            self._join_phonopy_arguments(
+                                "--symmetry",
+                                self.primitive_axes_setup_argument(self.PRIMITIVE_AXES),
+                            )
+                        ),
+                        shell=True,
+                    )
                     subprocess.call('cp PPOSCAR POSCAR', shell=True)
                     shutil.copyfile("PPOSCAR", "POSCAR-unitcell")
                 else:
@@ -375,11 +550,14 @@ class Phonon(Property):
                 # make tasks
                 if self.inter_param["type"] == 'vasp':
                     cmd = self.phonopy_setup_command(
-                        "-d --dim='%d %d %d' -c POSCAR"
-                        % (
-                            int(self.supercell_size[0]),
-                            int(self.supercell_size[1]),
-                            int(self.supercell_size[2]),
+                        self._join_phonopy_arguments(
+                            "-d --dim='%d %d %d' -c POSCAR"
+                            % (
+                                int(self.supercell_size[0]),
+                                int(self.supercell_size[1]),
+                                int(self.supercell_size[2]),
+                            ),
+                            self.primitive_axes_setup_argument(self.PRIMITIVE_AXES),
                         )
                     )
                     subprocess.call(cmd, shell=True)
@@ -395,7 +573,8 @@ class Phonon(Property):
                             fp.write(ret_force_read)
                     # finite displacement method
                     elif self.approach == 'displacement':
-                        poscar_list = glob.glob("POSCAR-0*")
+                        # Keep task numbering aligned with phonopy_disp.yaml.
+                        poscar_list = self.sorted_displacement_files("POSCAR-0*")
                         for ii in range(len(poscar_list)):
                             task_path = os.path.join(path_to_work, 'task.%06d' % ii)
                             os.makedirs(task_path, exist_ok=True)
@@ -622,7 +801,10 @@ class Phonon(Property):
                     if not os.path.exists("FORCE_SETS"):
                         raise FileNotFoundError("FORCE_SETS was not created")
                     print('FORCE_SETS is created')
-                    subprocess.check_call(self.phonopy_command("phonopy_disp.yaml --config band.conf"), shell=True)
+                    self.run_first_success(
+                        self.phonopy_load_commands(),
+                        required_file="band.yaml",
+                    )
                     self.write_band_dat()
 
                 elif self.inter_param["type"] == 'vasp':
@@ -635,10 +817,13 @@ class Phonon(Property):
                         assert os.path.isfile('vasprun.xml'), "vasprun.xml not found"
                         subprocess.check_call(self.phonopy_setup_command("--fc vasprun.xml"), shell=True)
                         assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
-                        subprocess.check_call(self.phonopy_command('--dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
-                                self.supercell_size[0],
-                                self.supercell_size[1],
-                                self.supercell_size[2])), shell=True)
+                        self.run_first_success(
+                            self.phonopy_load_commands(
+                                supercell_size=self.supercell_size,
+                                cell_file="POSCAR-unitcell",
+                            ),
+                            required_file="band.yaml",
+                        )
                         self.write_band_dat()
                         print('band.dat is created')
                         shutil.copyfile("band.dat", work_path/"band.dat")
@@ -650,18 +835,25 @@ class Phonon(Property):
                         if not os.path.exists("FORCE_SETS"):
                             raise FileNotFoundError("FORCE_SETS was not created")
                         print('FORCE_SETS is created')
-                        subprocess.check_call(self.phonopy_command('--dim="%s %s %s" -c POSCAR-unitcell band.conf' % (
-                            self.supercell_size[0],
-                            self.supercell_size[1],
-                            self.supercell_size[2])), shell=True)
+                        self.run_first_success(
+                            self.phonopy_load_commands(
+                                supercell_size=self.supercell_size,
+                                cell_file="POSCAR-unitcell",
+                            ),
+                            required_file="band.yaml",
+                        )
                         self.write_band_dat()
 
                 elif self.inter_param["type"] in LAMMPS_INTER_TYPE:
                     os.chdir(all_tasks[0])
                     assert os.path.isfile('FORCE_CONSTANTS'), "FORCE_CONSTANTS not created"
-                    subprocess.check_call(self.phonopy_command('--dim="%s %s %s" -c POSCAR band.conf' % (
-                        self.supercell_size[0], self.supercell_size[1], self.supercell_size[2])
-                        ), shell=True)
+                    self.run_first_success(
+                        self.phonopy_load_commands(
+                            supercell_size=self.supercell_size,
+                            cell_file="POSCAR",
+                        ),
+                        required_file="band.yaml",
+                    )
                     self.write_band_dat()
                     shutil.copyfile("band.dat", work_path/"band.dat")
 

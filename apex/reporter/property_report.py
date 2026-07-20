@@ -841,17 +841,38 @@ class GammaReport(PropertyReport):
 
 class GammaSurfaceReport(PropertyReport):
     @staticmethod
-    def plotly_graph(res_data: dict, name: str, **kwargs):
+    def _rows_from_result(res_data: dict):
         rows = []
-        for k, v in res_data.items():
-            frac_x_str, frac_y_str = str(k).split(",")
+        for key, values in res_data.items():
+            if not isinstance(key, str) or "," not in key:
+                continue
+            frac_x_str, frac_y_str = key.split(",", 1)
+            metadata = values[5] if len(values) > 5 else {}
+            if isinstance(metadata, dict) and "disp_cart" in metadata:
+                disp_cart = list(metadata["disp_cart"])
+            else:
+                disp_cart = [values[0], values[1], 0.0]
             rows.append(
                 {
                     "frac_x": float(frac_x_str),
                     "frac_y": float(frac_y_str),
-                    "fault_en": float(v[2]),
+                    "path_x": float(values[0]),
+                    "path_y": float(values[1]),
+                    "cart_x": float(disp_cart[0]),
+                    "cart_y": float(disp_cart[1]),
+                    "cart_z": float(disp_cart[2]),
+                    "fault_en": float(values[2]),
+                    "struct_en": float(values[3]),
+                    "equi_en": float(values[4]),
                 }
             )
+        return rows
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        rows = GammaSurfaceReport._rows_from_result(res_data)
+        if not rows:
+            return [], go.Layout(title="Stacking Fault Energy (Gamma Surface)")
 
         df = pd.DataFrame(rows)
         pivot = df.pivot_table(index="frac_y", columns="frac_x", values="fault_en")
@@ -878,31 +899,25 @@ class GammaSurfaceReport(PropertyReport):
 
     @staticmethod
     def dash_table(res_data: dict, decimal: int = 3, **kwargs) -> dash_table.DataTable:
-        frac_x = []
-        frac_y = []
-        disp_x = []
-        disp_y = []
-        fault_en = []
-        struct_en = []
-        equi_en = []
-        for k, v in res_data.items():
-            frac_x_str, frac_y_str = str(k).split(",")
-            frac_x.append(float(frac_x_str))
-            frac_y.append(float(frac_y_str))
-            disp_x.append(v[0])
-            disp_y.append(v[1])
-            fault_en.append(v[2])
-            struct_en.append(v[3])
-            equi_en.append(v[4])
+        rows = GammaSurfaceReport._rows_from_result(res_data)
         df = pd.DataFrame(
             {
-                "Slip_frac_x": round_format(frac_x, decimal),
-                "Slip_frac_y": round_format(frac_y, decimal),
-                "Slip_x (A)": round_format(disp_x, decimal),
-                "Slip_y (A)": round_format(disp_y, decimal),
-                "E_Fault (J/m^2)": round_format(fault_en, decimal),
-                "E_Slab (eV)": round_format(struct_en, decimal),
-                "E_Equilib (eV)": round_format(equi_en, decimal),
+                "Slip_frac_x": round_format([r["frac_x"] for r in rows], decimal),
+                "Slip_frac_y": round_format([r["frac_y"] for r in rows], decimal),
+                "Path_x (A)": round_format([r["path_x"] for r in rows], decimal),
+                "Path_y (A)": round_format([r["path_y"] for r in rows], decimal),
+                "Cart_x (A)": round_format([r["cart_x"] for r in rows], decimal),
+                "Cart_y (A)": round_format([r["cart_y"] for r in rows], decimal),
+                "Cart_z (A)": round_format([r["cart_z"] for r in rows], decimal),
+                "E_Fault (J/m^2)": round_format(
+                    [r["fault_en"] for r in rows], decimal
+                ),
+                "E_Slab (eV)": round_format(
+                    [r["struct_en"] for r in rows], decimal
+                ),
+                "E_Equilib (eV)": round_format(
+                    [r["equi_en"] for r in rows], decimal
+                ),
             }
         )
 

@@ -31,8 +31,13 @@ class GammaSurface(Property):
     """Calculation of generalized stacking fault energy surface."""
 
     def __init__(self, parameter, inter_param=None):
+        self._add_fix_explicit = "add_fix" in parameter
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
+        parameter["closed_loop"] = parameter.get("closed_loop", False)
+        if not isinstance(parameter["closed_loop"], (bool, np.bool_)):
+            raise ValueError("gamma_surface closed_loop must be a boolean")
+        self.closed_loop = bool(parameter["closed_loop"])
         if not self.reprod:
             if not ("init_from_suffix" in parameter and "output_suffix" in parameter):
                 parameter["plane_miller"] = parameter.get("plane_miller", None)
@@ -62,6 +67,8 @@ class GammaSurface(Property):
                 parameter["n_steps_y"] = parameter.get("n_steps_y", self.n_steps_x)
                 self.n_steps_y = parameter["n_steps_y"]
                 self.atom_num = None
+            else:
+                self.add_fix = parameter.get("add_fix")
             parameter["cal_type"] = parameter.get("cal_type", "relaxation")
             default_cal_setting = {
                 "relax_pos": True,
@@ -79,6 +86,13 @@ class GammaSurface(Property):
             parameter["init_from_suffix"] = parameter.get("init_from_suffix", "00")
             self.init_from_suffix = parameter["init_from_suffix"]
         self.cal_type = parameter["cal_type"]
+        if self.cal_type == "static":
+            if self._add_fix_explicit and parameter.get("add_fix") is not None:
+                raise RuntimeError(
+                    "gamma_surface add_fix is only valid for relaxation calculations"
+                )
+            parameter["add_fix"] = None
+            self.add_fix = None
         parameter["cal_setting"] = parameter.get("cal_setting", default_cal_setting)
         for key in default_cal_setting:
             parameter["cal_setting"].setdefault(key, default_cal_setting[key])
@@ -115,7 +129,13 @@ class GammaSurface(Property):
             return
         self.__poscar_fix(os.path.join(task_dir, "POSCAR"))
 
-    def make_confs(self, path_to_work, path_to_equi, refine=False):
+    def make_confs(
+        self,
+        path_to_work,
+        path_to_equi,
+        refine=False,
+        require_relaxation_result=True,
+    ):
         path_to_work = os.path.abspath(path_to_work)
         if os.path.exists(path_to_work):
             logging.debug("%s already exists" % path_to_work)
@@ -172,28 +192,73 @@ class GammaSurface(Property):
                     count=1,
                 )[::-1]
                 task_list_basename = list(map(os.path.basename, task_list))
+                if not task_list_basename:
+                    raise RuntimeError(
+                        "gamma_surface refine found no source task directories"
+                    )
 
                 for ii in task_list_basename:
                     init_from_task = os.path.join(init_from_path, ii)
                     output_task = os.path.join(path_to_work, ii)
-                    os.chdir(output_task)
-                    if os.path.exists("miller.json"):
-                        os.remove("miller.json")
-                    os.symlink(
-                        os.path.relpath(os.path.join(init_from_task, "miller.json")),
+                    for metadata in (
                         "miller.json",
-                    )
+                        "displacement.json",
+                        "slip_length_x.json",
+                        "slip_length_y.json",
+                        "slip_vector_x.json",
+                        "slip_vector_y.json",
+                    ):
+                        source = os.path.join(init_from_task, metadata)
+                        if not os.path.exists(source):
+                            if metadata in {
+                                "miller.json",
+                                "displacement.json",
+                                "slip_length_x.json",
+                                "slip_length_y.json",
+                            }:
+                                raise FileNotFoundError(
+                                    f"gamma_surface refine metadata is missing: {source}"
+                                )
+                            continue
+                        target = os.path.join(output_task, metadata)
+                        if os.path.lexists(target):
+                            os.remove(target)
+                        os.symlink(
+                            os.path.relpath(source, output_task),
+                            target,
+                        )
+
+                source_task_json = os.path.join(
+                    init_from_path, task_list_basename[0], "task.json"
+                )
+                if not self._add_fix_explicit and os.path.isfile(source_task_json):
+                    source_parameter = loadfn(source_task_json)
+                    self.add_fix = source_parameter.get("add_fix")
+                    self.parameter["add_fix"] = self.add_fix
+                self.closed_loop = all(
+                    os.path.isfile(os.path.join(task, "slip_vector_x.json"))
+                    and os.path.isfile(os.path.join(task, "slip_vector_y.json"))
+                    for task in task_list
+                )
+                self.parameter["closed_loop"] = self.closed_loop
 
             else:
                 equi_contcar, POSCAR = self._resolve_equilibrium_structure(path_to_equi)
                 if not os.path.exists(equi_contcar):
                     raise RuntimeError("please do relaxation first")
+                equi_result = os.path.join(path_to_equi, "result.json")
+                if require_relaxation_result and not os.path.isfile(equi_result):
+                    raise RuntimeError(
+                        "gamma_surface requires relaxation/relax_task/result.json; "
+                        "please finish relaxation post-processing first"
+                    )
 
                 ptypes, ss = self._load_equilibrium_structure(equi_contcar)
 
                 os.chdir(path_to_equi)
                 ss.to("CONTCAR.direct", "POSCAR")
                 ss = Structure.from_file("CONTCAR.direct")
+                os.chdir(cwd)
                 st = StructureInfo(ss)
                 self.structure_type = st.lattice_structure
                 self.conv_std_structure = st.conventional_structure
@@ -207,6 +272,10 @@ class GammaSurface(Property):
                     self.slip_direction = type_param.get("slip_direction", self.slip_direction)
                     self.slip_length = type_param.get("slip_length", self.slip_length)
                     self.slip_length_y = type_param.get("slip_length_y", self.slip_length_y)
+                    closed_loop = type_param.get("closed_loop", self.closed_loop)
+                    if not isinstance(closed_loop, (bool, np.bool_)):
+                        raise ValueError("gamma_surface closed_loop must be a boolean")
+                    self.closed_loop = bool(closed_loop)
                     self.plane_shift = type_param.get("plane_shift", self.plane_shift)
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
                     self.vacuum_size = type_param.get("vacuum_size", self.vacuum_size)
@@ -221,6 +290,28 @@ class GammaSurface(Property):
                     raise RuntimeError(
                         "fail to obtain both slip plane and slip direction info from input json file!"
                     )
+                if any(
+                    isinstance(value, (bool, np.bool_))
+                    or not isinstance(value, (int, np.integer))
+                    or value <= 0
+                    for value in (self.n_steps_x, self.n_steps_y)
+                ):
+                    raise RuntimeError(
+                        "n_steps_x and n_steps_y must be positive integers"
+                    )
+                self.n_steps_x = int(self.n_steps_x)
+                self.n_steps_y = int(self.n_steps_y)
+                if self.closed_loop and (
+                    self.slip_length is not None or self.slip_length_y is not None
+                ):
+                    raise RuntimeError(
+                        "closed_loop=true derives periodic slip vectors and cannot "
+                        "be combined with slip_length/slip_length_y; set "
+                        "closed_loop=false to use custom slip lengths"
+                    )
+                self.parameter["closed_loop"] = self.closed_loop
+                self.parameter["n_steps_x"] = self.n_steps_x
+                self.parameter["n_steps_y"] = self.n_steps_y
 
                 if self.structure_type not in ["bcc", "fcc", "hcp"]:
                     logging.warning(
@@ -242,28 +333,40 @@ class GammaSurface(Property):
                     os.remove(POSCAR)
                 os.symlink(os.path.relpath(equi_contcar), POSCAR)
 
-                slip_length_x = self.__resolve_slip_length(
-                    slip_length_x, relax_a, relax_b, relax_c
-                )
-                if self.slip_length_y is None:
-                    self.slip_length_y = slip_length_x
-                slip_length_y = self.__resolve_slip_length(
-                    self.slip_length_y, relax_a, relax_b, relax_c
-                )
+                if self.closed_loop:
+                    slip_vector_x = self.__find_periodic_slip_vector(slab, axis=0)
+                    slip_vector_y = self.__find_independent_periodic_slip_vector(
+                        slab, slip_vector_x
+                    )
+                    self.__validate_closed_loop(
+                        slab, slip_vector_x, slip_vector_y
+                    )
+                    slip_length_x = float(np.linalg.norm(slip_vector_x))
+                    slip_length_y = float(np.linalg.norm(slip_vector_y))
+                else:
+                    slip_length_x = self.__resolve_slip_length(
+                        slip_length_x, relax_a, relax_b, relax_c
+                    )
+                    if self.slip_length_y is None:
+                        slip_length_y = slip_length_x
+                    else:
+                        slip_length_y = self.__resolve_slip_length(
+                            self.slip_length_y, relax_a, relax_b, relax_c
+                        )
+                    slip_vector_x = np.array([slip_length_x, 0.0, 0.0])
+                    slip_vector_y = np.array([0.0, slip_length_y, 0.0])
                 self.slip_length = slip_length_x
                 self.slip_length_y = slip_length_y
 
                 top_atoms = np.where(slab.frac_coords[:, 2] > 0.5)[0]
-                n_steps_x = int(self.n_steps_x)
-                n_steps_y = int(self.n_steps_y)
-                n_steps_x_denom = max(n_steps_x, 1)
-                n_steps_y_denom = max(n_steps_y, 1)
+                n_steps_x = self.n_steps_x
+                n_steps_y = self.n_steps_y
 
                 count = 0
                 for idx_x in range(n_steps_x + 1):
-                    frac_x = idx_x / n_steps_x_denom
+                    frac_x = idx_x / n_steps_x
                     for idx_y in range(n_steps_y + 1):
-                        frac_y = idx_y / n_steps_y_denom
+                        frac_y = idx_y / n_steps_y
                         output_task = os.path.join(path_to_work, "task.%06d" % count)
                         os.makedirs(output_task, exist_ok=True)
                         os.chdir(output_task)
@@ -272,8 +375,8 @@ class GammaSurface(Property):
                                 os.remove(jj)
                         task_list.append(output_task)
 
-                        disp_cart = np.array(
-                            [slip_length_x * frac_x, slip_length_y * frac_y, 0.0]
+                        disp_cart = (
+                            slip_vector_x * frac_x + slip_vector_y * frac_y
                         )
                         slab_task = slab.copy()
                         if np.linalg.norm(disp_cart) > 0:
@@ -291,12 +394,16 @@ class GammaSurface(Property):
                         dumpfn(self.plane_miller, "miller.json")
                         dumpfn(slip_length_x, "slip_length_x.json")
                         dumpfn(slip_length_y, "slip_length_y.json")
+                        if self.closed_loop:
+                            dumpfn(slip_vector_x.tolist(), "slip_vector_x.json")
+                            dumpfn(slip_vector_y.tolist(), "slip_vector_y.json")
                         dumpfn(
                             {
                                 "frac_x": frac_x,
                                 "frac_y": frac_y,
                                 "idx_x": idx_x,
                                 "idx_y": idx_y,
+                                "disp_cart": disp_cart.tolist(),
                             },
                             "displacement.json",
                         )
@@ -304,6 +411,127 @@ class GammaSurface(Property):
 
         os.chdir(cwd)
         return task_list
+
+    @staticmethod
+    def __find_periodic_slip_vector(
+        slab: Structure,
+        axis: int,
+        max_index: int = 24,
+        direction_tol: float = 1e-3,
+    ) -> np.ndarray:
+        """Find the shortest in-plane lattice translation along a Cartesian axis."""
+        if axis not in (0, 1):
+            raise ValueError("axis must be 0 (x) or 1 (y)")
+
+        target = np.zeros(3)
+        target[axis] = 1.0
+        inplane = np.asarray(slab.lattice.matrix[:2], dtype=float)
+        candidates = []
+        for ii in range(-max_index, max_index + 1):
+            for jj in range(-max_index, max_index + 1):
+                if ii == 0 and jj == 0:
+                    continue
+                vector = ii * inplane[0] + jj * inplane[1]
+                length = float(np.linalg.norm(vector))
+                if length == 0:
+                    continue
+                projection = float(np.dot(vector, target))
+                if projection <= 0:
+                    continue
+                perpendicular = vector - projection * target
+                if np.linalg.norm(perpendicular) / length <= direction_tol:
+                    candidates.append((length, abs(ii) + abs(jj), vector))
+
+        if not candidates:
+            axis_name = "x" if axis == 0 else "y"
+            raise RuntimeError(
+                "Cannot find an in-plane slab lattice translation aligned with "
+                f"the {axis_name} slip axis (search limit={max_index}, relative "
+                f"tolerance={direction_tol}). Increase the in-plane supercell "
+                "or set closed_loop=false."
+            )
+        return min(candidates, key=lambda item: (item[0], item[1]))[2]
+
+    @staticmethod
+    def __find_independent_periodic_slip_vector(
+        slab: Structure,
+        reference_vector: np.ndarray,
+        max_index: int = 24,
+        independence_tol: float = 1e-8,
+    ) -> np.ndarray:
+        """Find the shortest in-plane translation independent of a reference."""
+        reference_vector = np.asarray(reference_vector, dtype=float)
+        reference_length = float(np.linalg.norm(reference_vector))
+        if reference_length == 0:
+            raise ValueError("reference_vector must be non-zero")
+
+        inplane = np.asarray(slab.lattice.matrix[:2], dtype=float)
+        candidates = []
+        for ii in range(-max_index, max_index + 1):
+            for jj in range(-max_index, max_index + 1):
+                if ii == 0 and jj == 0:
+                    continue
+                vector = ii * inplane[0] + jj * inplane[1]
+                length = float(np.linalg.norm(vector))
+                if length == 0:
+                    continue
+                relative_area = (
+                    np.linalg.norm(np.cross(reference_vector, vector))
+                    / (reference_length * length)
+                )
+                if relative_area <= independence_tol:
+                    continue
+                if vector[1] < 0 or (
+                    np.isclose(vector[1], 0.0) and vector[0] < 0
+                ):
+                    vector = -vector
+                y_misalignment = abs(float(vector[0])) / length
+                candidates.append(
+                    (length, y_misalignment, abs(ii) + abs(jj), vector)
+                )
+
+        if not candidates:
+            raise RuntimeError(
+                "Cannot find a second in-plane slab lattice translation "
+                "independent of the x slip vector. Increase the in-plane "
+                "supercell or set closed_loop=false."
+            )
+        return min(candidates, key=lambda item: (item[0], item[1], item[2]))[3]
+
+    @staticmethod
+    def __validate_closed_loop(
+        slab: Structure,
+        slip_vector_x: np.ndarray,
+        slip_vector_y: np.ndarray,
+        tol: float = 1e-8,
+    ) -> None:
+        """Verify that translating the upper slab closes all grid corners."""
+        top_atoms = np.where(slab.frac_coords[:, 2] > 0.5)[0]
+        if len(top_atoms) == 0 or len(top_atoms) == len(slab):
+            raise RuntimeError(
+                "Cannot define gamma_surface fault plane: the slab is not split "
+                "into lower and upper atom groups"
+            )
+        for label, vector in (
+            ("(1,0)", slip_vector_x),
+            ("(0,1)", slip_vector_y),
+            ("(1,1)", slip_vector_x + slip_vector_y),
+        ):
+            translated = slab.copy()
+            translated.translate_sites(
+                indices=top_atoms,
+                vector=vector,
+                frac_coords=False,
+                to_unit_cell=True,
+            )
+            delta = translated.frac_coords - slab.frac_coords
+            delta -= np.rint(delta)
+            if not np.allclose(delta, 0.0, atol=tol, rtol=0.0):
+                max_error = float(np.max(np.abs(delta)))
+                raise RuntimeError(
+                    f"Gamma-surface corner {label} is not closed under PBC "
+                    f"(maximum fractional-coordinate error {max_error:.3e})"
+                )
 
     def __resolve_slip_length(self, slip_length, relax_a, relax_b, relax_c):
         if isinstance(slip_length, (int, float)):
@@ -394,8 +622,15 @@ class GammaSurface(Property):
             primitive=False,
         )
         slabs_pmg = slab_gen.get_slabs(ftol=0.001)
-        slab = [s for s in slabs_pmg if s.miller_index == plane_miller][0]
-        if trans_matrix.any():
+        matching_slabs = [
+            slab for slab in slabs_pmg if slab.miller_index == plane_miller
+        ]
+        if not matching_slabs:
+            raise RuntimeError(
+                f"Cannot generate a gamma_surface slab for Miller plane {plane_miller}"
+            )
+        slab = matching_slabs[0]
+        if trans_matrix is not None and np.asarray(trans_matrix).any():
             reoriented_lattice_vectors = [trans_matrix.dot(v) for v in slab.lattice.matrix]
             slab = Structure(
                 lattice=np.matrix(reoriented_lattice_vectors),
@@ -476,6 +711,8 @@ class GammaSurface(Property):
         )
         with open(inLammps, "r") as fin1:
             contents = fin1.readlines()
+            lower_id = None
+            upper_id = None
             for ii in range(len(contents)):
                 upper = contents[ii].split()[:3] == ["variable", "N", "equal"]
                 lower = re.search("min_style       cg", contents[ii])
@@ -483,6 +720,12 @@ class GammaSurface(Property):
                     lower_id = ii
                 elif upper:
                     upper_id = ii
+            if lower_id is None or upper_id is None or lower_id >= upper_id:
+                raise RuntimeError(
+                    "Gamma-surface add_fix was requested, but in.lammps does not "
+                    "contain a compatible minimization block with 'min_style cg' "
+                    "and 'variable N equal' markers"
+                )
             del contents[lower_id + 1 : upper_id - 1]
             contents.insert(lower_id + 1, add_fix_str)
         with open(inLammps, "w") as fin2:
@@ -517,13 +760,29 @@ class GammaSurface(Property):
 
         if not self.reprod:
             ptr_data += (
-                "No_task: \tFrac_X\tFrac_Y\tDisp_X(\\AA)\tDisp_Y(\\AA)\t"
+                "No_task: \tFrac_X\tFrac_Y\tPath_X(\\AA)\tPath_Y(\\AA)\t"
+                "Cart_X(\\AA)\tCart_Y(\\AA)\tCart_Z(\\AA)\t"
                 "Stacking_Fault_E(J/m^2)\tEpA(eV)\tslab_equi_EpA(eV)\n"
             )
             all_tasks.sort()
             task_result_slab_equi = loadfn(os.path.join(all_tasks[0], "result_task.json"))
             slip_length_x = loadfn(os.path.join(all_tasks[0], "slip_length_x.json"))
             slip_length_y = loadfn(os.path.join(all_tasks[0], "slip_length_y.json"))
+            slip_vector_x_path = os.path.join(all_tasks[0], "slip_vector_x.json")
+            slip_vector_y_path = os.path.join(all_tasks[0], "slip_vector_y.json")
+            has_periodic_basis = os.path.isfile(
+                slip_vector_x_path
+            ) and os.path.isfile(slip_vector_y_path)
+            slip_vector_x = (
+                np.asarray(loadfn(slip_vector_x_path), dtype=float)
+                if has_periodic_basis
+                else np.array([slip_length_x, 0.0, 0.0])
+            )
+            slip_vector_y = (
+                np.asarray(loadfn(slip_vector_y_path), dtype=float)
+                if has_periodic_basis
+                else np.array([0.0, slip_length_y, 0.0])
+            )
             equi_path = os.path.abspath(
                 os.path.join(os.path.dirname(output_file), "../relaxation/relax_task")
             )
@@ -536,7 +795,7 @@ class GammaSurface(Property):
                 epa = task_result["energies"][-1] / natoms
                 equi_epa_slab = task_result_slab_equi["energies"][-1] / natoms
                 area = np.linalg.norm(
-                    np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
+                    np.cross(task_result["cells"][-1][0], task_result["cells"][-1][1])
                 )
 
                 structure_dir = os.path.basename(ii)
@@ -550,28 +809,48 @@ class GammaSurface(Property):
                     * cf
                 )
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
-                disp_x = slip_length_x * frac_x
-                disp_y = slip_length_y * frac_y
+                path_x = slip_length_x * frac_x
+                path_y = slip_length_y * frac_y
+                disp_cart = np.asarray(
+                    disp_info.get(
+                        "disp_cart",
+                        slip_vector_x * frac_x + slip_vector_y * frac_y,
+                    ),
+                    dtype=float,
+                )
                 ptr_data += (
-                    "%-25s  %7.3f  %7.3f  %7.3f  %7.3f  %7.3f  %8.3f %8.3f\n"
+                    "%-25s  %7.3f  %7.3f  %7.3f  %7.3f  "
+                    "%7.3f  %7.3f  %7.3f  %7.3f  %8.3f %8.3f\n"
                     % (
                         str(miller_index) + "-" + structure_dir + ":",
                         frac_x,
                         frac_y,
-                        disp_x,
-                        disp_y,
+                        path_x,
+                        path_y,
+                        disp_cart[0],
+                        disp_cart[1],
+                        disp_cart[2],
                         sfe,
                         epa,
                         equi_epa_slab,
                     )
                 )
-                res_data[f"{frac_x:.6f},{frac_y:.6f}"] = [
-                    disp_x,
-                    disp_y,
+                result_entry = [
+                    path_x,
+                    path_y,
                     sfe,
                     epa,
                     equi_epa,
                 ]
+                if has_periodic_basis:
+                    result_entry.append(
+                        {
+                            "disp_cart": disp_cart.tolist(),
+                            "slip_vector_x": slip_vector_x.tolist(),
+                            "slip_vector_y": slip_vector_y.tolist(),
+                        }
+                    )
+                res_data[f"{frac_x:.6f},{frac_y:.6f}"] = result_entry
 
         else:
             if "init_data_path" not in self.parameter:

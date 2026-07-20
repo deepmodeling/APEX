@@ -90,12 +90,98 @@ class TestPhonon(unittest.TestCase):
                 "phonopy -d --dim='2 2 2' -c POSCAR",
             )
 
+    def test_sorted_displacement_files_restores_phonopy_order(self):
+        with patch(
+            "apex.core.property.Phonon.glob.glob",
+            return_value=["POSCAR-003", "POSCAR-002", "POSCAR-001"],
+        ):
+            self.assertEqual(
+                Phonon.sorted_displacement_files("POSCAR-0*"),
+                ["POSCAR-001", "POSCAR-002", "POSCAR-003"],
+            )
+
     def test_phonopy_writefc_commands_collapse_for_phonopy_2(self):
         with patch("apex.core.property.Phonon.shutil.which", return_value=None):
             self.assertEqual(
                 Phonon.phonopy_writefc_commands("phonopy_disp.yaml --writefc"),
                 ["phonopy phonopy_disp.yaml --writefc"],
             )
+
+    def test_phonopy_load_commands_prefer_yaml_config_and_keep_legacy_fallback(self):
+        work_dir = Path("output/phonopy_load_commands")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            Path("phonopy_disp.yaml").write_text("phonopy yaml\n")
+            with patch("apex.core.property.Phonon.shutil.which", return_value=None):
+                commands = Phonon.phonopy_load_commands(
+                    supercell_size=[2, 2, 2],
+                    cell_file="POSCAR-unitcell",
+                )
+            self.assertEqual(commands[0], "phonopy phonopy_disp.yaml --config band.conf")
+            self.assertIn(
+                'phonopy --dim="2 2 2" -c POSCAR-unitcell band.conf',
+                commands,
+            )
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_phonopy_load_commands_can_create_yaml_before_v4_load(self):
+        work_dir = Path("output/phonopy_load_commands_no_yaml")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            with patch(
+                "apex.core.property.Phonon.shutil.which",
+                return_value="/usr/bin/phonopy-init",
+            ):
+                commands = Phonon.phonopy_load_commands(
+                    supercell_size=[2, 2, 2],
+                    cell_file="POSCAR",
+                )
+            self.assertEqual(
+                commands[0],
+                'phonopy-init -d --dim="2 2 2" -c POSCAR'
+                + " && phonopy phonopy_disp.yaml --config band.conf",
+            )
+            self.assertFalse(
+                any(command.startswith("phonopy --dim") for command in commands)
+            )
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_phonopy_writefc_load_commands_prefer_yaml_load_mode(self):
+        work_dir = Path("output/phonopy_writefc_load_commands")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        work_dir.mkdir(parents=True)
+        cwd = os.getcwd()
+        try:
+            os.chdir(work_dir)
+            Path("phonopy_disp.yaml").write_text("phonopy yaml\n")
+            with patch(
+                "apex.core.property.Phonon.shutil.which",
+                return_value="/usr/bin/phonopy-init",
+            ):
+                commands = Phonon.phonopy_writefc_load_commands(
+                    '--dim="2 2 2" -c POSCAR-unitcell --writefc'
+                )
+            self.assertEqual(commands[0], "phonopy phonopy_disp.yaml --writefc")
+            self.assertIn(
+                'phonopy-init --dim="2 2 2" -c POSCAR-unitcell --writefc',
+                commands,
+            )
+            self.assertFalse(
+                any(command.startswith("phonopy --dim") for command in commands)
+            )
+        finally:
+            os.chdir(cwd)
+            shutil.rmtree(work_dir, ignore_errors=True)
 
     def test_writefc_command_falls_back_to_phonopy(self):
         work_dir = Path("output/phonopy_writefc_fallback")
@@ -164,6 +250,45 @@ class TestPhonon(unittest.TestCase):
         finally:
             os.chdir(cwd)
             shutil.rmtree(work_dir, ignore_errors=True)
+
+    def test_run_first_success_reports_missing_required_output_and_commands(self):
+        with patch(
+            "apex.core.property.Phonon.subprocess.check_call",
+            side_effect=subprocess.CalledProcessError(2, "phonopy load"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "mesh.yaml was not created.*phonopy load",
+            ):
+                Phonon.run_first_success(
+                    ["phonopy load"],
+                    required_file="mesh.yaml",
+                )
+
+    def test_primitive_axes_render_consistently_for_phonolammps(self):
+        self.assertEqual(Phonon.primitive_axes_config_value("P"), "P")
+        self.assertEqual(
+            Phonon.primitive_axes_phonolammps_argument("P"),
+            "-pa 1 0 0 0 1 0 0 0 1",
+        )
+        self.assertIsNone(Phonon.primitive_axes_config_value("AUTO"))
+        self.assertEqual(
+            Phonon.primitive_axes_phonolammps_argument("AUTO"),
+            "",
+        )
+        axes = "0 1/2 1/2 1/2 0 1/2 1/2 1/2 0"
+        self.assertEqual(
+            Phonon.primitive_axes_phonolammps_argument(axes),
+            "-pa 0.0 0.5 0.5 0.5 0.0 0.5 0.5 0.5 0.0",
+        )
+
+    def test_phonolammps_command_includes_matching_primitive_axes(self):
+        phonon = Phonon({"type": "phonon", "supercell_size": [2, 2, 2]})
+        self.assertEqual(
+            phonon._build_phonolammps_run_command(),
+            "phonolammps in.lammps -c POSCAR --dim 2 2 2 "
+            "-pa 1 0 0 0 1 0 0 0 1",
+        )
 
     def test_write_band_dat_accepts_nonzero_exit_with_output(self):
         work_dir = Path("output/phonopy_bandplot_nonzero")
@@ -340,7 +465,7 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"):
+            elif command in Phonon.phonopy_load_commands():
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -390,7 +515,10 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command == Phonon.phonopy_setup_command("--fc vasprun.xml"):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command == Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'):
+            elif command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            ):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -399,7 +527,11 @@ class TestPhonon(unittest.TestCase):
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("--fc vasprun.xml"))
-            self.assertEqual(calls[1], Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'))
+            self.assertEqual(
+                calls[1],
+                Phonon.phonopy_setup_command('-d --dim="2 2 2" -c POSCAR-unitcell')
+                + " && phonopy phonopy_disp.yaml --config band.conf",
+            )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -420,7 +552,10 @@ class TestPhonon(unittest.TestCase):
             calls.append(command)
             if command == Phonon.phonopy_setup_command("-f task.0*/vasprun.xml"):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'):
+            elif command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            ):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -432,7 +567,7 @@ class TestPhonon(unittest.TestCase):
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
             self.assertEqual(calls[0], Phonon.phonopy_setup_command("-f task.0*/vasprun.xml"))
-            self.assertEqual(calls[1], Phonon.phonopy_command('--dim="2 2 2" -c POSCAR-unitcell band.conf'))
+            self.assertEqual(calls[1], Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"))
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -470,7 +605,10 @@ class TestPhonon(unittest.TestCase):
         def fake_check_call(command, shell):
             self.assertTrue(shell)
             calls.append(command)
-            if command == Phonon.phonopy_command('--dim="2 2 2" -c POSCAR band.conf'):
+            if command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR",
+            ):
                 Path("band.yaml").write_text("phonon: []\n")
 
         try:
@@ -478,7 +616,13 @@ class TestPhonon(unittest.TestCase):
             with patch("apex.core.property.Phonon.subprocess.check_call", side_effect=fake_check_call), \
                     patch.object(Phonon, "write_band_dat", side_effect=self._write_band_dat_for_compute):
                 phonon._compute_lower(str(work_dir / "result.json"), [str(task_dir)], [])
-            self.assertEqual(calls, [Phonon.phonopy_command('--dim="2 2 2" -c POSCAR band.conf')])
+            self.assertEqual(
+                calls,
+                [
+                    Phonon.phonopy_setup_command('-d --dim="2 2 2" -c POSCAR')
+                    + " && phonopy phonopy_disp.yaml --config band.conf"
+                ],
+            )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 

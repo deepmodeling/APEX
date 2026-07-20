@@ -9,9 +9,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 from monty.serialization import dumpfn, loadfn
+from pymatgen.core import Lattice, Structure
 
 from apex.core.calculator.Lammps import Lammps
 from apex.core.property.GammaSurface import GammaSurface
+from apex.reporter.property_report import GammaSurfaceReport
+from apex.utils import handle_prop_suffix
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
@@ -65,6 +68,12 @@ class TestGammaSurface(unittest.TestCase):
             os.path.join(self.source_path, "CONTCAR_Mo_bcc"),
             os.path.join(self.equi_path, "CONTCAR"),
         )
+        with self.assertRaisesRegex(RuntimeError, "requires relaxation"):
+            self.gamma_surface.make_confs(self.target_path, self.equi_path)
+        dumpfn(
+            {"energies": [-1.0], "atom_numbs": [1]},
+            os.path.join(self.equi_path, "result.json"),
+        )
         task_list = self.gamma_surface.make_confs(self.target_path, self.equi_path)
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
         self.assertEqual(len(dfm_dirs), (self.gamma_surface.n_steps_x + 1) * (self.gamma_surface.n_steps_y + 1))
@@ -76,6 +85,8 @@ class TestGammaSurface(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(ii, "miller.json")))
             self.assertTrue(os.path.isfile(os.path.join(ii, "displacement.json")))
             disp = loadfn(os.path.join(ii, "displacement.json"))
+            self.assertEqual(len(disp["disp_cart"]), 3)
+            self.assertFalse(os.path.exists(os.path.join(ii, "slip_vector_x.json")))
             pairs.add((disp["frac_x"], disp["frac_y"]))
 
         self.assertIn((0.0, 0.0), pairs)
@@ -252,6 +263,115 @@ def test_gamma_surface_resolve_slip_length_numeric_vector_and_invalid():
         resolve("bad", 3.0, 4.0, 5.0)
 
 
+def test_gamma_surface_closed_loop_is_opt_in():
+    legacy = GammaSurface({"type": "gamma_surface"})
+    closed = GammaSurface({"type": "gamma_surface", "closed_loop": True})
+
+    assert legacy.closed_loop is False
+    assert legacy.task_param()["closed_loop"] is False
+    assert closed.closed_loop is True
+    with pytest.raises(ValueError, match="must be a boolean"):
+        GammaSurface({"type": "gamma_surface", "closed_loop": "true"})
+
+
+def test_gamma_surface_finds_and_validates_oblique_periodic_vectors():
+    slab = Structure(
+        lattice=Lattice(
+            [
+                [0.02, 10.0, 0.0],
+                [-5.0, 5.0, 0.0],
+                [0.0, 0.0, 20.0],
+            ]
+        ),
+        species=["Al", "Mo"],
+        coords=[[0.2, 0.3, 0.25], [0.7, 0.8, 0.75]],
+    )
+    find_vector = GammaSurface._GammaSurface__find_periodic_slip_vector
+    find_independent = (
+        GammaSurface._GammaSurface__find_independent_periodic_slip_vector
+    )
+    validate = GammaSurface._GammaSurface__validate_closed_loop
+
+    vector_x = find_vector(slab, axis=0)
+    vector_y = find_independent(slab, vector_x)
+
+    np.testing.assert_allclose(
+        vector_x, slab.lattice.matrix[0] - 2 * slab.lattice.matrix[1]
+    )
+    np.testing.assert_allclose(vector_y, slab.lattice.matrix[1])
+    validate(slab, vector_x, vector_y)
+
+
+def test_gamma_surface_closed_loop_generates_periodic_corner_tasks(tmp_path):
+    root = Path(__file__).resolve().parent
+    equi_path = tmp_path / "relaxation" / "relax_task"
+    work_path = tmp_path / "gamma_surface_00"
+    equi_path.mkdir(parents=True)
+    shutil.copy(root / "equi/vasp/CONTCAR_Mo_bcc", equi_path / "CONTCAR")
+    dumpfn({"energies": [-1.0], "atom_numbs": [1]}, equi_path / "result.json")
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "supercell_size": [1, 1, 4],
+            "closed_loop": True,
+            "n_steps_x": 1,
+            "n_steps_y": 1,
+        }
+    )
+
+    tasks = prop.make_confs(str(work_path), str(equi_path))
+    assert len(tasks) == 4
+    structures = {}
+    for task in tasks:
+        disp = loadfn(Path(task) / "displacement.json")
+        structures[(disp["frac_x"], disp["frac_y"])] = Structure.from_file(
+            Path(task) / "POSCAR"
+        )
+        assert (Path(task) / "slip_vector_x.json").is_file()
+        assert (Path(task) / "slip_vector_y.json").is_file()
+
+    reference = structures[(0.0, 0.0)]
+    for corner_key in ((1.0, 0.0), (0.0, 1.0), (1.0, 1.0)):
+        corner = structures[corner_key]
+        delta = corner.frac_coords - reference.frac_coords
+        delta -= np.rint(delta)
+        np.testing.assert_allclose(delta, 0.0, atol=1e-8)
+
+
+def test_gamma_surface_rejects_invalid_steps_and_mixed_closed_loop(tmp_path):
+    equi_path = tmp_path / "relax"
+    equi_path.mkdir()
+    Structure(
+        Lattice.cubic(3.5), ["Al"], [[0.0, 0.0, 0.0]]
+    ).to(equi_path / "CONTCAR", "POSCAR")
+    dumpfn({"energies": [-1.0], "atom_numbs": [1]}, equi_path / "result.json")
+
+    invalid_steps = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "n_steps_x": 0,
+        }
+    )
+    with pytest.raises(RuntimeError, match="positive integers"):
+        invalid_steps.make_confs(str(tmp_path / "steps"), str(equi_path))
+
+    mixed = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "closed_loop": True,
+            "slip_length": 1,
+        }
+    )
+    with pytest.raises(RuntimeError, match="closed_loop=true"):
+        mixed.make_confs(str(tmp_path / "mixed"), str(equi_path))
+
+
 def test_gamma_surface_post_process_injects_lammps_setforce(tmp_path):
     task = tmp_path / "task.000000"
     task.mkdir()
@@ -276,6 +396,43 @@ def test_gamma_surface_post_process_injects_lammps_setforce(tmp_path):
 
     text = in_lammps.read_text()
     assert "fix             1 all setforce 0 NULL 0" in text
+
+
+def test_gamma_surface_lammps_missing_markers_and_static_behavior(tmp_path):
+    task = tmp_path / "task.000000"
+    task.mkdir()
+    (task / "in.lammps").write_text("clear\nrun 0\n")
+    relaxation = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+        },
+        {"type": "lammps"},
+    )
+    with pytest.raises(RuntimeError, match="compatible minimization block"):
+        relaxation.post_process([str(task)])
+
+    static = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "cal_type": "static",
+        },
+        {"type": "lammps"},
+    )
+    assert static.add_fix is None
+    static.post_process([str(task)])
+
+    with pytest.raises(RuntimeError, match="only valid for relaxation"):
+        GammaSurface(
+            {
+                "type": "gamma_surface",
+                "cal_type": "static",
+                "add_fix": ["true", "true", "false"],
+            }
+        )
 
 
 def test_gamma_surface_compute_lower_with_synthetic_results(tmp_path):
@@ -319,6 +476,145 @@ def test_gamma_surface_compute_lower_with_synthetic_results(tmp_path):
     assert (prop_dir / "result.json").is_file()
 
 
+def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(tmp_path):
+    prop_dir = tmp_path / "conf" / "gamma_surface_00"
+    task = prop_dir / "task.000000"
+    equi_dir = tmp_path / "conf" / "relaxation" / "relax_task"
+    task.mkdir(parents=True)
+    equi_dir.mkdir(parents=True)
+
+    cell = np.eye(3).tolist()
+    dumpfn({"energies": [-2.0], "atom_numbs": [2]}, equi_dir / "result.json")
+    dumpfn(
+        {"energies": [-2.0], "atom_numbs": [2], "cells": [cell]},
+        task / "result_task.json",
+    )
+    dumpfn([0, 0, 1], task / "miller.json")
+    dumpfn(
+        {
+            "frac_x": 0.5,
+            "frac_y": 1.0,
+            "disp_cart": [2.25, 3.0, 0.5],
+        },
+        task / "displacement.json",
+    )
+    dumpfn(4.0, task / "slip_length_x.json")
+    dumpfn(3.1, task / "slip_length_y.json")
+    dumpfn([4.0, 0.0, 0.0], task / "slip_vector_x.json")
+    dumpfn([0.25, 3.0, 0.5], task / "slip_vector_y.json")
+
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+            "closed_loop": True,
+        }
+    )
+    result, _ = prop._compute_lower(
+        str(prop_dir / "result.json"), [str(task)], {}
+    )
+
+    entry = result["0.500000,1.000000"]
+    assert entry[:2] == [2.0, 3.1]
+    assert entry[5]["disp_cart"] == [2.25, 3.0, 0.5]
+    assert entry[5]["slip_vector_y"] == [0.25, 3.0, 0.5]
+
+
+def test_gamma_surface_refine_inherits_metadata_and_constraints(tmp_path):
+    init_dir = tmp_path / "gamma_surface_00"
+    init_task = init_dir / "task.000000"
+    output_dir = tmp_path / "gamma_surface_01"
+    init_task.mkdir(parents=True)
+    (init_task / "POSCAR").write_text("placeholder\n")
+    for name, value in {
+        "miller.json": [0, 0, 1],
+        "displacement.json": {
+            "frac_x": 0.0,
+            "frac_y": 0.0,
+            "disp_cart": [0.0, 0.0, 0.0],
+        },
+        "slip_length_x.json": 4.0,
+        "slip_length_y.json": 3.0,
+        "slip_vector_x.json": [4.0, 0.0, 0.0],
+        "slip_vector_y.json": [0.2, 3.0, 0.0],
+    }.items():
+        dumpfn(value, init_task / name)
+    dumpfn(
+        {
+            "type": "gamma_surface",
+            "add_fix": ["true", "true", "false"],
+            "closed_loop": True,
+        },
+        init_task / "task.json",
+    )
+
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "init_from_suffix": "00",
+            "output_suffix": "01",
+        }
+    )
+    tasks = prop.make_confs(str(output_dir), str(tmp_path), refine=True)
+
+    assert len(tasks) == 1
+    output_task = Path(tasks[0])
+    for metadata in (
+        "miller.json",
+        "displacement.json",
+        "slip_length_x.json",
+        "slip_length_y.json",
+        "slip_vector_x.json",
+        "slip_vector_y.json",
+    ):
+        assert (output_task / metadata).is_file()
+    assert prop.add_fix == ["true", "true", "false"]
+    assert prop.closed_loop is True
+
+
+def test_gamma_surface_report_uses_fractional_grid_and_cartesian_table():
+    result = {
+        "0.000000,0.000000": [
+            0.0,
+            0.0,
+            0.0,
+            -1.0,
+            -1.0,
+            {"disp_cart": [0.0, 0.0, 0.0]},
+        ],
+        "1.000000,1.000000": [
+            4.0,
+            3.1,
+            0.2,
+            -0.9,
+            -1.0,
+            {"disp_cart": [4.25, 3.0, 0.5]},
+        ],
+    }
+
+    traces, layout = GammaSurfaceReport.plotly_graph(result, "closed")
+    assert list(traces[0].x) == [0.0, 1.0]
+    assert layout.xaxis.title.text == "Slip Fraction X"
+    _, dataframe = GammaSurfaceReport.dash_table(result)
+    assert list(dataframe["Cart_x (A)"]) == ["0.000", "4.250"]
+    assert list(dataframe["Cart_z (A)"]) == ["0.000", "0.500"]
+
+
+def test_handle_prop_suffix_requires_both_refine_suffixes():
+    assert handle_prop_suffix({"type": "gamma_surface", "output_suffix": "01"}) == (
+        False,
+        "00",
+    )
+    assert handle_prop_suffix(
+        {
+            "type": "gamma_surface",
+            "init_from_suffix": "00",
+            "output_suffix": "01",
+        }
+    ) == (True, "01")
+
+
 class TestGammaSurfaceCoverage(unittest.TestCase):
     def test_gamma_surface_reproduce_defaults_to_static_calculation(self):
         test_gamma_surface_reproduce_defaults_to_static_calculation()
@@ -338,13 +634,47 @@ class TestGammaSurfaceCoverage(unittest.TestCase):
     def test_gamma_surface_resolve_slip_length_numeric_vector_and_invalid(self):
         test_gamma_surface_resolve_slip_length_numeric_vector_and_invalid()
 
+    def test_gamma_surface_closed_loop_is_opt_in(self):
+        test_gamma_surface_closed_loop_is_opt_in()
+
+    def test_gamma_surface_finds_and_validates_oblique_periodic_vectors(self):
+        test_gamma_surface_finds_and_validates_oblique_periodic_vectors()
+
+    def test_gamma_surface_closed_loop_generates_periodic_corner_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_closed_loop_generates_periodic_corner_tasks(Path(tmp))
+
+    def test_gamma_surface_rejects_invalid_steps_and_mixed_closed_loop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_rejects_invalid_steps_and_mixed_closed_loop(Path(tmp))
+
     def test_gamma_surface_post_process_injects_lammps_setforce(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_gamma_surface_post_process_injects_lammps_setforce(Path(tmp))
 
+    def test_gamma_surface_lammps_missing_markers_and_static_behavior(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_lammps_missing_markers_and_static_behavior(Path(tmp))
+
     def test_gamma_surface_compute_lower_with_synthetic_results(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_gamma_surface_compute_lower_with_synthetic_results(Path(tmp))
+
+    def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(
+                Path(tmp)
+            )
+
+    def test_gamma_surface_refine_inherits_metadata_and_constraints(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_refine_inherits_metadata_and_constraints(Path(tmp))
+
+    def test_gamma_surface_report_uses_fractional_grid_and_cartesian_table(self):
+        test_gamma_surface_report_uses_fractional_grid_and_cartesian_table()
+
+    def test_handle_prop_suffix_requires_both_refine_suffixes(self):
+        test_handle_prop_suffix_requires_both_refine_suffixes()
 
 
 if __name__ == "__main__":

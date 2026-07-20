@@ -45,6 +45,10 @@ def valid_gruneisen_params(**overrides):
         ({"volume_strains": [-0.02, 0.0, 0.0, 0.02]}, "duplicates"),
         ({"temperatures": [50, 10]}, "temperatures must be strictly increasing"),
         ({"volume_strains": [-0.02, 0.0, 0.03]}, "symmetric"),
+        ({"MESH": []}, "MESH"),
+        ({"MESH": [20, 20]}, "MESH"),
+        ({"MESH": [20, 0, 20]}, "MESH"),
+        ({"MESH": [20, True, 20]}, "MESH"),
     ],
 )
 def test_gruneisen_validation_rejects_low_cost_invalid_options(overrides, message):
@@ -67,6 +71,10 @@ class TestGruneisenValidationCoverage(unittest.TestCase):
             ({"volume_strains": [-0.02, 0.0, 0.0, 0.02]}, "duplicates"),
             ({"temperatures": [50, 10]}, "temperatures must be strictly increasing"),
             ({"volume_strains": [-0.02, 0.0, 0.03]}, "symmetric"),
+            ({"MESH": []}, "MESH"),
+            ({"MESH": [20, 20]}, "MESH"),
+            ({"MESH": [20, 0, 20]}, "MESH"),
+            ({"MESH": [20, True, 20]}, "MESH"),
         ]
         for overrides, message in cases:
             with self.subTest(overrides=overrides):
@@ -110,6 +118,7 @@ class TestGruneisen(unittest.TestCase):
         self.assertEqual(task_param["supercell_size"], [2, 2, 2])
         self.assertEqual(task_param["approach"], "linear")
         self.assertEqual(task_param["PRIMITIVE_AXES"], "P")
+        self.assertEqual(task_param["MESH"], [20, 20, 20])
 
     def test_validation_rejects_invalid_schema(self):
         with self.assertRaises(ValueError):
@@ -166,6 +175,10 @@ class TestGruneisen(unittest.TestCase):
             self.assertGreater(volume_data["volume"], 0.0)
             self.assertGreater(volume_data["volume_per_atom"], 0.0)
             self.assertTrue((Path(task_dir) / "band.conf").is_file())
+            self.assertIn(
+                "MESH = 20 20 20",
+                (Path(task_dir) / "band.conf").read_text(),
+            )
 
         self.assertTrue((self.target_path / "band_path.json").is_file())
 
@@ -266,6 +279,23 @@ class TestGruneisen(unittest.TestCase):
         self.assertIn("-c POSCAR-unitcell", calls[1])
         self.assertIn("--nomeshsym", calls[1])
 
+    def test_ensure_mesh_yaml_rejects_legacy_band_conf_without_mesh(self):
+        task_dir = self.work_root / "missing_mesh" / "task.000000"
+        task_dir.mkdir(parents=True)
+        (task_dir / "FORCE_CONSTANTS").write_text("fake force constants\n")
+        (task_dir / "band.conf").write_text("BAND = 0 0 0  0.5 0 0\n")
+        (task_dir / "POSCAR").write_text(self.source_path.read_text())
+
+        gruneisen = Gruneisen(
+            valid_gruneisen_params(),
+            inter_param={"type": "deepmd"},
+        )
+        with self.assertRaisesRegex(
+            ValueError,
+            r"does not define MESH.*MESH=\[20, 20, 20\]",
+        ):
+            gruneisen._ensure_mesh_yaml(str(task_dir))
+
     def test_sign_only_compute_lower_from_vasp_displacement_manifest(self):
         gruneisen = Gruneisen(
             {
@@ -286,9 +316,14 @@ class TestGruneisen(unittest.TestCase):
             calls.append((Path.cwd().name, command))
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command.startswith(Phonon.phonopy_setup_command("--dim=")) and "--writefc" in command:
+            elif command in Phonon.phonopy_writefc_load_commands(
+                '--dim="2 2 2" -c POSCAR-unitcell --writefc'
+            ):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command.startswith(Phonon.phonopy_command("--dim=")):
+            elif command in Phonon.phonopy_load_commands(
+                supercell_size=[2, 2, 2],
+                cell_file="POSCAR-unitcell",
+            ):
                 strain = loadfn("volume.json")["strain"]
                 if strain < 0:
                     frequencies = [4.2, 8.4]
@@ -406,9 +441,9 @@ class TestGruneisen(unittest.TestCase):
             calls.append((Path.cwd().name, command))
             if command.startswith(Phonon.phonopy_setup_command("-f")):
                 Path("FORCE_SETS").write_text("fake force sets\n")
-            elif command == Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc"):
+            elif command in Phonon.phonopy_writefc_load_commands("phonopy_disp.yaml --writefc"):
                 Path("FORCE_CONSTANTS").write_text("fake force constants\n")
-            elif command == Phonon.phonopy_command("phonopy_disp.yaml --config band.conf"):
+            elif command in Phonon.phonopy_load_commands():
                 strain = loadfn("volume.json")["strain"]
                 if strain < 0:
                     frequencies = [4.2, 8.4]
@@ -455,12 +490,16 @@ class TestGruneisen(unittest.TestCase):
             len([
                 cmd
                 for _, cmd in calls
-                if cmd == Phonon.phonopy_setup_command("phonopy_disp.yaml --writefc")
+                if cmd == Phonon.phonopy_command("phonopy_disp.yaml --writefc")
             ]),
             3,
         )
         self.assertEqual(
-            len([cmd for _, cmd in calls if cmd == Phonon.phonopy_command("phonopy_disp.yaml --config band.conf")]),
+            len([
+                cmd
+                for _, cmd in calls
+                if cmd == Phonon.phonopy_command("phonopy_disp.yaml --config band.conf")
+            ]),
             3,
         )
         self.assertFalse(any(cmd == "phonopy phonopy_disp.yaml --config band.conf --abacus" for _, cmd in calls))
@@ -507,6 +546,7 @@ class TestGruneisen(unittest.TestCase):
         self.assertIn("/root/.dp1s/bin/lmp -in in.relax.lammps", run_script)
         self.assertIn("python3 convert_relax_dump_to_poscar.py dump.relax POSCAR.relaxed type_map.json", run_script)
         self.assertIn("phonolammps in.lammps -c POSCAR --dim 2 2 2", run_script)
+        self.assertIn("-pa 1 0 0 0 1 0 0 0 1", run_script)
         self.assertIn("cp POSCAR.relaxed POSCAR", run_script)
 
     def test_lammps_backward_files_for_gruneisen(self):
