@@ -310,7 +310,6 @@ class TestABACUS(unittest.TestCase):
         pwd = os.getcwd()
         target_path_0 = "confs/fcc-Al/eos_00"
         target_path_2 = "confs/fcc-Al/eos_02"
-        path_to_work = os.path.abspath(target_path_0)
 
         make_property(self.jdata["structures"], self.jdata["interaction"], [property])
         dfm_dirs_0 = glob.glob(os.path.join(target_path_0, "task.*"))
@@ -336,7 +335,9 @@ class TestABACUS(unittest.TestCase):
         make_property(
             self.jdata["structures"], self.jdata["interaction"], new_prop_list
         )
-        self.assertTrue(os.path.isdir(path_to_work.replace("00", "02")))
+        # Prefer relative target path: abspath(...).replace("00","02") breaks when
+        # the workspace path itself contains "00" (e.g. /personal/00_APEX/...).
+        self.assertTrue(os.path.isdir(target_path_2))
         os.chdir(pwd)
         dfm_dirs_2 = glob.glob(os.path.join(target_path_2, "task.*"))
         self.assertEqual(len(dfm_dirs_2), len(dfm_dirs_0))
