@@ -1,0 +1,36 @@
+# Local pre-commit checks (no remote hook repos; works behind restricted proxies).
+# Install once:
+#   pip install pre-commit && pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: check-merge-conflict
+        name: check merge conflict markers
+        entry: python3 -c
+        args:
+          - |
+            import pathlib, re, sys
+            pat = re.compile(r"^(<<<<<<< |>>>>>>> )")
+            bad = False
+            for raw in sys.argv[1:]:
+                path = pathlib.Path(raw)
+                if not path.is_file():
+                    continue
+                try:
+                    text = path.read_text(encoding="utf-8", errors="ignore")
+                except Exception:
+                    continue
+                for i, line in enumerate(text.splitlines(), 1):
+                    if pat.match(line):
+                        print(f"{path}:{i}: merge conflict marker")
+                        bad = True
+            raise SystemExit(1 if bad else 0)
+        language: system
+        types: [text]
+
+      - id: apex-unit-smoke
+        name: APEX unit smoke (gamma + ticket + failed-result)
+        entry: bash -c 'cd tests && python3 -m unittest -v test_gamma.TestGamma.test_compute_lower test_skill_scripts.TestGenerateConfigHelpers.test_get_bohrium_ticket_success test_ops.TestTaskStatusHelpers.test_is_failed_task_result_accepts_dict_and_mapping_like'
+        language: system
+        pass_filenames: false
+        types: [python]

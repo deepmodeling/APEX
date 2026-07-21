@@ -35,6 +35,7 @@ from apex.task_failure import (
     load_and_classify_task_status,
 )
 from apex.utils import apex_task_succeeded, all_apex_task_status_succeeded
+from apex.core.property.Property import is_failed_task_result
 try:
     from context import write_poscar
 except ModuleNotFoundError:
@@ -45,6 +46,20 @@ __package__ = "tests"
 
 
 class TestTaskStatusHelpers(unittest.TestCase):
+    def test_is_failed_task_result_accepts_dict_and_mapping_like(self):
+        self.assertTrue(is_failed_task_result(None))
+        self.assertTrue(is_failed_task_result({"failed": True, "energies": [1.0]}))
+        self.assertTrue(is_failed_task_result({"atom_numbs": [1]}))
+        self.assertFalse(is_failed_task_result({"energies": [-1.0], "atom_numbs": [1]}))
+
+        class MappingLike:
+            def __getitem__(self, key):
+                if key == "energies":
+                    return [-1.0]
+                raise KeyError(key)
+
+        self.assertFalse(is_failed_task_result(MappingLike()))
+
     def test_task_failure_helpers_cover_error_branches(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             task_dir = Path(tmpdir)

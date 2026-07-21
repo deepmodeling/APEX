@@ -11,13 +11,20 @@ upload_packages.append(__file__)
 
 
 def is_failed_task_result(result) -> bool:
-    """Return True when a task result cannot be used for property aggregation."""
-    return (
-        result is None
-        or not isinstance(result, dict)
-        or result.get("failed") is True
-        or "energies" not in result
-    )
+    """Return True when a task result cannot be used for property aggregation.
+
+    Accepts plain dicts and mapping-like objects such as dpdata LabeledSystem
+    (fixture ``result_task.json`` files often load as the latter).
+    """
+    if result is None:
+        return True
+    if isinstance(result, dict) and result.get("failed") is True:
+        return True
+    try:
+        energies = result["energies"]
+    except Exception:
+        return True
+    return energies is None
 
 
 def _task_marked_failed(task_dir: str) -> bool:
