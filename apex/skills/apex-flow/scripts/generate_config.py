@@ -47,6 +47,7 @@ from urllib.error import URLError, HTTPError
 # =============================================================================
 
 TICKET_API_URL = "https://openapi.dp.tech/openapi/v1/ticket/get"
+TICKET_EXPIRE_SECONDS = 604800  # 7 days; default ticket validity for APEX workflows
 DFLOW_HOST = "https://workflows.deepmodeling.com"
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
 LAMMPS_IMAGE = (
@@ -174,6 +175,76 @@ SCASS_TYPES = {
 }
 
 
+# =============================================================================
+# Adaptive KSPACING based on system type and atom count
+# =============================================================================
+# Rules:
+#   - Bulk crystal: denser k-mesh for small unit cells, sparser for supercells
+#   - Surface/slab: moderate k-mesh (vacuum direction handled by APEX)
+#   - Amorphous/liquid: low k-point requirement (no long-range periodicity)
+# Always use KGAMMA = .TRUE.
+#
+# Users can override by providing explicit kspacing in --incar or cal_setting.
+
+def classify_system(structure) -> str:
+    """Classify a pymatgen Structure as 'bulk', 'surface', or 'amorphous'.
+
+    Heuristic:
+      - If any lattice vector > 15 Å and the cell is highly anisotropic
+        (max/min ratio > 2.5), treat as surface/slab.
+      - Otherwise treat as bulk crystal.
+      - 'amorphous' must be explicitly requested by the user (not auto-detected).
+    """
+    lengths = sorted(structure.lattice.abc)
+    ratio = lengths[-1] / max(lengths[0], 0.1)
+    if lengths[-1] > 15.0 and ratio > 2.5:
+        return "surface"
+    return "bulk"
+
+
+def adaptive_kspacing(structure, system_type: str = None) -> float:
+    """Determine KSPACING based on system type and atom count.
+
+    Args:
+        structure: pymatgen Structure object
+        system_type: 'bulk', 'surface', or 'amorphous' (auto-detected if None)
+
+    Returns:
+        Recommended KSPACING value (Å⁻¹ for VASP, 1/Bohr for ABACUS)
+
+    Rules (unified for all DFT properties):
+        bulk_crystal:
+          N <= 10:       0.16
+          10 < N <= 50:  0.20
+          50 < N <= 150: 0.25
+          N > 150:       0.30
+        surface_slab:
+          N <= 100:      0.22
+          N > 100:       0.28
+        amorphous_liquid:
+          N <= 100:      0.30
+          N > 100:       0.38
+    """
+    if system_type is None:
+        system_type = classify_system(structure)
+
+    n_atoms = len(structure)
+
+    if system_type == "amorphous":
+        return 0.30 if n_atoms <= 100 else 0.38
+    elif system_type == "surface":
+        return 0.22 if n_atoms <= 100 else 0.28
+    else:  # bulk (default)
+        if n_atoms <= 10:
+            return 0.16
+        elif n_atoms <= 50:
+            return 0.20
+        elif n_atoms <= 150:
+            return 0.25
+        else:
+            return 0.30
+
+
 def _nprocs_from_scass(scass_type: str, default: int = 16) -> int:
     """Extract CPU count from scass strings like ``c32_m128_cpu`` → 32."""
     if not scass_type:
@@ -218,7 +289,7 @@ ABACUS_INPUT_DEFAULTS = {
         "force_thr_ev": 0.02,
         "stress_thr": 1.0,
         "relax_nmax": 50,
-        "kspacing": 0.20,       # FAST: ~6x6x6 for typical metals (vs 0.10 → 12x12x12)
+        "kspacing": None,       # Auto-filled by adaptive_kspacing(structure)
     },
     "phonon_scf": {
         "calculation": "scf",
@@ -231,9 +302,26 @@ ABACUS_INPUT_DEFAULTS = {
         "mixing_type": "broyden",
         "mixing_beta": 0.7,
         "cal_force": 1,
-        "kspacing": 0.15,       # Slightly tighter for force accuracy
+        "kspacing": None,       # Auto-filled by adaptive_kspacing(structure)
     },
 }
+
+# Default VASP INCAR template (KSPACING auto-filled by adaptive_kspacing)
+VASP_INCAR_TEMPLATE = """\
+SYSTEM = APEX calculation
+PREC = Accurate
+ENCUT = 520
+EDIFF = 1E-6
+EDIFFG = -0.01
+IBRION = 2
+NSW = 200
+ISIF = 3
+ISMEAR = 1
+SIGMA = 0.1
+LREAL = Auto
+KSPACING = {kspacing}
+KGAMMA = .TRUE.
+"""
 
 # DFT-specific property defaults: smaller supercells, fewer points
 DFT_PROPERTY_OVERRIDES = {
@@ -264,18 +352,25 @@ DFT_PROPERTY_OVERRIDES = {
 # Ticket conversion
 # =============================================================================
 
-def get_bohrium_ticket(access_key: str) -> str:
+def get_bohrium_ticket(access_key: str, expire_seconds: int = TICKET_EXPIRE_SECONDS) -> str:
     """
     Convert a Bohrium access_key to a dflow ticket via the OpenAPI.
 
-    API: GET https://openapi.dp.tech/openapi/v1/ticket/get?accessKey=<KEY>
+    API: GET https://openapi.dp.tech/openapi/v1/ticket/get?accessKey=<KEY>&expireIn=<seconds>
     Header: x-app-key: (empty string)
     Response: {"code": 0, "data": {"ticket": "UUID-36-chars"}}
+
+    Args:
+        access_key: Bohrium access key from environment.
+        expire_seconds: Ticket validity in seconds. Default 604800 (7 days).
+            Must be called from sandbox where BOHRIUM_ACCESS_KEY is available.
+            The generated ticket is embedded in global.json for use by
+            containers that lack the access key.
 
     Returns the ticket string (UUID).
     Raises RuntimeError on failure.
     """
-    url = f"{TICKET_API_URL}?accessKey={access_key}"
+    url = f"{TICKET_API_URL}?accessKey={access_key}&expireIn={expire_seconds}"
     req = Request(url, method="GET")
     req.add_header("x-app-key", "")
 
