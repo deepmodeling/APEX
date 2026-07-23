@@ -47,7 +47,7 @@ from urllib.error import URLError, HTTPError
 # =============================================================================
 
 TICKET_API_URL = "https://openapi.dp.tech/openapi/v1/ticket/get"
-TICKET_EXPIRE_SECONDS = 604800  # 7 days; default ticket validity for APEX workflows
+TICKET_EXPIRE_HOURS = 168  # 7 days; API 'expiration' parameter unit is HOURS
 DFLOW_HOST = "https://workflows.deepmodeling.com"
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
 LAMMPS_IMAGE = (
@@ -352,17 +352,17 @@ DFT_PROPERTY_OVERRIDES = {
 # Ticket conversion
 # =============================================================================
 
-def get_bohrium_ticket(access_key: str, expire_seconds: int = TICKET_EXPIRE_SECONDS) -> str:
+def get_bohrium_ticket(access_key: str, expire_hours: int = TICKET_EXPIRE_HOURS) -> str:
     """
     Convert a Bohrium access_key to a dflow ticket via the OpenAPI.
 
-    API: GET https://openapi.dp.tech/openapi/v1/ticket/get?accessKey=<KEY>&expireIn=<seconds>
+    API: GET https://openapi.dp.tech/openapi/v1/ticket/get?accessKey=<KEY>&expiration=<hours>
     Header: x-app-key: (empty string)
     Response: {"code": 0, "data": {"ticket": "UUID-36-chars"}}
 
     Args:
         access_key: Bohrium access key from environment.
-        expire_seconds: Ticket validity in seconds. Default 604800 (7 days).
+        expire_hours: Ticket validity in HOURS. Default 168 (7 days).
             Must be called from sandbox where BOHRIUM_ACCESS_KEY is available.
             The generated ticket is embedded in global.json for use by
             containers that lack the access key.
@@ -370,7 +370,7 @@ def get_bohrium_ticket(access_key: str, expire_seconds: int = TICKET_EXPIRE_SECO
     Returns the ticket string (UUID).
     Raises RuntimeError on failure.
     """
-    url = f"{TICKET_API_URL}?accessKey={access_key}&expireIn={expire_seconds}"
+    url = f"{TICKET_API_URL}?accessKey={access_key}&expiration={expire_hours}"
     req = Request(url, method="GET")
     req.add_header("x-app-key", "")
 
