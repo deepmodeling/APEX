@@ -54,7 +54,7 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         request = mocked.call_args.args[0]
         self.assertIn("accessKey=secret", request.full_url)
         self.assertIn(
-            f"expireIn={self.gen.TICKET_EXPIRE_SECONDS}", request.full_url
+            f"expiration={self.gen.TICKET_EXPIRE_HOURS}", request.full_url
         )
 
     def test_get_bohrium_ticket_rejects_transport_and_api_errors(self):
