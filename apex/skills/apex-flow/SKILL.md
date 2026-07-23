@@ -113,9 +113,9 @@ Options to offer via AskQuestion:
   - First inspect the agent/local environment for `BOHRIUM_ACCESS_KEY`.
   - If it is missing, STOP and ask the user to provide/configure it. `generate_config.py` cannot generate a ticket without an access key.
   - If it exists, use `create` for a new job or `refresh-global` for an existing job; both convert the key to a fresh ticket and write it to `global.json`.
-  - **Ticket API**: `GET https://openapi.dp.tech/openapi/v1/ticket/get?accessKey=<KEY>&expireIn=<seconds>`
+  - **Ticket API**: `GET https://openapi.dp.tech/openapi/v1/ticket/get?accessKey=<KEY>&expiration=<hours>`
     - Header: `x-app-key: ""` (empty string)
-    - `expireIn` 单位为秒，默认值 `604800`（7 天）。`generate_config.py` 已内置此默认值。
+    - `expiration` 单位为**小时**，默认值 `168`（7 天）。`generate_config.py` 已内置此默认值。
     - 返回: `{"code": 0, "data": {"ticket": "UUID"}}`
   - Verify that `global.json` contains a non-empty `bohrium_config.ticket` before submission.
   - `run.sh` must only install/verify APEX and call `apex submit`. Do not add ticket API calls or depend on `BOHRIUM_ACCESS_KEY` inside the APEX container — 容器内没有此环境变量。
