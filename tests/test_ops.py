@@ -60,6 +60,31 @@ class TestTaskStatusHelpers(unittest.TestCase):
 
         self.assertFalse(is_failed_task_result(MappingLike()))
 
+        # Calculator compute() returns dpdata as_dict with nested data.energies
+        as_dict = {
+            "@module": "dpdata.system",
+            "@class": "LabeledSystem",
+            "data": {
+                "atom_numbs": [2],
+                "energies": {
+                    "@module": "numpy",
+                    "@class": "array",
+                    "dtype": "float64",
+                    "data": [-1.0],
+                },
+            },
+        }
+        self.assertFalse(is_failed_task_result(as_dict))
+        self.assertTrue(
+            is_failed_task_result(
+                {
+                    "@module": "dpdata.system",
+                    "@class": "LabeledSystem",
+                    "data": {"atom_numbs": [2]},
+                }
+            )
+        )
+
     def test_task_failure_helpers_cover_error_branches(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             task_dir = Path(tmpdir)
