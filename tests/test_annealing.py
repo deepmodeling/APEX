@@ -530,6 +530,7 @@ def test_annealing_vasp_coexistence_protocol(tmp_path):
         str(task), "annealing", prop.task_param()
     )
     assert "TEBEG = 900.0" in (task / "INCAR.equi").read_text()
+    assert (task / "INCAR").read_text() == (task / "INCAR.equi").read_text()
     assert "NSW = 10000" in (task / "INCAR.production").read_text()
     assert "NBLOCK = 5" in (task / "INCAR.production").read_text()
     command = (task / "run_command").read_text()

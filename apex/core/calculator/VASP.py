@@ -172,6 +172,10 @@ class VASP(Task):
             production["NSW"] = int(cal_setting["ave_step"])
             equi.write_file(os.path.join(output_dir, "INCAR.equi"))
             production.write_file(os.path.join(output_dir, "INCAR.production"))
+            # fpop.RunVasp validates the conventional four VASP inputs before
+            # executing run_command.  Keep the first-stage INCAR present even
+            # though run_command replaces it explicitly for every stage.
+            equi.write_file(os.path.join(output_dir, "INCAR"))
 
             kspacing = base.get("KSPACING")
             if kspacing is None:
@@ -282,6 +286,11 @@ class VASP(Task):
                 Incar.from_file(
                     os.path.join(output_dir, f"INCAR.{source}")
                 ).write_file(os.path.join(output_dir, f"INCAR.{alias}"))
+            # fpop.RunVasp requires INCAR during task staging.  The staged
+            # command still selects the appropriate INCAR.<stage> at runtime.
+            Incar.from_file(
+                os.path.join(output_dir, f"INCAR.{stages[0][0]}")
+            ).write_file(os.path.join(output_dir, "INCAR"))
 
             kspacing = base.get("KSPACING")
             if kspacing is None:

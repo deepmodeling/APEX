@@ -197,7 +197,10 @@ Direct
             ).make_input_file(tmp, "finite_t_latt", task_param)
             with open(os.path.join(tmp, "INCAR.equi")) as fp:
                 equi = fp.read()
+            with open(os.path.join(tmp, "INCAR")) as fp:
+                staged = fp.read()
             self.assertIn("MDALGO = 3", equi)
+            self.assertEqual(equi, staged)
             self.assertIn("ISIF = 3", equi)
             self.assertIn("POTIM = 1.0", equi)
             self.assertIn("LANGEVIN_GAMMA_L = 10.0", equi)
@@ -279,4 +282,3 @@ Direct
     def test_abacus_backend_is_rejected_early(self):
         with self.assertRaisesRegex(NotImplementedError, "does not support.*ABACUS"):
             FiniteTlatt({"type": "finite_t_latt"}, {"type": "abacus"})
-
