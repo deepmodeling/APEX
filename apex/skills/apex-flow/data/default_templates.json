@@ -34,9 +34,9 @@
         "gamma": {"lammps": true, "abacus": true, "vasp": true},
         "gamma_surface": {"lammps": true, "abacus": true, "vasp": true},
         "decohesive": {"lammps": true, "abacus": true, "vasp": true},
-        "finite_t_latt": {"lammps": true, "abacus": false, "vasp": false},
+        "finite_t_latt": {"lammps": true, "abacus": false, "vasp": true},
         "finite_t_elastic": {"lammps": true, "abacus": false, "vasp": false},
         "gruneisen": {"lammps": true, "abacus": true, "vasp": true},
-        "annealing": {"lammps": true, "abacus": false, "vasp": false}
+        "annealing": {"lammps": true, "abacus": false, "vasp": true}
     }
 }

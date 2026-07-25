@@ -1,4 +1,5 @@
 import os
+import shlex
 from pathlib import (
     Path,
 )
@@ -161,6 +162,12 @@ class SimplePropertySteps(Steps):
 
         # Step for property run
         if calculator in ['vasp', 'abacus']:
+            quoted_command = shlex.quote(run_command)
+            property_run_command = (
+                "if [ -f run_command ]; then "
+                f"APEX_RUN_COMMAND={quoted_command} bash run_command; "
+                f"else {run_command}; fi"
+            )
             run_fp = PythonOPTemplate(
                 run_op,
                 slices=Slices(
@@ -179,10 +186,9 @@ class SimplePropertySteps(Steps):
                 name="PropsVASP-Cal",
                 template=run_fp,
                 parameters={
-                    "run_image_config": {"command": run_command},
+                    "run_image_config": {"command": property_run_command},
                     "task_name": make.outputs.parameters["task_names"],
-                    "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR",
-                                        "vasprun.xml"]
+                    "backward_list": make.outputs.parameters["backward_list"],
                 },
                 artifacts={
                     "task_path": make.outputs.artifacts["task_paths"]
@@ -196,9 +202,9 @@ class SimplePropertySteps(Steps):
                 name="PropsABACUS-Cal",
                 template=run_fp,
                 parameters={
-                    "run_image_config": {"command": run_command},
+                    "run_image_config": {"command": property_run_command},
                     "task_name": make.outputs.parameters["task_names"],
-                    "backward_list": ["OUT.ABACUS", "log"],
+                    "backward_list": make.outputs.parameters["backward_list"],
                     "log_name": "log"
                 },
                 artifacts={

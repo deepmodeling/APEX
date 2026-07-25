@@ -1,4 +1,4 @@
-"""Lattice parameter vs temperature (LAMMPS npt + averaging). Only LAMMPS supported."""
+"""Lattice parameter versus temperature from NpT molecular dynamics."""
 
 import json
 import logging
@@ -7,7 +7,10 @@ import re
 from shutil import copyfile
 from typing import Dict, List, Tuple
 
+import numpy as np
 from monty.serialization import dumpfn
+from pymatgen.core.lattice import Lattice
+from pymatgen.core.structure import Structure
 
 from apex.core.property.Property import Property
 from apex.core.refine import make_refine
@@ -17,7 +20,7 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 DEFAULT_SUPERCELL = [2, 2, 2]
-DEFAULT_CAL_SETTING: Dict[str, int | List[int]] = {
+DEFAULT_CAL_SETTING: Dict[str, float | int | List[int]] = {
     "temperature": [200, 400, 600, 800],
     "equi_step": 80000,
     "N_every": 100,
@@ -31,20 +34,32 @@ DEFAULT_CAL_SETTING: Dict[str, int | List[int]] = {
 
 class FiniteTlatt(Property):
     """
-    Generate LAMMPS tasks to measure lattice parameters at finite temperatures
-    using NPT runs plus time-averaging.
+    Generate LAMMPS or VASP tasks to measure finite-temperature lattice
+    parameters using NpT runs plus production-trajectory statistics.
     """
 
     def __init__(self, parameter: Dict, inter_param: Dict | None = None):
+        self.inter_param = inter_param or {"type": "lammps"}
+        if self.inter_param.get("type") == "abacus":
+            raise NotImplementedError(
+                "finite_t_latt does not support the ABACUS backend; "
+                "use LAMMPS or VASP"
+            )
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
 
-        # Enforce LAMMPS-only workflow
-        if inter_param is not None and inter_param.get("type") in ["vasp", "abacus"]:
-            raise TypeError("FiniteTlatt supports only LAMMPS calculations.")
-
         parameter.setdefault("cal_setting", {})
-        for key, val in DEFAULT_CAL_SETTING.items():
+        default_cal_setting = dict(DEFAULT_CAL_SETTING)
+        if self.inter_param["type"] == "vasp":
+            default_cal_setting.update(
+                {
+                    "temperature": [300, 500, 700, 900, 1100, 1300, 1500],
+                    "equi_step": 5000,
+                    "ave_step": 10000,
+                    "timestep_fs": 1.0,
+                }
+            )
+        for key, val in default_cal_setting.items():
             parameter["cal_setting"].setdefault(key, val)
 
         if not self.reprod and not (
@@ -57,11 +72,12 @@ class FiniteTlatt(Property):
             self.init_from_suffix = parameter["init_from_suffix"]
             self.supercell_size = parameter.get("supercell_size", DEFAULT_SUPERCELL)
 
-        parameter["cal_type"] = "npt+ave/time"
+        # MD calculators dispatch on the property type.  "static" remains a
+        # valid fallback for calculators that inspect cal_type first and,
+        # unlike "relaxation", does not require relaxation-only settings.
+        parameter["cal_type"] = "static"
         self.cal_setting = parameter["cal_setting"]
         self.parameter = parameter
-        # only supports LAMMPS now
-        self.inter_param = inter_param or {"type": "lammps"}
 
     def make_confs(self, path_to_work: str, path_to_equi: str, refine: bool = False):
         path_to_work = os.path.abspath(path_to_work)
@@ -105,11 +121,20 @@ class FiniteTlatt(Property):
             )
         else:
             ptr_data += " Temperature(K)  a(A)  b(A)  c(A)\n"
+            statistics = {}
             for idx, task_dir in enumerate(all_tasks):
                 temp = self.cal_setting["temperature"][idx]
-                a, b, c = self._average_box(task_dir, self.supercell_size)
+                stats = self._cell_statistics(task_dir, self.supercell_size)
+                a, b, c = stats["lengths"]["mean"]
                 ptr_data += f"{temp:>10}:  {a:7.6f}  {b:7.6f}  {c:7.6f}\n"
                 res_data[str(temp)] = [a, b, c, temp]
+                statistics[str(temp)] = stats
+            # Preserve the historic temperature -> [a, b, c, T] mapping.
+            # Rich tensor/statistical data lives under a reserved companion key.
+            res_data["_metadata"] = {
+                "schema": "apex.finite_t_latt.statistics/v1",
+                "temperatures": statistics,
+            }
 
         with open(output_file, "w") as fp:
             json.dump(res_data, fp, indent=4)
@@ -149,64 +174,156 @@ class FiniteTlatt(Property):
         return task_list
 
     def _make_fresh_tasks(self, path_to_work: str, path_to_equi: str) -> List[str]:
-        if self.inter_param["type"] in ["vasp", "abacus"]:
-            raise TypeError("FiniteTlatt only supports LAMMPS calculation")
-
-        equi_contcar = os.path.join(path_to_equi, "CONTCAR")
-        if not os.path.exists(equi_contcar):
+        equi_structure = os.path.join(path_to_equi, "CONTCAR")
+        if not os.path.exists(equi_structure):
             raise RuntimeError("please do relaxation first")
 
         task_list: List[str] = []
         for idx, temp in enumerate(self.cal_setting["temperature"]):
             task_dir = os.path.join(path_to_work, f"task.{idx:06d}")
             os.makedirs(task_dir, exist_ok=True)
-            self._write_task(task_dir, equi_contcar, temp)
+            self._write_task(task_dir, equi_structure, temp)
             task_list.append(task_dir)
         return task_list
 
     def _symlink_variable(self, init_task: str, out_task: str):
         os.makedirs(out_task, exist_ok=True)
-        dst = os.path.join(out_task, "variable_FiniteTlatt.json")
-        if os.path.exists(dst):
+        if self.inter_param["type"] == "vasp":
+            return
+        src = os.path.join(init_task, "variable_FiniteTlatt.in")
+        dst = os.path.join(out_task, "variable_FiniteTlatt.in")
+        if os.path.lexists(dst):
             os.remove(dst)
-        os.symlink(
-            os.path.relpath(os.path.join(init_task, "variable_FiniteTlatt.json"), out_task),
-            dst,
-        )
+        os.symlink(os.path.relpath(src, out_task), dst)
 
-    def _write_task(self, task_dir: str, equi_contcar: str, temp: float):
+    def _write_task(self, task_dir: str, equi_structure: str, temp: float):
         os.chdir(task_dir)
         for fname in ["INCAR", "POTCAR", "POSCAR", "conf.lmp", "in.lammps", "STRU"]:
             if os.path.exists(fname):
                 os.remove(fname)
-        copyfile(equi_contcar, "POSCAR")
+        if self.inter_param["type"] == "vasp":
+            structure = Structure.from_file(equi_structure)
+            structure.make_supercell(self.supercell_size)
+            structure.to(filename="POSCAR")
+        else:
+            copyfile(equi_structure, "POSCAR")
 
         FiniteTlatt_task = {"temperature": temp, "supercell_size": self.supercell_size}
         dumpfn(FiniteTlatt_task, "FiniteTlatt.json", indent=4)
 
-        with open("variable_FiniteTlatt.in", "w") as fp:
-            fp.write(self._variable(temp))
+        if self.inter_param["type"] != "vasp":
+            with open("variable_FiniteTlatt.in", "w") as fp:
+                fp.write(self._variable(temp))
 
     def _average_box(self, task_dir: str, supercell_size: List[int]) -> Tuple[float, float, float]:
-        a_sum = b_sum = c_sum = count = 0
-        box_file = os.path.join(task_dir, "average_box.txt")
-        with open(box_file, "r") as fh:
-            for line in fh:
-                if line.startswith("#") or not line.strip():
-                    continue
-                parts = line.split()
-                if len(parts) == 4:
-                    _, v_lx, v_ly, v_lz = parts
-                    a_sum += float(v_lx)
-                    b_sum += float(v_ly)
-                    c_sum += float(v_lz)
-                    count += 1
+        stats = self._cell_statistics(task_dir, supercell_size)
+        return tuple(stats["lengths"]["mean"])
+
+    def _cell_statistics(self, task_dir: str, supercell_size: List[int]) -> Dict:
+        if self.inter_param["type"] == "vasp":
+            cells = self._vasp_cells(os.path.join(task_dir, "OUTCAR"))
+        else:
+            cells = []
+            box_file = os.path.join(task_dir, "average_box.txt")
+            with open(box_file, "r") as fh:
+                for line in fh:
+                    if line.startswith("#") or not line.strip():
+                        continue
+                    parts = line.split()
+                    if len(parts) == 4:
+                        cells.append(np.diag([float(value) for value in parts[1:]]))
+        return self._summarize_cells(cells, supercell_size)
+
+    @staticmethod
+    def _series_statistics(values):
+        array = np.asarray(values, dtype=float)
+        count = int(array.shape[0])
         if count == 0:
+            shape = list(array.shape[1:])
+            zero = np.zeros(shape, dtype=float).tolist()
+            return {
+                "mean": zero,
+                "std": zero,
+                "block_standard_error": zero,
+                "sample_count": 0,
+                "block_count": 0,
+            }
+        mean = np.mean(array, axis=0)
+        std = np.std(array, axis=0, ddof=1) if count > 1 else np.zeros_like(mean)
+        block_size = max(1, int(np.sqrt(count)))
+        block_count = count // block_size
+        if block_count > 1:
+            trimmed = array[: block_count * block_size]
+            block_means = trimmed.reshape(
+                (block_count, block_size) + array.shape[1:]
+            ).mean(axis=1)
+            block_error = np.std(block_means, axis=0, ddof=1) / np.sqrt(block_count)
+        else:
+            block_error = np.zeros_like(mean)
+        return {
+            "mean": np.asarray(mean).tolist(),
+            "std": np.asarray(std).tolist(),
+            "block_standard_error": np.asarray(block_error).tolist(),
+            "sample_count": count,
+            "block_count": block_count,
+        }
+
+    @classmethod
+    def _summarize_cells(cls, cells, supercell_size):
+        if not cells:
+            empty = cls._series_statistics(np.empty((0, 3)))
+            return {
+                "cell": cls._series_statistics(np.empty((0, 3, 3))),
+                "lengths": empty,
+                "angles": empty,
+                "volume": cls._series_statistics(np.empty((0,))),
+                "sample_count": 0,
+            }
+        scale = np.asarray(supercell_size, dtype=float)[:, None]
+        normalized = np.asarray(cells, dtype=float) / scale
+        lengths = np.linalg.norm(normalized, axis=2)
+        angles = np.asarray(
+            [Lattice(cell).angles for cell in normalized], dtype=float
+        )
+        volumes = np.abs(np.linalg.det(normalized))
+        return {
+            "cell": cls._series_statistics(normalized),
+            "lengths": cls._series_statistics(lengths),
+            "angles": cls._series_statistics(angles),
+            "volume": cls._series_statistics(volumes),
+            "sample_count": int(len(normalized)),
+        }
+
+    @staticmethod
+    def _mean_cell_lengths(cells, supercell_size):
+        if not cells:
             return 0.0, 0.0, 0.0
-        a = a_sum / count / supercell_size[0]
-        b = b_sum / count / supercell_size[1]
-        c = c_sum / count / supercell_size[2]
-        return a, b, c
+        lengths = np.asarray(
+            [[np.linalg.norm(vector) for vector in cell] for cell in cells],
+            dtype=float,
+        )
+        return tuple(
+            float(np.mean(lengths[:, axis]) / supercell_size[axis])
+            for axis in range(3)
+        )
+
+    @staticmethod
+    def _vasp_cells(outcar):
+        cells = []
+        with open(outcar, encoding="utf-8", errors="ignore") as fp:
+            lines = fp.readlines()
+        for idx, line in enumerate(lines):
+            if "direct lattice vectors" not in line.lower():
+                continue
+            try:
+                cell = [
+                    [float(value) for value in lines[idx + offset].split()[:3]]
+                    for offset in (1, 2, 3)
+                ]
+            except (IndexError, ValueError):
+                continue
+            cells.append(cell)
+        return cells
 
     def _variable(self, temp: float) -> str:
         return (

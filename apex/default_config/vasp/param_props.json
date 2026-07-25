@@ -68,6 +68,58 @@
         "n_steps_y":       20
 	},
         {
+         "type": "finite_t_latt",
+         "req_calc": false,
+         "supercell_size": [2, 2, 2],
+         "cal_setting": {
+           "temperature": [300, 500, 700, 900, 1100, 1300, 1500],
+           "equi_step": 5000,
+           "ave_step": 10000,
+           "timestep_fs": 1.0,
+           "pressure_kbar": 0.0,
+           "langevin_gamma": 10.0,
+           "langevin_gamma_l": 10.0,
+           "pmass": 1000.0
+         }
+        },
+        {
+         "type": "annealing",
+         "req_calc": false,
+         "protocol": "ramp_cool",
+         "supercell_size": [2, 2, 2],
+         "cal_setting": {
+           "start_temp": 300,
+           "target_temp": 900,
+           "end_temp": 300,
+           "equi_step": 100,
+           "ramp_step": 200,
+           "cool_step": 200,
+           "hold_step": 100,
+           "timestep_fs": 1.0,
+           "pressure_kbar": 0.0,
+           "langevin_gamma": 10.0,
+           "langevin_gamma_l": 10.0,
+           "pmass": 1000.0
+         }
+        },
+        {
+         "type": "annealing",
+         "suffix": "coexistence",
+         "req_calc": false,
+         "protocol": "coexistence",
+         "supercell_size": [2, 2, 2],
+         "cal_setting": {
+           "target_temp": 900,
+           "equi_step": 5000,
+           "production_step": 10000,
+           "timestep_fs": 1.0,
+           "pressure_kbar": 0.0,
+           "langevin_gamma": 10.0,
+           "langevin_gamma_l": 10.0,
+           "pmass": 1000.0
+         }
+        },
+        {
          "type":         "phonon",
 	 "req_calc": false,
 	 "suffix":       "linear",

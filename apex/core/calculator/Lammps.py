@@ -301,7 +301,24 @@ class Lammps(Task):
                 )
                 maxeval = cal_setting["maxeval"]
 
-            if cal_type == "relaxation":
+            if task_type == "finite_t_latt":
+                fc = lammps_utils.make_lammps_FiniteTlatt(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+            elif task_type in ["annealing", "Annealing"]:
+                # MD annealing schedule: equilibrate -> ramp -> hold -> cool
+                fc = lammps_utils.make_lammps_annealing(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+            elif cal_type == "relaxation":
                 relax_pos = cal_setting["relax_pos"]
                 relax_shape = cal_setting["relax_shape"]
                 relax_vol = cal_setting["relax_vol"]
@@ -402,25 +419,6 @@ class Lammps(Task):
                     self.model_param,
                     output_dir,
                 )
-            elif task_type in ["annealing", "Annealing"]:
-                # MD annealing schedule: equilibrate -> ramp -> hold -> cool
-                fc = lammps_utils.make_lammps_annealing(
-                    "conf.lmp",
-                    self.type_map,
-                    self.inter_func,
-                    self.model_param,
-                    cal_setting,
-                )
-
-            elif task_type == "finite_t_latt":
-                fc = lammps_utils.make_lammps_FiniteTlatt(
-                    "conf.lmp",
-                    self.type_map,
-                    self.inter_func,
-                    self.model_param,
-                    cal_setting,
-                )
-
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
 

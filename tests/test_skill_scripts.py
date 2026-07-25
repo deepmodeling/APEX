@@ -39,6 +39,54 @@ class _Response:
         return json.dumps(self.payload).encode()
 
 
+class TestFiniteTemperatureTemplates(unittest.TestCase):
+    def test_backend_truth_table_and_vasp_defaults(self):
+        skill_root = get_skill_root()
+        templates = json.loads(
+            (skill_root / "data" / "default_templates.json").read_text()
+        )
+        properties = templates["properties"]
+        self.assertEqual(
+            {"lammps": True, "abacus": False, "vasp": True},
+            properties["finite_t_latt"],
+        )
+        self.assertEqual(
+            {"lammps": True, "abacus": False, "vasp": True},
+            properties["annealing"],
+        )
+        self.assertEqual(
+            {"lammps": True, "abacus": False, "vasp": False},
+            properties["finite_t_elastic"],
+        )
+
+        vasp_props = json.loads(
+            (
+                skill_root.parents[2]
+                / "apex"
+                / "default_config"
+                / "vasp"
+                / "param_props.json"
+            ).read_text()
+        )["properties"]
+        finite_latt = next(
+            prop for prop in vasp_props if prop["type"] == "finite_t_latt"
+        )
+        self.assertEqual(
+            [300, 500, 700, 900, 1100, 1300, 1500],
+            finite_latt["cal_setting"]["temperature"],
+        )
+        self.assertEqual(5000, finite_latt["cal_setting"]["equi_step"])
+        self.assertEqual(10000, finite_latt["cal_setting"]["ave_step"])
+        coexistence = next(
+            prop
+            for prop in vasp_props
+            if prop["type"] == "annealing"
+            and prop.get("protocol") == "coexistence"
+        )
+        self.assertEqual(5000, coexistence["cal_setting"]["equi_step"])
+        self.assertEqual(10000, coexistence["cal_setting"]["production_step"])
+
+
 class TestGenerateConfigHelpers(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -873,7 +921,6 @@ class TestValidateInputs(unittest.TestCase):
             [{"type": "finite_t_elastic"}], "vasp"
         )
         self.assertTrue(any("LAMMPS-only" in error for error in errors))
-
     def test_validate_gruneisen_and_gamma_geometry(self):
         errors, _ = self.validator.validate_properties(
             [{

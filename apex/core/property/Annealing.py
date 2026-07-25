@@ -1,13 +1,25 @@
 import glob
+import math
 import os
 import logging
+import re
 from typing import List, Dict, Any
 
+import numpy as np
 from monty.serialization import dumpfn, loadfn
+from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
+from dflow.python import upload_packages
 
 from apex.core.property.Property import Property
 from apex.core.calculator.lib import vasp_utils
+from apex.core.lib.vasp_trajectory import (
+    parse_outcar_stage_geometry,
+    split_apex_stage_sections,
+    tail_align_stage_geometry,
+)
+
+upload_packages.append(__file__)
 
 
 def _as_bool(value) -> bool:
@@ -21,9 +33,14 @@ def _as_bool(value) -> bool:
 class Annealing(Property):
 
     def __init__(self, parameter: Dict[str, Any], inter_param=None):
-        parameter["cal_type"] = "annealing"
-        self.parameter = parameter
         self.inter_param = inter_param if inter_param is not None else {"type": "lammps"}
+        if self.inter_param.get("type") == "abacus":
+            raise NotImplementedError(
+                "annealing does not support the ABACUS backend; "
+                "use LAMMPS or VASP"
+            )
+        parameter["cal_type"] = "static"
+        self.parameter = parameter
 
         # geometry
         self.supercell_size = parameter.get("supercell_size", [2, 2, 2])
@@ -31,6 +48,22 @@ class Annealing(Property):
 
         # MD controls (independent knobs only)
         cal = parameter.setdefault("cal_setting", {})
+        self.protocol = parameter.get("protocol", cal.get("protocol", "ramp_cool"))
+        if self.protocol not in {"ramp_cool", "coexistence"}:
+            raise ValueError(
+                "annealing protocol must be 'ramp_cool' or 'coexistence'"
+            )
+        if self.protocol == "coexistence" and self.inter_param.get("type") != "vasp":
+            raise ValueError(
+                "annealing protocol='coexistence' currently supports only VASP"
+            )
+        dft_backend = self.inter_param.get("type") == "vasp"
+        equi_default = (
+            5000 if self.protocol == "coexistence" else (100 if dft_backend else 20000)
+        )
+        ramp_default = 200 if dft_backend else 0
+        final_equi_default = 100 if dft_backend else 20000
+        cool_default = 200 if dft_backend else 0
         # Schedule defaults mirror annealing/spec.
         self.start_temp = float(cal.get("start_temp", 4))
         _tgt = cal.get("target_temp", cal.get("temp", 300))
@@ -40,18 +73,37 @@ class Annealing(Property):
         self._has_cool_rate = "cool_rate" in cal
         self.temp_ramp_rate = cal.get("temp_ramp_rate", cal.get("ramp_rate", 1000))
         self.cool_rate = cal.get("cool_rate", self.temp_ramp_rate)
-        self.equi_step = int(cal.get("equi_step", cal.get("init_thermo_equil_step", 20000)))
-        self.init_lgv_thermo_equil_step = int(cal.get("init_lgv_thermo_equil_step", 20000))
+        self.equi_step = int(
+            cal.get("equi_step", cal.get("init_thermo_equil_step", equi_default))
+        )
+        self.init_lgv_thermo_equil_step = int(
+            cal.get("init_lgv_thermo_equil_step", equi_default)
+        )
         self.init_thermo_equil_step = int(cal.get("init_thermo_equil_step", self.equi_step))
-        self.final_thermo_equil_step = int(cal.get("final_thermo_equil_step", cal.get("hold_step", 20000)))
+        self.final_thermo_equil_step = int(
+            cal.get(
+                "final_thermo_equil_step",
+                cal.get("hold_step", final_equi_default),
+            )
+        )
         # Explicit step counts override rate-derived counts when provided.
-        self.ramp_step = int(cal.get("ramp_step", cal.get("temp_ramp_step", 0)))
-        self.cool_step = int(cal.get("cool_step", cal.get("temp_decline_step", 0)))
+        self.ramp_step = int(
+            cal.get("ramp_step", cal.get("temp_ramp_step", ramp_default))
+        )
+        self.cool_step = int(
+            cal.get("cool_step", cal.get("temp_decline_step", cool_default))
+        )
         self.hold_step = int(cal.get("hold_step", self.final_thermo_equil_step))
+        self.production_step = int(cal.get("production_step", 10000))
         # options
         self.thermostat = cal.get("thermostat", "nose_hoover")
         self.ensemble = cal.get("ensemble", "npt")
-        self.timestep = float(cal.get("timestep", 0.001))
+        if "timestep_fs" in cal:
+            self.timestep_fs = float(cal["timestep_fs"])
+            self.timestep = self.timestep_fs / 1000.0
+        else:
+            self.timestep = float(cal.get("timestep", 0.001))
+            self.timestep_fs = 1000.0 * self.timestep
         self.tdamp_factor = cal.get("tdamp_factor", 100)
         self.pdamp_factor = cal.get("pdamp_factor", 1000)
         self.tdamp = cal.get("tdamp")
@@ -99,6 +151,7 @@ class Annealing(Property):
         cal.update(
             {
                 "start_temp": self.start_temp,
+                "protocol": self.protocol,
                 "target_temp": self.target_temp,
                 "temp": self.target_temp,
                 "end_temp": self.end_temp,
@@ -110,6 +163,7 @@ class Annealing(Property):
                 "ramp_step": self.ramp_step,
                 "temp_ramp_step": self.ramp_step,
                 "hold_step": self.hold_step,
+                "production_step": self.production_step,
                 "cool_step": self.cool_step,
                 "temp_decline_step": self.cool_step,
                 "thermostat": self.thermostat,
@@ -134,6 +188,7 @@ class Annealing(Property):
                 "init_fmax_tol": self.init_fmax_tol,
                 "init_stress_tol": self.init_stress_tol,
                 "timestep": self.timestep,
+                "timestep_fs": self.timestep_fs,
                 "req_compute_rdf": self.req_compute_rdf,
                 "rdf_bins": self.rdf_bins,
                 "rdf_cutoff": self.rdf_cutoff,
@@ -163,9 +218,8 @@ class Annealing(Property):
         else:
             logging.warning("%s already exists" % path_to_work)
 
-        # Calculator selection happens downstream via make_calculator; do not hard-code here.
-        # Annealing is implemented for LAMMPS; other calculators should provide their own impls.
-        if not os.path.isdir(path_to_equi) or not os.path.isfile(os.path.join(path_to_equi, "CONTCAR")):
+        equi_structure = os.path.join(path_to_equi, "CONTCAR")
+        if not os.path.isdir(path_to_equi) or not os.path.isfile(equi_structure):
             raise RuntimeError("please finish relaxation before annealing")
 
         task_list: List[str] = []
@@ -181,17 +235,15 @@ class Annealing(Property):
             task_dir = os.path.join(path_to_work, f"task.{idx:06d}")
             os.makedirs(task_dir, exist_ok=True)
 
-            # Build POSCAR from relaxation
             import shutil
-            equi_contcar = os.path.join(path_to_equi, "CONTCAR")
-            shutil.copy(equi_contcar, os.path.join(task_dir, "POSCAR"))
-            # Load back to fetch lattice metrics if needed later
+            shutil.copy(equi_structure, os.path.join(task_dir, "POSCAR"))
             s_sorted = Structure.from_file(os.path.join(task_dir, "POSCAR"))
+            lattice_lengths = list(s_sorted.lattice.abc)
 
             # Derive integer replication from physical length if requested
             if self.supercell_length is not None:
                 try:
-                    a, b, c = s_sorted.lattice.abc
+                    a, b, c = lattice_lengths
                     import math
                     sx, sy, sz = self.supercell_length
                     nx = max(1, int(math.ceil(sx / a)))
@@ -200,9 +252,13 @@ class Annealing(Property):
                     self.supercell_size = [nx, ny, nz]
                 except Exception as e:
                     logging.warning(f"Failed to derive supercell_size from supercell_length: {e}")
+            if self.inter_param.get("type") == "vasp":
+                s_sorted.make_supercell(self.supercell_size)
+                s_sorted.to(filename=os.path.join(task_dir, "POSCAR"))
 
             # Persist params per task
             anneal_task = {
+                "protocol": self.protocol,
                 "start_temp": self.start_temp,
                 "target_temp": float(tgt),
                 "temp": float(tgt),
@@ -317,8 +373,25 @@ class Annealing(Property):
             var.append(f"variable dump_step equal {self.dump_step}")
             var.append(f"variable thermostat string {self.thermostat}")
             var.append(f"variable ensemble string {self.ensemble}")
-            with open(os.path.join(task_dir, "variable_Annealing.in"), "w") as fp:
-                fp.write("\n".join(var) + "\n")
+            if self.inter_param.get("type") != "vasp":
+                with open(os.path.join(task_dir, "variable_Annealing.in"), "w") as fp:
+                    fp.write("\n".join(var) + "\n")
+
+            anneal_task.update(
+                {
+                    "equi_step": self.init_thermo_equil_step,
+                    "production_step": self.production_step,
+                    "ramp_step": rstep,
+                    "cool_step": cstep,
+                    "final_equi_step": self.final_thermo_equil_step,
+                    "timestep_fs": self.timestep_fs,
+                    "req_compute_rdf": self.req_compute_rdf,
+                    "req_compute_msd": self.req_compute_msd,
+                    "rdf_bins": self.rdf_bins,
+                    "rdf_cutoff": self.rdf_cutoff,
+                }
+            )
+            dumpfn(anneal_task, os.path.join(task_dir, "Annealing.json"), indent=4)
 
             task_list.append(task_dir)
 
@@ -348,17 +421,296 @@ class Annealing(Property):
         task_path = os.path.abspath(task_dir)
         metadata_path = os.path.join(task_path, "Annealing.json")
         status_path = os.path.join(task_path, "apex_task_status.json")
+        metadata = cls._safe_load_json(metadata_path)
+        dft_result = cls._collect_dft_result(task_path, metadata)
         result = {
             "task": os.path.basename(task_path),
             "path": task_path,
-            "metadata": cls._safe_load_json(metadata_path),
+            "metadata": metadata,
             "status": cls._safe_load_json(status_path),
-            "rdf": cls._collect_rdf(task_path),
-            "msd": cls._collect_msd(task_path),
-            "volume_temperature": cls._collect_volume_temperature(task_path),
+            "rdf": dft_result.get("rdf", cls._collect_rdf(task_path)),
+            "msd": dft_result.get("msd", cls._collect_msd(task_path)),
+            "volume_temperature": dft_result.get(
+                "volume_temperature", cls._collect_volume_temperature(task_path)
+            ),
         }
         result["summary"] = cls._build_summary(result)
         return result
+
+    @classmethod
+    def _collect_dft_result(cls, task_path, metadata):
+        xdatcar = os.path.join(task_path, "XDATCAR")
+        if os.path.isfile(xdatcar):
+            frames = cls._parse_vasp_xdatcar(xdatcar)
+            cls._attach_vasp_thermo(
+                frames, os.path.join(task_path, "OUTCAR")
+            )
+        else:
+            return {}
+        if not frames:
+            return {}
+
+        stage_names = {
+            "eq": f"eq_{metadata.get('start_temp', 0):g}K",
+            "equi": f"equi_{metadata.get('target_temp', 0):g}K",
+            "production": f"production_{metadata.get('target_temp', 0):g}K",
+            "ramp": (
+                f"T_ramp_{metadata.get('start_temp', 0):g}K_"
+                f"{metadata.get('target_temp', 0):g}K"
+            ),
+            "decline": (
+                f"T_decline_{metadata.get('target_temp', 0):g}K_"
+                f"{metadata.get('end_temp', 0):g}K"
+            ),
+            "final_eq": f"final_eq_{metadata.get('end_temp', 0):g}K",
+        }
+        rdf = {}
+        msd = {}
+        volume_temperature = {}
+        bins = int(metadata.get("rdf_bins", 100))
+        cutoff = float(metadata.get("rdf_cutoff", 6.0))
+        timestep_fs = float(metadata.get("timestep_fs", 1.0))
+        compute_rdf = _as_bool(metadata.get("req_compute_rdf", True))
+        compute_msd = _as_bool(metadata.get("req_compute_msd", True))
+        for stage, stage_frames in frames.items():
+            if not stage_frames:
+                continue
+            label = stage_names.get(stage, stage)
+            first = stage_frames[0]
+            natoms = len(first["frac"])
+            if compute_rdf:
+                hist = np.zeros(bins, dtype=float)
+                edges = np.linspace(0.0, cutoff, bins + 1)
+                pair_indices = np.triu_indices(natoms, 1)
+                for frame in stage_frames:
+                    structure = Structure(
+                        Lattice(frame["cell"]),
+                        frame["labels"],
+                        frame["frac"],
+                    )
+                    distances = structure.distance_matrix[pair_indices]
+                    hist += np.histogram(distances, bins=edges)[0]
+                radius = 0.5 * (edges[:-1] + edges[1:])
+                volume = float(
+                    np.mean([abs(np.linalg.det(f["cell"])) for f in stage_frames])
+                )
+                shell = (
+                    4.0
+                    * math.pi
+                    / 3.0
+                    * (edges[1:] ** 3 - edges[:-1] ** 3)
+                )
+                expected = (
+                    0.5
+                    * natoms
+                    * max(natoms - 1, 0)
+                    / volume
+                    * shell
+                    * len(stage_frames)
+                )
+                g_r = np.divide(
+                    hist,
+                    expected,
+                    out=np.zeros_like(hist),
+                    where=expected > 0,
+                )
+                coordination = (
+                    2.0 * np.cumsum(hist) / (natoms * len(stage_frames))
+                )
+                rdf[label] = {
+                    "source": os.path.basename(
+                        xdatcar
+                    ),
+                    "timestep": stage_frames[-1]["step"],
+                    "nblocks": len(stage_frames),
+                    "columns": {},
+                    "radius": radius.tolist(),
+                    "g_r": g_r.tolist(),
+                    "coordination": coordination.tolist(),
+                }
+
+            if compute_msd:
+                reference = first["frac"].copy()
+                previous = reference.copy()
+                unwrapped = reference.copy()
+                reference_cart = np.dot(reference, first["cell"])
+                msd_x, msd_y, msd_z, msd_total, timesteps = [], [], [], [], []
+                for index, frame in enumerate(stage_frames):
+                    if index:
+                        delta = frame["frac"] - previous
+                        delta -= np.rint(delta)
+                        unwrapped += delta
+                        previous = frame["frac"].copy()
+                    displacement = np.dot(unwrapped, frame["cell"]) - reference_cart
+                    components = np.mean(displacement ** 2, axis=0)
+                    timesteps.append(float(frame["step"]) * timestep_fs)
+                    msd_x.append(float(components[0]))
+                    msd_y.append(float(components[1]))
+                    msd_z.append(float(components[2]))
+                    msd_total.append(float(np.sum(components)))
+                msd[label] = {
+                    "source": os.path.basename(
+                        xdatcar
+                    ),
+                    "timestep": timesteps,
+                    "msd_x": msd_x,
+                    "msd_y": msd_y,
+                    "msd_z": msd_z,
+                    "msd_total": msd_total,
+                }
+
+            if stage in {"ramp", "decline", "production"}:
+                vt_stage = {
+                    "ramp": "heating",
+                    "decline": "cooling",
+                    "production": "production",
+                }[stage]
+                volume_temperature[vt_stage] = {
+                    "source": os.path.basename(
+                        os.path.join(task_path, "OUTCAR")
+                    ),
+                    "timestep": [frame["step"] for frame in stage_frames],
+                    "temperature": [
+                        frame.get("temperature") for frame in stage_frames
+                    ],
+                    "volume_per_atom": [
+                        frame.get(
+                            "outcar_volume", abs(np.linalg.det(frame["cell"]))
+                        )
+                        / natoms
+                        for frame in stage_frames
+                    ],
+                    "total_volume": [
+                        frame.get(
+                            "outcar_volume", abs(np.linalg.det(frame["cell"]))
+                        )
+                        for frame in stage_frames
+                    ],
+                    "potential_energy": [
+                        frame.get("potential_energy") for frame in stage_frames
+                    ],
+                    "total_energy": [
+                        frame.get("total_energy") for frame in stage_frames
+                    ],
+                    "pressure": [frame.get("pressure") for frame in stage_frames],
+                }
+        return {
+            "rdf": rdf,
+            "msd": msd,
+            "volume_temperature": volume_temperature,
+        }
+
+    @staticmethod
+    def _stage_sections(path):
+        with open(path, encoding="utf-8", errors="ignore") as fp:
+            return split_apex_stage_sections(fp.read())
+
+    @classmethod
+    def _parse_vasp_xdatcar(cls, path):
+        result = {}
+        for stage, text in cls._stage_sections(path).items():
+            lines = text.splitlines()
+            frames = []
+            idx = 0
+            cell = None
+            labels = []
+            natoms = 0
+            while idx < len(lines):
+                if not lines[idx].strip():
+                    idx += 1
+                    continue
+                if "Direct configuration=" not in lines[idx]:
+                    try:
+                        scale = float(lines[idx + 1].split()[0])
+                        cell = np.asarray(
+                            [
+                                [float(value) for value in lines[idx + offset].split()[:3]]
+                                for offset in (2, 3, 4)
+                            ]
+                        ) * scale
+                        species = lines[idx + 5].split()
+                        counts = [int(value) for value in lines[idx + 6].split()]
+                        labels = [
+                            symbol
+                            for symbol, count in zip(species, counts)
+                            for _ in range(count)
+                        ]
+                        natoms = sum(counts)
+                        idx += 7
+                    except (IndexError, ValueError):
+                        idx += 1
+                        continue
+                if idx >= len(lines) or "Direct configuration=" not in lines[idx]:
+                    continue
+                match = re.search(r"=\s*(\d+)", lines[idx])
+                step = int(match.group(1)) if match else len(frames)
+                try:
+                    frac = np.asarray(
+                        [
+                            [float(value) for value in lines[idx + offset].split()[:3]]
+                            for offset in range(1, natoms + 1)
+                        ]
+                    )
+                except (IndexError, ValueError):
+                    break
+                frames.append(
+                    {
+                        "step": step,
+                        "cell": cell.copy(),
+                        "frac": frac,
+                        "labels": labels,
+                    }
+                )
+                idx += natoms + 1
+            result[stage] = frames
+        return result
+
+    @classmethod
+    def _attach_vasp_thermo(cls, frames, outcar):
+        if not os.path.isfile(outcar):
+            return
+        with open(outcar, encoding="utf-8", errors="ignore") as fp:
+            outcar_text = fp.read()
+        sections = split_apex_stage_sections(outcar_text)
+        tail_align_stage_geometry(
+            frames, parse_outcar_stage_geometry(outcar_text)
+        )
+        for stage, text in sections.items():
+            stage_frames = frames.get(stage, [])
+            if not stage_frames:
+                continue
+            values = {
+                "temperature": [
+                    float(value)
+                    for value in re.findall(
+                        r"(?:temperature\s*=|\bT=)\s*([-+0-9.eE]+)", text
+                    )
+                ],
+                "pressure": [
+                    float(value)
+                    for value in re.findall(
+                        r"external pressure\s*=\s*([-+0-9.eE]+)", text
+                    )
+                ],
+                "potential_energy": [
+                    float(value)
+                    for value in re.findall(
+                        r"free\s+energy\s+TOTEN\s*=\s*([-+0-9.eE]+)", text
+                    )
+                ],
+                "total_energy": [
+                    float(value)
+                    for value in re.findall(
+                        r"total energy\s+ETOTAL\s*=\s*([-+0-9.eE]+)", text
+                    )
+                ],
+            }
+            for key, series in values.items():
+                if not series:
+                    continue
+                series = series[-len(stage_frames):]
+                for frame, value in zip(stage_frames[-len(series):], series):
+                    frame[key] = value
 
     @staticmethod
     def _safe_load_json(path: str):

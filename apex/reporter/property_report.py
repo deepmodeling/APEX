@@ -287,7 +287,9 @@ class FiniteTlattReport(PropertyReport):
     @staticmethod
     def _normalized_data(res_data, relax_abc=None):
         data = {}
-        for value in res_data.values():
+        for key, value in res_data.items():
+            if str(key).startswith("_"):
+                continue
             if isinstance(value, (list, tuple)) and len(value) >= 4:
                 a, b, c, temp = (
                     float(value[0]),

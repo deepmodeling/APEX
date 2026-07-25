@@ -171,7 +171,8 @@ class PropsMake(OP):
             'output_work_path': Artifact(Path),
             'task_names': List[str],
             'njobs': int,
-            'task_paths': Artifact(List[Path])
+            'task_paths': Artifact(List[Path]),
+            'backward_list': List[str],
         })
 
     @OP.exec_sign_check
@@ -212,7 +213,8 @@ class PropsMake(OP):
                 'output_work_path': abs_path_to_prop,
                 'task_names': [],
                 'njobs': 0,
-                'task_paths': []
+                'task_paths': [],
+                'backward_list': [],
             })
 
         inter_param_prop = inter_param
@@ -220,6 +222,9 @@ class PropsMake(OP):
             inter_param_prop = prop_param["cal_setting"]["overwrite_interaction"]
 
         prop = make_property_instance(prop_param, inter_param_prop)
+        backward_list = make_calculator(
+            inter_param_prop, "POSCAR"
+        ).backward_files(prop.task_type())
         task_list = prop.make_confs(abs_path_to_prop, path_to_equi, do_refine)
         for kk in task_list:
             if (not rerun_finished) and apex_task_succeeded(kk):
@@ -255,7 +260,8 @@ class PropsMake(OP):
             "output_work_path": input_work_path,
             "task_names": run_task_names,
             "njobs": njobs,
-            "task_paths": jobs
+            "task_paths": jobs,
+            "backward_list": backward_list,
         })
         return op_out
 

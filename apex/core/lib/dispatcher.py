@@ -1,5 +1,6 @@
 import logging
 import os
+import shlex
 from dpdispatcher import (
     Machine,
     Resources,
@@ -39,14 +40,16 @@ def make_submission(
 
     task_list = []
     for ii in run_tasks:
+        task_command = command
         # execute injected run command
         injected_run_command = os.path.join(work_path, ii, "run_command")
         if os.path.isfile(injected_run_command):
             logging.info(msg=f"execute injected run_command file in {injected_run_command}")
-            with open(injected_run_command, "r") as f:
-                command = f.read()
+            task_command = (
+                f"APEX_RUN_COMMAND={shlex.quote(command)} bash run_command"
+            )
         task = Task(
-            command=command,
+            command=task_command,
             task_work_path=ii,
             forward_files=forward_files,
             backward_files=backward_files,

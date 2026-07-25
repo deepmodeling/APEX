@@ -318,6 +318,7 @@ class TestSimplePropertySteps(unittest.TestCase):
                     parameters={
                         "task_names": f"{name}-task_names",
                         "njobs": f"{name}-njobs",
+                        "backward_list": f"{name}-backward_list",
                     },
                 )
 
@@ -378,6 +379,36 @@ class TestSimplePropertySteps(unittest.TestCase):
         self.assertEqual(
             obj.outputs.artifacts["retrieve_path"]._from,
             "Props-post-retrieve_path",
+        )
+
+        added_steps.clear()
+        with patch.object(simple_steps, "Step", FakeStep), \
+                patch.object(simple_steps, "PythonOPTemplate", FakeTemplate), \
+                patch.object(simple_steps, "Slices", lambda *args, **kwargs: ("slices", args, kwargs)), \
+                patch.object(simple_steps, "argo_range", lambda value: f"range:{value}"), \
+                patch.object(simple_steps, "argo_len", lambda value: f"len:{value}"), \
+                patch.object(SimplePropertySteps, "add", fake_add):
+            obj._build(
+                "step",
+                make_op=object(),
+                run_op=object(),
+                post_op=object(),
+                make_image="make-image",
+                run_image="run-image",
+                post_image="post-image",
+                run_command="mpirun vasp_std",
+                calculator="vasp",
+                upload_python_packages=[],
+            )
+
+        vasp_run = next(step for step in added_steps if step.name == "PropsVASP-Cal")
+        self.assertEqual(
+            vasp_run.parameters["backward_list"],
+            "Props-make-backward_list",
+        )
+        self.assertIn(
+            "APEX_RUN_COMMAND=",
+            vasp_run.parameters["run_image_config"]["command"],
         )
 
 

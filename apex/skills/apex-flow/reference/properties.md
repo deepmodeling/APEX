@@ -473,17 +473,17 @@ overrides — detect the lattice, pick from this table, and confirm with the use
 
 | Key | Required? | Type | Default | Description |
 |-----|-----------|------|---------|-------------|
-| `temperature` | **REQUIRED** | list[float] | `[200,400,600,800]` | Target temperatures (K) |
-| `equi_step` | optional | int | `80000` | Equilibration steps |
-| `ave_step` | optional | int | `40000` | Averaging steps |
+| `temperature` | optional | list[float] | `[200,400,600,800]` LAMMPS; `[300,500,700,900,1100,1300,1500]` VASP | Target temperatures (K) |
+| `equi_step` | optional | int | `80000` LAMMPS; `5000` VASP | Equilibration steps |
+| `ave_step` | optional | int | `40000` LAMMPS; `10000` VASP | Production/statistics steps |
 | `timestep` | optional | float | `0.001` | Timestep (ps) |
 | `tdamp` | optional | float | `0.1` | Thermostat damping |
 | `pdamp` | optional | float | `1.0` | Barostat damping |
 | `N_every` | optional | int | `100` | Sample frequency |
 | `N_repeat` | optional | int | `10` | Repeat count |
 | `N_freq` | optional | int | `2000` | Output frequency |
-| `timestep_fs` | DFT optional | float | `1.0` | VASP/ABACUS timestep (fs) |
-| `pressure_kbar` | DFT optional | float | `0.0` | VASP/ABACUS target pressure (kbar) |
+| `timestep_fs` | VASP optional | float | `1.0` | VASP timestep (fs) |
+| `pressure_kbar` | VASP optional | float | `0.0` | VASP target pressure (kbar) |
 
 **Complete working default**:
 ```json
@@ -496,9 +496,9 @@ overrides — detect the lattice, pick from this table, and confirm with the use
 }
 ```
 
-**Output**: Lattice parameter a (and c/a for non-cubic) vs temperature.
+**Output**: The legacy temperature-to-`[a,b,c,T]` mapping plus rich `_metadata` statistics (mean, standard deviation, block standard error, and sample count) for cell tensors, lengths, angles, and volume.
 
-VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style NpT. These integrations share the thermodynamic target but not thermostat/barostat parameters.
+Supported backends are LAMMPS and VASP; ABACUS is rejected. VASP uses Langevin–Parrinello–Rahman NpT (`MDALGO=3`, `ISIF=3`) and requires a VASP binary compiled with `-Dtbdyn`.
 
 **Notes**:
 - Each temperature is a separate NPT MD run.
@@ -601,6 +601,7 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 |-----------|-----------|------|---------|-------------|
 | `supercell_size` | optional | list[int] | `[3,3,3]` | MD supercell |
 | `supercell_length` | optional | float | `null` | Auto-size from target edge length |
+| `protocol` | optional | str | `"ramp_cool"` | Legacy heat/cool schedule, or VASP-only `"coexistence"` |
 
 **cal_setting keys (temperature cycle)**:
 
@@ -613,12 +614,13 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 | `cool_rate` | optional | float | = ramp_rate | Cooling rate (K/ps) |
 | `equi_step` | optional | int | `20000` | Initial equilibration steps |
 | `hold_step` | optional | int | `20000` | Hold at target_temp steps |
+| `production_step` | optional | int | `10000` | Fixed-T production steps for `protocol="coexistence"` |
 | `timestep` | optional | float | `0.001` | Timestep (ps) |
 | `thermostat` | optional | str | `"nose_hoover"` | Thermostat type |
 | `ensemble` | optional | str | `"npt"` | Ensemble type |
 | `velocity_seed` | optional | int | `123457` | Random seed |
-| `timestep_fs` | DFT optional | float | `1.0` | VASP/ABACUS timestep (fs) |
-| `pressure_kbar` | DFT optional | float | `0.0` | VASP/ABACUS target pressure (kbar) |
+| `timestep_fs` | VASP optional | float | `1.0` | VASP timestep (fs) |
+| `pressure_kbar` | VASP optional | float | `0.0` | VASP target pressure (kbar) |
 
 **cal_setting keys (analysis)**:
 
@@ -643,9 +645,9 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 }
 ```
 
-**Output**: RDF at each stage, MSD, volume-temperature curves, final quenched structure.
+**Output**: RDF and MSD by stage, plus volume, pressure, temperature, potential energy, and total energy series. Ramp/cool also produces a final quenched structure.
 
-VASP and ABACUS run the same temperature schedule with their native NpT integrators and post-process compact trajectories into the same result schema.
+Supported backends are LAMMPS and VASP; ABACUS is rejected. `protocol="ramp_cool"` retains the existing heating/cooling semantics. VASP-only `protocol="coexistence"` holds `target_temp` for an equilibration stage and then a production stage, both at fixed target temperature. VASP uses `MDALGO=3` and requires `-Dtbdyn`.
 
 **Notes**:
 - [3,3,3] supercell recommended for statistical sampling (108+ atoms).

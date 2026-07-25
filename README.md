@@ -887,26 +887,28 @@ For `full` mode, use fixed-volume internal relaxation in `cal_setting` (`relax_p
 
 ### 4.13 Finite-temperature lattice parameters
 
-APEX supports lattice parameter calculations at finite temperatures using molecular dynamics in LAMMPS.
-This workflow performs NVT equilibration at target temperatures and averages lattice parameters over the equilibrated trajectory.
+APEX supports lattice parameter calculations at finite temperatures using NpT molecular dynamics in LAMMPS and VASP. ABACUS is not supported for this property.
+The workflow runs separate equilibration and production stages and averages lattice parameters from the production trajectory. VASP uses Langevin–Parrinello–Rahman NpT (`MDALGO=3`, `ISIF=3`) and therefore requires a VASP executable compiled with `-Dtbdyn`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
 
-LAMMPS-specific calculation settings in `cal_setting`:
+Common and LAMMPS calculation settings in `cal_setting`:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `temperature` | Sequence[Float] | Required | Target temperatures (K) for lattice parameter calculation, e.g., `[200, 400, 600, 800]`. |
-| `equi_step` | Integer | `80000` | Number of equilibration steps before averaging. |
-| `ave_step` | Integer | `40000` | Number of steps for averaging lattice parameters. |
+| `temperature` | Sequence[Float] | `[200, 400, 600, 800]` (LAMMPS), `[300, 500, 700, 900, 1100, 1300, 1500]` (VASP) | Target temperatures (K). |
+| `equi_step` | Integer | `80000` (LAMMPS), `5000` (VASP) | Number of equilibration steps before averaging. |
+| `ave_step` | Integer | `40000` (LAMMPS), `10000` (VASP) | Number of production steps used for statistics. |
 | `timestep` | Float | `0.001` | MD timestep (ps). |
 | `tdamp` | Float | `0.1` | Thermostat damping parameter. |
 | `pdamp` | Float | `1.0` | Barostat damping parameter. |
 | `N_every` | Integer | `100` | Interval for computing averages. |
 | `N_repeat` | Integer | `10` | Number of average samples. |
 | `N_freq` | Integer | `2000` | Sample output frequency. |
+
+For VASP, use `timestep_fs` (fs) and `pressure_kbar` (kbar); `langevin_gamma`, `langevin_gamma_l`, and `pmass` configure the Langevin thermostat and lattice barostat. Results preserve the legacy `temperature -> [a, b, c, T]` entries and add `_metadata` with the mean, standard deviation, block standard error, and sample count for cell tensors, lengths, angles, and volume.
 
 Example:
 
@@ -979,15 +981,16 @@ Example:
 
 ### 4.15 Annealing
 
-APEX supports annealing simulations using molecular dynamics in LAMMPS.
-This workflow equilibrates the structure at a starting temperature, ramps to a target temperature, cools to an ending temperature, and performs final equilibration. Post-processing extracts radial distribution functions (RDF), mean squared displacement (MSD), and volume-temperature data from the heating and cooling stages for report visualization.
+APEX supports annealing simulations using molecular dynamics in LAMMPS and VASP. ABACUS is not supported for this property.
+The default `protocol="ramp_cool"` preserves the legacy schedule: equilibrate at a starting temperature, ramp to a target, cool to an ending temperature, and perform final equilibration. VASP also supports `protocol="coexistence"`, a fixed-target-temperature equilibration followed by a fixed-temperature production stage. Both VASP modes use `MDALGO=3` and require `-Dtbdyn`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `protocol` | String | `"ramp_cool"` | `"ramp_cool"` for the legacy heat/cool schedule, or VASP-only `"coexistence"` for fixed-T equilibration and production. |
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
 | `supercell_length` | Float | `None` | Optional target supercell length. When provided, APEX derives a near-cubic replication from the relaxed structure. |
 
-LAMMPS-specific calculation settings in `cal_setting`:
+Calculation settings in `cal_setting`:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -996,10 +999,11 @@ LAMMPS-specific calculation settings in `cal_setting`:
 | `end_temp` | Float | `4` | Final cooling temperature (K). |
 | `temp_ramp_rate` | Float | `1000` | Heating rate used to derive `ramp_step` when explicit step counts are not provided. Alias: `ramp_rate`. |
 | `cool_rate` | Float | `temp_ramp_rate` | Cooling rate used to derive `cool_step` when explicit step counts are not provided. |
-| `equi_step` | Integer | `20000` | Initial equilibration steps at `start_temp`. |
-| `ramp_step` | Integer | rate-derived | Heating steps from `start_temp` to `target_temp`. Alias: `temp_ramp_step`. |
-| `hold_step` | Integer | `20000` | Final equilibration steps. |
-| `cool_step` | Integer | rate-derived | Cooling steps from `target_temp` to `end_temp`. Alias: `temp_decline_step`. |
+| `equi_step` | Integer | `20000` (`100` for DFT) | Initial equilibration steps at `start_temp`. |
+| `ramp_step` | Integer | rate-derived (`200` for DFT) | Heating steps from `start_temp` to `target_temp`. Alias: `temp_ramp_step`. |
+| `hold_step` | Integer | `20000` (`100` for DFT) | Final equilibration steps. |
+| `cool_step` | Integer | rate-derived (`200` for DFT) | Cooling steps from `target_temp` to `end_temp`. Alias: `temp_decline_step`. |
+| `production_step` | Integer | `10000` | Production steps for VASP `protocol="coexistence"`. |
 | `thermostat` | String | `"nose_hoover"` | Thermostat method: `"nose_hoover"` or `"langevin"`. |
 | `ensemble` | String | `"npt"` | Ensemble. For Nose-Hoover use `"npt"` or `"nvt"`; for Langevin use `"nph"` or `"nve"`. |
 | `timestep` | Float | `0.001` | MD timestep (ps). |
@@ -1019,6 +1023,8 @@ LAMMPS-specific calculation settings in `cal_setting`:
 | `msd_nevery` | Integer | `100` | MSD sampling interval for `fix ave/time`. |
 | `msd_nrepeat` | Integer | `1` | Number of MSD samples per average. |
 | `msd_nfreq` | Integer | `200` | MSD output frequency. |
+
+VASP uses the `timestep_fs` and `pressure_kbar` fields described for `finite_t_latt`. Ramp/cool stages or coexistence equilibration/production stages run sequentially inside each task; `OUTCAR` and `XDATCAR` provide RDF, MSD, volume, pressure, temperature, and energy data for post-processing.
 
 Example:
 

@@ -1,8 +1,9 @@
 import os
 import logging
+import re
 
 from dpdata import LabeledSystem
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
@@ -22,6 +23,67 @@ class VASP(Task):
         self.potcar_prefix = inter_parameter.get("potcar_prefix", "")
         self.potcars = inter_parameter["potcars"]
         self.path_to_poscar = path_to_poscar
+
+    @staticmethod
+    def _validate_md_encut(incar, potcar_path):
+        """Validate ENCUT against POTCAR ENMAX values without retaining POTCAR data."""
+        if not os.path.isfile(potcar_path) or "ENCUT" not in incar:
+            return
+        enmax_values = []
+        with open(potcar_path, encoding="utf-8", errors="ignore") as fp:
+            for line in fp:
+                match = re.search(r"\bENMAX\s*=\s*([-+0-9.eE]+)", line)
+                if match:
+                    enmax_values.append(float(match.group(1)))
+        if not enmax_values:
+            return
+        required = 1.3 * max(enmax_values)
+        actual = float(incar["ENCUT"])
+        if actual + 1.0e-12 < required:
+            raise ValueError(
+                f"ENCUT={actual:g} eV is below the MD minimum of 1.3 * "
+                f"max(POTCAR ENMAX)={required:g} eV"
+            )
+
+    @classmethod
+    def _md_base_incar(
+        cls, template, cal_setting, timestep_fs, pressure, gamma
+    ):
+        defaults = {
+            "PREC": "Accurate",
+            "EDIFF": 1.0e-6,
+            "ISMEAR": 1,
+            "SIGMA": 0.2,
+            "LASPH": True,
+            "LREAL": "Auto",
+            "ALGO": "Normal",
+            "IBRION": 0,
+            "MDALGO": 3,
+            "ISIF": 3,
+            "ISYM": 0,
+            "LWAVE": False,
+            "LCHARG": False,
+            "NBLOCK": 1,
+        }
+        base = Incar(dict(template))
+        for tag, default in defaults.items():
+            base[tag] = cal_setting.get(tag.lower(), cal_setting.get(tag, default))
+        base.update(
+            {
+                "POTIM": timestep_fs,
+                "PSTRESS": pressure,
+                "LANGEVIN_GAMMA": gamma,
+                "LANGEVIN_GAMMA_L": float(
+                    cal_setting.get("langevin_gamma_l", 10.0)
+                ),
+                "PMASS": float(cal_setting.get("pmass", 1000.0)),
+            }
+        )
+        base.pop("SMASS", None)
+        for key in ("ediffg", "encut", "kspacing", "kgamma"):
+            if key in cal_setting:
+                base[key.upper()] = cal_setting[key]
+        return base
 
     def make_potential_files(self, output_dir):
         potcar_not_link_list = {"vacancy", "interstitial"}
@@ -69,6 +131,184 @@ class VASP(Task):
         prop_type = task_param.get("type", "relaxation")
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
+        md_incar = incar_relax
+        if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
+            md_incar = incar_upper(
+                Incar.from_file(os.path.abspath(cal_setting["input_prop"]))
+            )
+
+        if task_type == "finite_t_latt":
+            metadata = loadfn(os.path.join(output_dir, "FiniteTlatt.json"))
+            temperature = float(metadata["temperature"])
+            timestep_fs = float(
+                cal_setting.get(
+                    "timestep_fs", 1000.0 * float(cal_setting.get("timestep", 0.001))
+                )
+            )
+            pressure = float(cal_setting.get("pressure_kbar", 0.0))
+            species = []
+            for site in Structure.from_file(self.path_to_poscar):
+                name = site.specie.symbol
+                if name not in species:
+                    species.append(name)
+            gamma = cal_setting.get("langevin_gamma", 10.0)
+            if isinstance(gamma, (int, float)):
+                gamma = [float(gamma)] * len(species)
+            else:
+                gamma = [float(value) for value in gamma]
+            if len(gamma) != len(species):
+                raise ValueError(
+                    "langevin_gamma must contain one value per POSCAR species"
+                )
+
+            base = self._md_base_incar(
+                md_incar, cal_setting, timestep_fs, pressure, gamma
+            )
+            base.update({"TEBEG": temperature, "TEEND": temperature})
+            self._validate_md_encut(base, os.path.join(output_dir, "POTCAR"))
+            equi = Incar(dict(base))
+            equi["NSW"] = int(cal_setting["equi_step"])
+            production = Incar(dict(base))
+            production["NSW"] = int(cal_setting["ave_step"])
+            equi.write_file(os.path.join(output_dir, "INCAR.equi"))
+            production.write_file(os.path.join(output_dir, "INCAR.production"))
+
+            kspacing = base.get("KSPACING")
+            if kspacing is None:
+                raise RuntimeError("KSPACING must be given in INCAR")
+            kgamma = base.get("KGAMMA", False)
+            ret = vasp_utils.make_kspacing_kpoints(
+                self.path_to_poscar, kspacing, kgamma
+            )
+            Kpoints.from_str(ret).write_file(os.path.join(output_dir, "KPOINTS"))
+            with open(os.path.join(output_dir, "run_command"), "w") as fp:
+                fp.write(
+                    "set -e\n"
+                    "cp INCAR.equi INCAR\n"
+                    'eval "$APEX_RUN_COMMAND"\n'
+                    "mv OUTCAR OUTCAR.equi\n"
+                    "[ ! -f XDATCAR ] || mv XDATCAR XDATCAR.equi\n"
+                    "cp CONTCAR POSCAR\n"
+                    "cp INCAR.production INCAR\n"
+                    'eval "$APEX_RUN_COMMAND"\n'
+                )
+            return
+
+        if task_type == "annealing":
+            metadata = loadfn(os.path.join(output_dir, "Annealing.json"))
+            timestep_fs = float(metadata["timestep_fs"])
+            pressure = float(cal_setting.get("pressure_kbar", 0.0))
+            species = []
+            for site in Structure.from_file(self.path_to_poscar):
+                name = site.specie.symbol
+                if name not in species:
+                    species.append(name)
+            gamma = cal_setting.get("langevin_gamma", 10.0)
+            if isinstance(gamma, (int, float)):
+                gamma = [float(gamma)] * len(species)
+            else:
+                gamma = [float(value) for value in gamma]
+            if len(gamma) != len(species):
+                raise ValueError(
+                    "langevin_gamma must contain one value per POSCAR species"
+                )
+            base = self._md_base_incar(
+                md_incar, cal_setting, timestep_fs, pressure, gamma
+            )
+            self._validate_md_encut(base, os.path.join(output_dir, "POTCAR"))
+            if metadata.get("protocol", "ramp_cool") == "coexistence":
+                stages = [
+                    (
+                        "equi",
+                        metadata["target_temp"],
+                        metadata["target_temp"],
+                        metadata["equi_step"],
+                    ),
+                    (
+                        "production",
+                        metadata["target_temp"],
+                        metadata["target_temp"],
+                        metadata["production_step"],
+                    ),
+                ]
+            else:
+                stages = [
+                    (
+                        "eq",
+                        metadata["start_temp"],
+                        metadata["start_temp"],
+                        metadata["equi_step"],
+                    ),
+                    (
+                        "ramp",
+                        metadata["start_temp"],
+                        metadata["target_temp"],
+                        metadata["ramp_step"],
+                    ),
+                    (
+                        "decline",
+                        metadata["target_temp"],
+                        metadata["end_temp"],
+                        metadata["cool_step"],
+                    ),
+                    (
+                        "final_eq",
+                        metadata["end_temp"],
+                        metadata["end_temp"],
+                        metadata["final_equi_step"],
+                    ),
+                ]
+            for name, first_temp, last_temp, nsteps in stages:
+                incar = Incar(dict(base))
+                incar.update(
+                    {
+                        "TEBEG": float(first_temp),
+                        "TEEND": float(last_temp),
+                        "NSW": int(nsteps),
+                    }
+                )
+                incar.write_file(os.path.join(output_dir, f"INCAR.{name}"))
+            # Keep a stable transfer manifest across both protocols.
+            if metadata.get("protocol", "ramp_cool") == "coexistence":
+                aliases = {
+                    "eq": "equi",
+                    "ramp": "equi",
+                    "decline": "production",
+                    "final_eq": "production",
+                }
+            else:
+                aliases = {"equi": "eq", "production": "final_eq"}
+            for alias, source in aliases.items():
+                Incar.from_file(
+                    os.path.join(output_dir, f"INCAR.{source}")
+                ).write_file(os.path.join(output_dir, f"INCAR.{alias}"))
+
+            kspacing = base.get("KSPACING")
+            if kspacing is None:
+                raise RuntimeError("KSPACING must be given in INCAR")
+            ret = vasp_utils.make_kspacing_kpoints(
+                self.path_to_poscar, kspacing, base.get("KGAMMA", False)
+            )
+            Kpoints.from_str(ret).write_file(os.path.join(output_dir, "KPOINTS"))
+            with open(os.path.join(output_dir, "run_command"), "w") as fp:
+                fp.write("set -e\nrm -f OUTCAR.apex XDATCAR.apex\n")
+                for name, _first, _last, nsteps in stages:
+                    if int(nsteps) <= 0:
+                        continue
+                    fp.write(
+                        f"cp INCAR.{name} INCAR\n"
+                        'eval "$APEX_RUN_COMMAND"\n'
+                        f"printf '\\nAPEX_STAGE {name}\\n' >> OUTCAR.apex\n"
+                        "cat OUTCAR >> OUTCAR.apex\n"
+                        f"printf '\\nAPEX_STAGE {name}\\n' >> XDATCAR.apex\n"
+                        "[ ! -f XDATCAR ] || cat XDATCAR >> XDATCAR.apex\n"
+                        "cp CONTCAR POSCAR\n"
+                    )
+                fp.write(
+                    "mv OUTCAR.apex OUTCAR\n"
+                    "[ ! -f XDATCAR.apex ] || mv XDATCAR.apex XDATCAR\n"
+                )
+            return
 
         # user input INCAR for APEX calculation
         if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
@@ -200,6 +440,10 @@ class VASP(Task):
             os.symlink(target, link_name)
 
     def compute(self, output_dir):
+        task_json = os.path.join(output_dir, "task.json")
+        task_param = loadfn(task_json) if os.path.isfile(task_json) else {}
+        if task_param.get("type") in {"finite_t_latt", "annealing"}:
+            return None
         outcar = os.path.join(output_dir, "OUTCAR")
         if not os.path.isfile(outcar):
             logging.warning("cannot find OUTCAR in " + output_dir + " skip")
@@ -233,9 +477,33 @@ class VASP(Task):
         return outcar_dict
 
     def forward_files(self, property_type="relaxation"):
+        if property_type == "finite_t_latt":
+            return [
+                "INCAR.equi",
+                "INCAR.production",
+                "run_command",
+                "POSCAR",
+                "KPOINTS",
+                "POTCAR",
+            ]
+        if property_type == "annealing":
+            return [
+                "INCAR.eq",
+                "INCAR.ramp",
+                "INCAR.decline",
+                "INCAR.final_eq",
+                "INCAR.equi",
+                "INCAR.production",
+                "run_command",
+                "POSCAR",
+                "KPOINTS",
+                "POTCAR",
+            ]
         return ["INCAR", "POSCAR", "KPOINTS", "POTCAR"]
 
     def forward_common_files(self, property_type="relaxation"):
+        if property_type in {"finite_t_latt", "annealing"}:
+            return ["POTCAR"]
         potcar_not_link_list = ["vacancy", "interstitial"]
         if property_type == "elastic":
             return ["INCAR", "KPOINTS", "POTCAR"]
@@ -245,6 +513,10 @@ class VASP(Task):
             return ["INCAR", "POTCAR"]
 
     def backward_files(self, property_type="relaxation"):
+        if property_type == "finite_t_latt":
+            return ["OUTCAR", "CONTCAR", "XDATCAR"]
+        if property_type == "annealing":
+            return ["OUTCAR", "XDATCAR", "CONTCAR"]
         if property_type in {"phonon", "gruneisen"}:
             return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"]
         else:

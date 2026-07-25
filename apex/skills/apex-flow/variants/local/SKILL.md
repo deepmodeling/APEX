@@ -81,7 +81,8 @@ See `reference/calculators.md` and `reference/lammps_potentials.md`.
 ## Property Rules
 
 - Supported types and complete defaults are in `reference/properties.md`.
-- `finite_t_latt`, `finite_t_elastic`, and `annealing` are LAMMPS-only.
+- `finite_t_elastic` is LAMMPS-only.
+- `finite_t_latt` and `annealing` support LAMMPS and VASP, but not ABACUS. VASP uses `MDALGO=3` and requires a binary compiled with `-Dtbdyn`; annealing `protocol="coexistence"` is a fixed-temperature equilibration plus production run.
 - For vacancy/interstitial/phonon/Grüneisen/finite-T calculations, confirm the
   final atom count after expansion. Avoid expanding an existing supercell
   twice; use `[1,1,1]` after user confirmation when appropriate.
