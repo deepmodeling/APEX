@@ -750,7 +750,10 @@ Key parameters:
 | `plane_shift` | Float | `0` | Shift of the displacement plane in units of lattice parameter `c`. |
 | `n_steps` | Integer | `10` | Number of sampling points along the slip. |
 | `vacuum_size` | Float | `0` | Added vacuum layer thickness (Å). |
-| `supercell_size` | Sequence[Int] | `[1, 1, 5]` | Slab supercell size. |
+| `supercell_size` | Sequence[Int] | `[1, 1, 5]` | In-plane replication and target number of Miller-plane spacings. |
+| `min_slab_height` | Float or `None` | `None` | Minimum material-slab thickness (Å); APEX adds only the oriented-cell repeats required to reach it. |
+| `max_atoms` | Integer or `None` | `None` | Stop structure generation when the final slab exceeds this atom count. |
+| `min_distance` | Float | `0.2` | Stop when any periodic atom-pair distance is below this threshold (Å). |
 | `add_fix` | Sequence[String] | `["true","true","false"]` | Position constraints along x/y/z. |
 | `closed_loop` | Bool | `false` |  when `true`, derive two periodic in-plane translation vectors from the generated slab. and slip_length or slip_length_y will be **ignored** |
 
@@ -769,11 +772,21 @@ Example:
     "plane_shift": 0.25
   },
   "supercell_size": [1, 1, 6],
+  "min_slab_height": 18,
+  "max_atoms": 216,
   "vacuum_size": 10,
   "add_fix": ["true", "true", "false"],
   "n_steps": 10
 }
 ```
+
+The third `supercell_size` value is handled as a Miller-plane count, avoiding
+floating-point promotion such as `ceil(2.0000000000000004) = 3`. Generation
+statistics are written to `slab_generation.json`, including the requested and
+effective plane counts, material-slab height, atom count, and minimum pair
+distance. `min_slab_height`, `max_atoms`, and `min_distance` apply equally to
+`gamma` and `gamma_surface`.
+
 To preview structure behave as expected before brusting computational resource, you can use `preview` to generate a gif file to visulize it.
 
 ```shell

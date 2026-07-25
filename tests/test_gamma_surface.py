@@ -78,6 +78,11 @@ class TestGammaSurface(unittest.TestCase):
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
         self.assertEqual(len(dfm_dirs), (self.gamma_surface.n_steps_x + 1) * (self.gamma_surface.n_steps_y + 1))
         self.assertEqual(len(task_list), len(dfm_dirs))
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(self.target_path, "slab_generation.json")
+            )
+        )
 
         pairs = set()
         for ii in sorted(dfm_dirs):

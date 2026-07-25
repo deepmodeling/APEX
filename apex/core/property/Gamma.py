@@ -8,12 +8,14 @@ import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
-from pymatgen.core.surface import SlabGenerator
-from pymatgen.analysis.diffraction.tem import TEMCalculator
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.property.Property import Property, is_failed_task_result
+from apex.core.property.gamma_slab import get_first_gamma_slab
+from apex.core.property.gamma_slab import make_gamma_slab_generator
+from apex.core.property.gamma_slab import validate_gamma_slab_settings
+from apex.core.property.gamma_slab import validate_generated_gamma_slab
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from apex.core.structure import StructureInfo
@@ -47,6 +49,14 @@ class Gamma(Property):
                 self.plane_shift = parameter["plane_shift"]
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
+                parameter["min_slab_height"] = parameter.get(
+                    "min_slab_height", None
+                )
+                self.min_slab_height = parameter["min_slab_height"]
+                parameter["max_atoms"] = parameter.get("max_atoms", None)
+                self.max_atoms = parameter["max_atoms"]
+                parameter["min_distance"] = parameter.get("min_distance", 0.2)
+                self.min_distance = parameter["min_distance"]
                 parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
                 self.vacuum_size = parameter["vacuum_size"]
                 if parameter["cal_type"] == "static" and "add_fix" not in parameter:
@@ -210,6 +220,13 @@ class Gamma(Property):
                     self.slip_length = type_param.get("slip_length", self.slip_length)
                     self.plane_shift = type_param.get("plane_shift", self.plane_shift)
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
+                    self.min_slab_height = type_param.get(
+                        "min_slab_height", self.min_slab_height
+                    )
+                    self.max_atoms = type_param.get("max_atoms", self.max_atoms)
+                    self.min_distance = type_param.get(
+                        "min_distance", self.min_distance
+                    )
                     self.vacuum_size = type_param.get("vacuum_size", self.vacuum_size)
                     self.add_fix = type_param.get("add_fix", self.add_fix)
                     self.n_steps = type_param.get("n_steps", self.n_steps)
@@ -223,11 +240,26 @@ class Gamma(Property):
                         f'is not fully supported so far.\n'
                         f'You may need to double check the generated slab structures'
                     )
+                (
+                    self.supercell_size,
+                    self.min_slab_height,
+                    self.max_atoms,
+                    self.min_distance,
+                ) = validate_gamma_slab_settings(
+                    self.supercell_size,
+                    self.min_slab_height,
+                    self.max_atoms,
+                    self.min_distance,
+                )
                 # gen initial slab
                 (plane_miller, slip_direction,
                  slip_length, Q) = self.__convert_input_miller(self.conv_std_structure)
                 slab = self.__gen_slab_pmg(self.conv_std_structure, plane_miller, trans_matrix=Q)
                 self.atom_num = len(slab.sites)
+                dumpfn(
+                    self.slab_generation,
+                    os.path.join(path_to_work, "slab_generation.json"),
+                )
 
                 os.chdir(path_to_work)
                 if os.path.exists(POSCAR):
@@ -255,6 +287,14 @@ class Gamma(Property):
                 for obtained_slab in self.__displace_slab_generator(slab,
                                                                     disp_vector=frac_slip_vec,
                                                                     is_frac=False):
+                    validate_generated_gamma_slab(
+                        obtained_slab,
+                        self._slab_generation_metadata,
+                        self.supercell_size[:2],
+                        self.max_atoms,
+                        self.min_distance,
+                        "Gamma task",
+                    )
                     output_task = os.path.join(path_to_work, "task.%06d" % count)
                     os.makedirs(output_task, exist_ok=True)
                     os.chdir(output_task)
@@ -345,21 +385,15 @@ class Gamma(Property):
 
     def __gen_slab_pmg(self, structure: Structure,
                        plane_miller, trans_matrix=None) -> Structure:
-        # Get slab inter-plane distance
-        tem_calc_obj = TEMCalculator()
-        spacing_dict = tem_calc_obj.get_interplanar_spacings(self.conv_std_structure,
-                                                             [plane_miller])
-        slab_size = spacing_dict[plane_miller] * self.supercell_size[2]
-        # Generate slab via Pymatgen
-        slabGen = SlabGenerator(structure, miller_index=plane_miller,
-                                min_slab_size=slab_size, min_vacuum_size=0,
-                                center_slab=True, in_unit_planes=False,
-                                lll_reduce=True, reorient_lattice=False,
-                                primitive=False)
-        slabs_pmg = slabGen.get_slabs(ftol=0.001)
-        slab = [s for s in slabs_pmg if s.miller_index == plane_miller][0]
+        slabGen, generation_metadata = make_gamma_slab_generator(
+            structure,
+            plane_miller,
+            self.supercell_size[2],
+            self.min_slab_height,
+        )
+        slab = get_first_gamma_slab(slabGen, ftol=0.001)
         # If a transform matrix is passed, reorient the slab
-        if trans_matrix.any():
+        if trans_matrix is not None and np.asarray(trans_matrix).any():
             reoriented_lattice_vectors = [trans_matrix.dot(v) for v in slab.lattice.matrix]
             slab = Structure(lattice=np.matrix(reoriented_lattice_vectors),
                              coords=slab.frac_coords, species=slab.species)
@@ -400,6 +434,23 @@ class Gamma(Property):
         slab.make_supercell(scaling_matrix=[self.supercell_size[0],
                                             self.supercell_size[1],
                                             1])
+        self._slab_generation_metadata = generation_metadata
+        self.slab_generation = validate_generated_gamma_slab(
+            slab,
+            generation_metadata,
+            self.supercell_size[:2],
+            self.max_atoms,
+            self.min_distance,
+            "Gamma",
+        )
+        self.slab_generation.update(
+            {
+                "min_slab_height": self.min_slab_height,
+                "max_atoms": self.max_atoms,
+                "min_distance_threshold": self.min_distance,
+            }
+        )
+        logging.info("Gamma slab generation: %s", self.slab_generation)
         return slab
 
     def __displace_slab_generator(self, slab: Structure,

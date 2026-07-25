@@ -265,7 +265,10 @@ These parameters appear in most property configurations:
 | `slip_direction` | **REQUIRED** | list[int] | `[-1,1,0]` | Slip direction (**must lie ON the plane**) |
 | `slip_length` | optional | float | `null` | Total slip distance (Å); auto if null |
 | `plane_shift` | optional | int/float | `0` | Shift of slip plane position |
-| `supercell_size` | optional | list[int] | `[1,1,5]` | Supercell for slab |
+| `supercell_size` | optional | list[int] | `[1,1,5]` | In-plane replication and target Miller-plane spacings |
+| `min_slab_height` | optional | float/null | `null` | Auto-add oriented-cell repeats until this material thickness (Å) is reached |
+| `max_atoms` | optional | int/null | `null` | Stop if the generated slab exceeds this atom count |
+| `min_distance` | optional | float | `0.2` | Stop if a periodic atom-pair distance is below this value (Å) |
 | `vacuum_size` | optional | float | `0` | Vacuum above slab (Å) |
 | `n_steps` | optional | int | `10` | Number of slip increments |
 | `add_fix` | optional | list[str] | `["true","true","false"]` | Selective dynamics per axis |
@@ -279,6 +282,8 @@ These parameters appear in most property configurations:
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
+    "min_slab_height": 18,
+    "max_atoms": 216,
     "n_steps": 10
 }
 ```
@@ -318,7 +323,10 @@ Quick primary picks when the user has not specified a system (still confirm):
 | `slip_length` | optional | float | `null` | Slip distance in x |
 | `slip_length_y` | optional | float | `null` | Slip distance in y |
 | `plane_shift` | optional | int/float | `0` | Slip plane shift |
-| `supercell_size` | optional | list[int] | `[1,1,5]` | Supercell |
+| `supercell_size` | optional | list[int] | `[1,1,5]` | In-plane replication and target Miller-plane spacings |
+| `min_slab_height` | optional | float/null | `null` | Auto-add oriented-cell repeats until this material thickness (Å) is reached |
+| `max_atoms` | optional | int/null | `null` | Stop if the generated slab exceeds this atom count |
+| `min_distance` | optional | float | `0.2` | Stop if a periodic atom-pair distance is below this value (Å) |
 | `vacuum_size` | optional | float | `0` | Vacuum (Å) |
 | `closed_loop` | optional | bool | `false` | Derive a periodic, possibly oblique in-plane basis |
 | `n_steps_x` | optional | int | `10` | Grid points in x |
@@ -334,6 +342,8 @@ Quick primary picks when the user has not specified a system (still confirm):
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
+    "min_slab_height": 18,
+    "max_atoms": 216,
     "closed_loop": false,
     "n_steps_x": 10,
     "n_steps_y": 10
@@ -344,6 +354,10 @@ Quick primary picks when the user has not specified a system (still confirm):
 With `closed_loop=true`, `slip_length` and `slip_length_y` must be omitted.
 APEX records the periodic basis vectors and the true Cartesian displacement of
 every grid point; use this mode for oblique or disordered supercells.
+Both properties also write `slab_generation.json`. The third
+`supercell_size` value is passed to Pymatgen as a plane count
+(`in_unit_planes=true`), preventing an intended two-layer slab from being
+promoted by floating-point round-off.
 
 ⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with
 `plane_miller`. Canonical FCC/BCC/HCP systems: **README §4.10** (same table as `gamma`).

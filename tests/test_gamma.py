@@ -97,6 +97,11 @@ class TestGamma(unittest.TestCase):
         task_list = self.gamma.make_confs(self.target_path, self.equi_path)
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
         self.assertEqual(len(dfm_dirs), self.gamma.n_steps + 1)
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(self.target_path, "slab_generation.json")
+            )
+        )
 
         incar0 = Incar.from_file(os.path.join("vasp_input", "INCAR.rlx"))
         incar0["ISIF"] = 4
