@@ -544,16 +544,18 @@ Local/debug Shell jobs may use a simpler command only when the host already has 
 
 ### VASP executable and parallel guards
 
-The validator reads the run command, `scass_type`, generated KPOINTS, and the
-INCAR parallel tags together:
+The validator reads the run-command template, `scass_type`, representative
+generated KPOINTS, and the INCAR parallel tags together. At runtime APEX reads
+the actual `KPOINTS` in every task and selects the executable independently:
 
-- `vasp_gam` is allowed only when every representative Gamma slab actually
-  produces a Gamma-centered `1x1x1` grid. `KGAMMA=True` only selects centering;
-  it does not prove that the grid has one point.
-- Because the executable is configured globally, a job containing non-Gamma
-  properties must use `vasp_std`. When a relaxation section is present, its
-  source-cell grid must also be Gamma-centered `1x1x1`.
-- `vasp_gam` requires `KPAR=1`.
+- Gamma-centered `1x1x1` always runs with `vasp_gam`; every other grid runs
+  with `vasp_std`. The rule applies to relaxation and every property, not only
+  Gamma/GammaSurface.
+- `KGAMMA=True` only selects centering; it does not prove that the grid has one
+  point. The generated task `KPOINTS` is authoritative.
+- `vasp_run_command` may name either `vasp_std` or `vasp_gam`; APEX derives
+  both sibling command variants and chooses after task generation.
+- Any representative task that resolves to `vasp_gam` requires `KPAR=1`.
 - Let `R` be MPI ranks and `K` be `KPAR` (default `1`). `K` must divide `R`.
 - If `NCORE=C` is set, `C` must be a positive integer and divide `R/K`.
 - `NCORE` and `NPAR` must not both be set. Every explicit `NPAR` and `KPAR`
@@ -561,8 +563,8 @@ INCAR parallel tags together:
 - Missing `NCORE` is a warning, because the best value depends on the licensed
   executable, CPU profile, and system size.
 
-Use `vasp_std` whenever the generated grid has more than one k-point or is
-Monkhorst-Pack centered.
+The automatic selector uses `vasp_std` whenever the generated grid has more
+than one k-point or is Monkhorst-Pack centered.
 
 ### VASP POTCAR Handling
 

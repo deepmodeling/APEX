@@ -234,11 +234,13 @@ Options to offer via AskQuestion:
    - Prefer an absolute `vasp_std`/`vasp_gam` binary path; adjust it for the
      user-approved image.
    - Align `<RANKS>` with the CPU count encoded by `scass_type`.
-   - Use `vasp_gam` only when validation proves the generated KPOINTS is
-     Gamma-centered `1x1x1`; `KGAMMA=True` alone is not proof.
-   - `vasp_gam` requires `KPAR=1`. In general, `KPAR` must divide ranks, and
-     `NCORE` must divide ranks/KPAR. Do not combine `NCORE` and `NPAR`;
-     missing `NCORE` is a warning.
+   - APEX selects the executable per generated task: Gamma-centered `1x1x1`
+     uses `vasp_gam`; every other grid uses `vasp_std`. This applies to every
+     property and relaxation, not only Gamma/GammaSurface workflows.
+     `KGAMMA=True` alone is not proof—the generated `KPOINTS` is authoritative.
+   - Any task that resolves to `vasp_gam` requires `KPAR=1`. In general,
+     `KPAR` must divide ranks, and `NCORE` must divide ranks/KPAR. Do not
+     combine `NCORE` and `NPAR`; missing `NCORE` is a warning.
    `generate_config.py` writes the run_command template for `--backend vasp`
    and sets `vasp_image_name` only from `--vasp-image`.
 16. **STOP: Before submitting `gamma_surface`, run `apex preview` to check for overlapping atoms.**

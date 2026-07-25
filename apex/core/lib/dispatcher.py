@@ -8,6 +8,10 @@ from dpdispatcher import (
     Task
 )
 from dflow.python import upload_packages
+from apex.core.lib.vasp_runtime import (
+    build_kpoint_aware_vasp_command,
+    is_switchable_vasp_command,
+)
 upload_packages.append(__file__)
 
 
@@ -43,7 +47,17 @@ def make_submission(
         task_command = command
         # execute injected run command
         injected_run_command = os.path.join(work_path, ii, "run_command")
-        if os.path.isfile(injected_run_command):
+        has_injected_run_command = os.path.isfile(injected_run_command)
+        kpoints_path = os.path.join(work_path, ii, "KPOINTS")
+        if (
+            os.path.isfile(kpoints_path)
+            and is_switchable_vasp_command(command)
+        ):
+            task_command = build_kpoint_aware_vasp_command(
+                command,
+                staged_run_command=has_injected_run_command,
+            )
+        elif has_injected_run_command:
             logging.info(msg=f"execute injected run_command file in {injected_run_command}")
             task_command = (
                 f"APEX_RUN_COMMAND={shlex.quote(command)} bash run_command"
@@ -66,4 +80,3 @@ def make_submission(
         backward_common_files=[],
     )
     return submission
-

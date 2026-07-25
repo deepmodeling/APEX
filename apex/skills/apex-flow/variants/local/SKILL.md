@@ -67,11 +67,13 @@ The exact installed choice is in `reference/execution-profile.md`.
   only to the Bohrium profile.
 - **ABACUS/VASP k-points**: VASP must set `KSPACING`; ABACUS must set
   `kspacing` or `cal_setting.K_POINTS`.
-- **VASP Gamma executable**: use `vasp_gam` only when validation proves the
-  generated grid is Gamma-centered `1x1x1`; `KGAMMA=True` alone is not proof.
-  It requires `KPAR=1`. MPI ranks must match the Bohrium CPU count; `KPAR`
-  must divide ranks and `NCORE` must divide ranks/KPAR. Do not combine
-  `NCORE` with `NPAR`; a missing `NCORE` is a warning.
+- **VASP executable selection**: APEX reads each generated task `KPOINTS`.
+  Gamma-centered `1x1x1` always uses `vasp_gam`; every other grid uses
+  `vasp_std`, for all properties and relaxation. `KGAMMA=True` alone is not
+  proof. A task selected for `vasp_gam` requires `KPAR=1`. MPI ranks must
+  match the Bohrium CPU count; `KPAR` must divide ranks and `NCORE` must
+  divide ranks/KPAR. Do not combine `NCORE` with `NPAR`; a missing `NCORE`
+  is a warning.
 - Model, pseudopotential, orbital, and structure paths must be valid from the
   execution environment; do not assume a host path exists in a container or
   on a compute node.

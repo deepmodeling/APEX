@@ -835,7 +835,7 @@ class TestValidateInputs(unittest.TestCase):
             errors, _ = self.validator.validate_vasp_parallel_settings(
                 param, global_config, root, [report]
             )
-            self.assertTrue(any("1x1x1" in item for item in errors))
+            self.assertEqual(errors, [])
 
             incar.write_text(
                 "NCORE = 3\nKPAR = 2\n", encoding="utf-8"
@@ -843,7 +843,7 @@ class TestValidateInputs(unittest.TestCase):
             errors, _ = self.validator.validate_vasp_parallel_settings(
                 param, global_config, root, [gamma_report]
             )
-            self.assertTrue(any("vasp_gam requires KPAR=1" in item for item in errors))
+            self.assertTrue(any("require KPAR=1" in item for item in errors))
             self.assertTrue(any("NCORE=3" in item for item in errors))
 
             global_config["scass_type"] = "c4_m8_cpu"
@@ -867,6 +867,68 @@ class TestValidateInputs(unittest.TestCase):
                 param, global_config, root, [gamma_report]
             )
             self.assertTrue(any("same time" in item for item in errors))
+
+    def test_validate_vasp_gam_selection_uses_sampling_not_property_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conf = root / "confs" / "alloy"
+            conf.mkdir(parents=True)
+            (conf / "POSCAR").write_text(
+                "TiV\n"
+                "1.0\n"
+                "10 0 0\n"
+                "0 10 0\n"
+                "0 0 10\n"
+                "Ti V\n"
+                "1 1\n"
+                "Direct\n"
+                "0 0 0\n"
+                "0.5 0.5 0.5\n",
+                encoding="utf-8",
+            )
+            incar = root / "INCAR"
+            incar.write_text(
+                "KSPACING = 1.0\nKGAMMA = True\nNCORE = 2\nKPAR = 2\n",
+                encoding="utf-8",
+            )
+            param = {
+                "structures": ["confs/alloy"],
+                "interaction": {"type": "vasp", "incar": "INCAR"},
+                "relaxation": {"req_calc": False},
+                "properties": [
+                    {
+                        "type": "finite_t_latt",
+                        "supercell_size": [1, 1, 1],
+                    }
+                ],
+            }
+            global_config = {
+                "vasp_run_command": (
+                    'bash -c "source /opt/intel/oneapi/setvars.sh && '
+                    "ulimit -s unlimited && mpirun -n 8 "
+                    '/opt/vasp.5.4.4/bin/vasp_std"'
+                ),
+                "scass_type": "c8_m16_cpu",
+            }
+            errors, _ = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, []
+            )
+            self.assertTrue(any("require KPAR=1" in item for item in errors))
+            self.assertFalse(
+                any("non-Gamma properties" in item for item in errors)
+            )
+
+            incar.write_text(
+                "KSPACING = 1.0\nKGAMMA = True\nNCORE = 2\nKPAR = 1\n",
+                encoding="utf-8",
+            )
+            errors, warnings = (
+                self.validator.validate_vasp_parallel_settings(
+                    param, global_config, root, []
+                )
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual(warnings, [])
 
     def test_validate_interaction(self):
         cases = (

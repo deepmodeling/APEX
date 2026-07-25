@@ -26,6 +26,7 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
+from apex.core.lib.vasp_runtime import build_kpoint_aware_vasp_command
 
 
 class RelaxationFlow(Steps):
@@ -166,11 +167,14 @@ class RelaxationFlow(Steps):
                 image=run_image
             )
         if calculator == 'vasp':
+            kpoint_aware_run_command = build_kpoint_aware_vasp_command(
+                run_command
+            )
             runcal = Step(
                 name="RelaxVASP-Cal",
                 template=run_fp,
                 parameters={
-                    "run_image_config": {"command": run_command},
+                    "run_image_config": {"command": kpoint_aware_run_command},
                     "task_name": make.outputs.parameters["task_names"],
                     "backward_list": ["INCAR", "POSCAR", "OUTCAR", "CONTCAR"],
                     "backward_dir_name": "relax_task"
@@ -245,5 +249,3 @@ class RelaxationFlow(Steps):
             = post.outputs.artifacts["output_all"]
         self.outputs.artifacts["retrieve_path"]._from \
             = post.outputs.artifacts["retrieve_path"]
-
-

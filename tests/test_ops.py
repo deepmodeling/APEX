@@ -3,6 +3,7 @@ import sys
 import os
 import glob
 import shutil
+import subprocess
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -26,6 +27,8 @@ from apex.op.property_ops import (
 )
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.superop.SimplePropertySteps import SimplePropertySteps
+from apex.core.lib.vasp_runtime import build_kpoint_aware_vasp_command
+from apex.core.lib import dispatcher as dispatcher_module
 from apex.task_failure import (
     REMOTE_LAMMPS_STARTUP_FAILURE,
     classify_apex_task_status,
@@ -287,6 +290,83 @@ class TestTaskStatusHelpers(unittest.TestCase):
 
 
 class TestSimplePropertySteps(unittest.TestCase):
+    def test_dispatcher_applies_kpoint_selector_to_vasp_tasks(self):
+        captured = {}
+
+        def fake_task(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(**kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir) / "task.000000"
+            task_dir.mkdir()
+            (task_dir / "KPOINTS").write_text(
+                "Automatic mesh\n0\nGamma\n1 1 1\n0 0 0\n"
+            )
+            with patch.object(
+                dispatcher_module.Machine,
+                "load_from_dict",
+                return_value=object(),
+            ), patch.object(
+                dispatcher_module.Resources,
+                "load_from_dict",
+                return_value=object(),
+            ), patch.object(
+                dispatcher_module, "Task", fake_task
+            ), patch.object(
+                dispatcher_module,
+                "Submission",
+                side_effect=lambda **kwargs: SimpleNamespace(**kwargs),
+            ):
+                dispatcher_module.make_submission(
+                    mdata_machine={},
+                    mdata_resources={},
+                    commands=["mpirun -n 4 /opt/vasp/bin/vasp_std"],
+                    work_path=tmpdir,
+                    run_tasks=["task.000000"],
+                    group_size=1,
+                    forward_common_files=[],
+                    forward_files=[],
+                    backward_files=[],
+                    outlog="outlog",
+                    errlog="errlog",
+                )
+        self.assertIn("vasp_gam", captured["command"])
+        self.assertIn("vasp_std", captured["command"])
+        self.assertIn("KPOINTS", captured["command"])
+
+    def test_vasp_runtime_selects_executable_from_actual_kpoints(self):
+        command = build_kpoint_aware_vasp_command(
+            "printf vasp_std > selected"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            gamma = (
+                "Automatic mesh\n0\nGamma\n1 1 1\n0 0 0\n"
+            )
+            (task_dir / "KPOINTS").write_text(gamma)
+            subprocess.run(
+                ["bash", "-c", command], cwd=task_dir, check=True
+            )
+            self.assertEqual(
+                (task_dir / "selected").read_text(), "vasp_gam"
+            )
+
+            non_gamma = (
+                "Automatic mesh\n0\nGamma\n2 1 1\n0 0 0\n"
+            )
+            (task_dir / "KPOINTS").write_text(non_gamma)
+            subprocess.run(
+                ["bash", "-c", command], cwd=task_dir, check=True
+            )
+            self.assertEqual(
+                (task_dir / "selected").read_text(), "vasp_std"
+            )
+
+    def test_vasp_runtime_requires_switchable_executable(self):
+        with self.assertRaisesRegex(ValueError, "vasp_std or vasp_gam"):
+            build_kpoint_aware_vasp_command("mpirun vasp_ncl")
+
     def test_lammps_repair_step_feeds_checked_post_to_post_step(self):
         import apex.superop.SimplePropertySteps as simple_steps
 
@@ -408,6 +488,14 @@ class TestSimplePropertySteps(unittest.TestCase):
         )
         self.assertIn(
             "APEX_RUN_COMMAND=",
+            vasp_run.parameters["run_image_config"]["command"],
+        )
+        self.assertIn(
+            "vasp_gam",
+            vasp_run.parameters["run_image_config"]["command"],
+        )
+        self.assertIn(
+            "vasp_std",
             vasp_run.parameters["run_image_config"]["command"],
         )
 

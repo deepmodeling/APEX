@@ -269,12 +269,39 @@ def _effective_vasp_sampling(prop: dict, incar_values: dict):
     return spacing, _parse_vasp_bool(kgamma, default=False)
 
 
-def _kpoint_summary(poscar: Path, kspacing, kgamma: bool) -> dict:
+def _kpoint_summary(
+    poscar: Path, kspacing, kgamma: bool, supercell_size=None
+) -> dict:
     from apex.core.calculator.lib import vasp_utils
 
-    text = vasp_utils.make_kspacing_kpoints(
-        str(poscar), kspacing, kgamma
-    )
+    sampling_poscar = poscar
+    temporary_dir = None
+    if supercell_size is not None:
+        factors = [int(value) for value in supercell_size]
+        if len(factors) != 3 or any(value <= 0 for value in factors):
+            raise ValueError(
+                f"invalid VASP supercell factors: {supercell_size!r}"
+            )
+        lines = poscar.read_text(
+            encoding="utf-8", errors="replace"
+        ).splitlines()
+        if len(lines) < 5:
+            raise ValueError(f"unreadable POSCAR: {poscar}")
+        for line_index, factor in zip(range(2, 5), factors):
+            vector = [float(value) for value in lines[line_index].split()[:3]]
+            lines[line_index] = " ".join(
+                f"{factor * value:.16g}" for value in vector
+            )
+        temporary_dir = tempfile.TemporaryDirectory()
+        sampling_poscar = Path(temporary_dir.name) / "POSCAR"
+        sampling_poscar.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    try:
+        text = vasp_utils.make_kspacing_kpoints(
+            str(sampling_poscar), kspacing, kgamma
+        )
+    finally:
+        if temporary_dir is not None:
+            temporary_dir.cleanup()
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if len(lines) < 4:
         raise RuntimeError("APEX generated an unreadable KPOINTS payload")
@@ -282,6 +309,88 @@ def _kpoint_summary(poscar: Path, kspacing, kgamma: bool) -> dict:
         "style": lines[2],
         "grid": [int(value) for value in lines[3].split()[:3]],
     }
+
+
+def _property_supercell_size(prop: dict):
+    prop_type = prop.get("type")
+    if prop_type in {"vacancy", "interstitial"}:
+        return prop.get("supercell", [1, 1, 1])
+    if prop_type in {"phonon", "gruneisen", "finite_t_latt", "annealing"}:
+        return prop.get("supercell_size", [2, 2, 2])
+    return prop.get("supercell_size")
+
+
+def _collect_vasp_sampling_reports(
+    param_config: dict,
+    base_dir: Path,
+    incar_values: dict,
+    gamma_reports: list,
+) -> tuple:
+    """Collect representative grids; runtime still decides from each KPOINTS."""
+    reports = list(gamma_reports)
+    errors = []
+    structure_paths = [
+        path for path in _iter_structure_poscars(param_config, base_dir)
+        if path.name != "STRU"
+    ]
+
+    relaxation = param_config.get("relaxation")
+    if (
+        isinstance(relaxation, dict)
+        and relaxation.get("req_calc", True) is not False
+    ):
+        try:
+            kspacing, kgamma = _effective_vasp_sampling(
+                relaxation, incar_values
+            )
+            for structure_path in structure_paths:
+                reports.append(
+                    {
+                        "label": f"relaxation for {structure_path}",
+                        "kpoints": (
+                            None if kspacing is None
+                            else _kpoint_summary(
+                                structure_path, kspacing, kgamma
+                            )
+                        ),
+                    }
+                )
+        except Exception as exc:
+            errors.append(
+                f"VASP: cannot verify relaxation KPOINTS: {exc}"
+            )
+
+    for prop_index, prop in enumerate(param_config.get("properties", [])):
+        if not isinstance(prop, dict) or prop.get("req_calc", True) is False:
+            continue
+        if prop.get("type") in {"gamma", "gamma_surface"}:
+            continue
+        try:
+            kspacing, kgamma = _effective_vasp_sampling(prop, incar_values)
+            supercell_size = _property_supercell_size(prop)
+            for structure_path in structure_paths:
+                reports.append(
+                    {
+                        "label": (
+                            f"properties[{prop_index}] {prop.get('type')} "
+                            f"for {structure_path}"
+                        ),
+                        "kpoints": (
+                            None if kspacing is None
+                            else _kpoint_summary(
+                                structure_path,
+                                kspacing,
+                                kgamma,
+                                supercell_size=supercell_size,
+                            )
+                        ),
+                    }
+                )
+        except Exception as exc:
+            errors.append(
+                f"VASP: cannot verify properties[{prop_index}] KPOINTS: {exc}"
+            )
+    return reports, errors
 
 
 def validate_dft_kspacing(
@@ -402,7 +511,7 @@ def _vasp_command_details(global_config: dict) -> dict:
         or ""
     )
     executable_match = re.search(
-        r"(?:^|[/\s])(?P<name>vasp_(?:std|gam|ncl))(?=$|[\s\"'])",
+        r"(?:^|[/\s])(?P<name>vasp_(?:std|gam))(?=$|[\s\"'])",
         command,
         re.IGNORECASE,
     )
@@ -488,71 +597,24 @@ def validate_vasp_parallel_settings(
                     f"MPI ranks/KPAR={ranks_per_kgroup}"
                 )
 
-    if executable == "vasp_gam":
-        if effective_kpar != 1:
-            errors.append("VASP: vasp_gam requires KPAR=1")
-        configured_props = [
-            prop for prop in param_config.get("properties", [])
-            if isinstance(prop, dict)
-        ]
-        unsupported = [
-            prop.get("type") for prop in configured_props
-            if prop.get("type") not in {"gamma", "gamma_surface"}
-        ]
-        if unsupported:
-            errors.append(
-                "VASP: vasp_gam cannot be selected globally when non-Gamma "
-                f"properties are present ({unsupported}); use vasp_std"
-            )
-        if not gamma_reports:
-            errors.append(
-                "VASP: vasp_gam requires a successful Gamma slab preflight "
-                "to prove the generated KPOINTS grid"
-            )
-        sampling_reports = list(gamma_reports)
-        relaxation = param_config.get("relaxation")
-        if isinstance(relaxation, dict):
-            try:
-                kspacing, kgamma = _effective_vasp_sampling(
-                    relaxation, incar_values
-                )
-                for structure_path in _iter_structure_poscars(
-                    param_config, base_dir
-                ):
-                    if structure_path.name == "STRU":
-                        continue
-                    sampling_reports.append(
-                        {
-                            "label": f"relaxation for {structure_path}",
-                            "kpoints": (
-                                None if kspacing is None
-                                else _kpoint_summary(
-                                    structure_path, kspacing, kgamma
-                                )
-                            ),
-                        }
-                    )
-            except Exception as exc:
-                errors.append(
-                    f"VASP: cannot verify relaxation KPOINTS for vasp_gam: {exc}"
-                )
-        for report in sampling_reports:
-            kpoints = report.get("kpoints")
-            if (
-                not kpoints
-                or str(kpoints.get("style", "")).lower() != "gamma"
-                or kpoints.get("grid") != [1, 1, 1]
-            ):
-                label = report.get("label", "Gamma slab")
-                rendered = (
-                    "unavailable" if not kpoints
-                    else f"{kpoints.get('style')} {kpoints.get('grid')}"
-                )
-                errors.append(
-                    "VASP: vasp_gam is only valid for an actually generated "
-                    f"Gamma-centered 1x1x1 KPOINTS grid; {label} produced "
-                    f"{rendered}. KGAMMA=True alone is insufficient"
-                )
+    sampling_reports, sampling_errors = _collect_vasp_sampling_reports(
+        param_config, base_dir, incar_values, gamma_reports
+    )
+    errors.extend(sampling_errors)
+    gamma_only_reports = [
+        report for report in sampling_reports
+        if report.get("kpoints")
+        and str(report["kpoints"].get("style", "")).lower() == "gamma"
+        and report["kpoints"].get("grid") == [1, 1, 1]
+    ]
+    if gamma_only_reports and effective_kpar != 1:
+        labels = ", ".join(
+            report.get("label", "VASP task") for report in gamma_only_reports
+        )
+        errors.append(
+            "VASP: Gamma-centered 1x1x1 tasks are executed with vasp_gam "
+            f"and require KPAR=1; detected KPAR={effective_kpar} for {labels}"
+        )
 
     return errors, warnings
 

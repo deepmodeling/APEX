@@ -26,6 +26,7 @@ from dflow.python import (
     Slices,
 )
 from dflow.plugins.dispatcher import DispatcherExecutor
+from apex.core.lib.vasp_runtime import build_kpoint_aware_vasp_command
 
 
 class SimplePropertySteps(Steps):
@@ -162,12 +163,17 @@ class SimplePropertySteps(Steps):
 
         # Step for property run
         if calculator in ['vasp', 'abacus']:
-            quoted_command = shlex.quote(run_command)
-            property_run_command = (
-                "if [ -f run_command ]; then "
-                f"APEX_RUN_COMMAND={quoted_command} bash run_command; "
-                f"else {run_command}; fi"
-            )
+            if calculator == "vasp":
+                property_run_command = build_kpoint_aware_vasp_command(
+                    run_command, staged_run_command=True
+                )
+            else:
+                quoted_command = shlex.quote(run_command)
+                property_run_command = (
+                    "if [ -f run_command ]; then "
+                    f"APEX_RUN_COMMAND={quoted_command} bash run_command; "
+                    f"else {run_command}; fi"
+                )
             run_fp = PythonOPTemplate(
                 run_op,
                 slices=Slices(
