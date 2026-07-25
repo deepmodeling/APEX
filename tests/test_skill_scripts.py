@@ -6,6 +6,7 @@ import stat
 import sys
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -221,6 +222,93 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         )
         self.assertNotIn("relaxation", dft)
         self.assertEqual(dft["properties"][0]["BAND_POINTS"], 21)
+
+    def test_gamma_overrides_preserve_defaults_and_route_by_property(self):
+        interaction = {"type": "deepmd"}
+        baseline = self.gen.build_param_json(
+            "confs/input",
+            interaction,
+            ["gamma", "gamma_surface"],
+            flow_type="props",
+        )
+        self.assertEqual(
+            baseline["properties"][0],
+            self.gen.PROPERTY_DEFAULTS["gamma"],
+        )
+        self.assertEqual(
+            baseline["properties"][1],
+            self.gen.PROPERTY_DEFAULTS["gamma_surface"],
+        )
+
+        args = Namespace(
+            gamma_plane_miller=[1.0, 1.0, 0.0],
+            gamma_slip_direction=[1.0, -1.0, 0.0],
+            gamma_supercell_size=[2.0, 3.0, 4.5],
+            gamma_min_slab_height=7.5,
+            gamma_max_atoms=80,
+            gamma_min_distance=0.4,
+            gamma_n_steps=5,
+            gamma_n_steps_x=3,
+            gamma_n_steps_y=4,
+            gamma_closed_loop=True,
+        )
+        overrides = self.gen.gamma_overrides_from_args(args)
+        self.assertEqual(
+            self.gen.validate_gamma_cli_options(
+                ["gamma", "gamma_surface"], overrides
+            ),
+            [],
+        )
+        configured = self.gen.build_param_json(
+            "confs/input",
+            interaction,
+            ["gamma", "gamma_surface"],
+            flow_type="props",
+            gamma_overrides=overrides,
+        )
+        line, surface = configured["properties"]
+        self.assertEqual(line["supercell_size"], [2, 3, 4.5])
+        self.assertEqual(line["n_steps"], 5)
+        self.assertNotIn("n_steps_x", line)
+        self.assertEqual(surface["n_steps_x"], 3)
+        self.assertEqual(surface["n_steps_y"], 4)
+        self.assertTrue(surface["closed_loop"])
+        self.assertNotIn("n_steps", surface)
+
+    def test_gamma_cli_options_reject_invalid_values_and_scope(self):
+        cases = (
+            (["elastic"], {"max_atoms": 10}, "--gamma-*"),
+            (["gamma_surface"], {"n_steps": 2}, "--gamma-n-steps"),
+            (["gamma"], {"n_steps_x": 2}, "--gamma-n-steps-x"),
+            (["gamma"], {"plane_miller": [1, 1]}, "3 or 4"),
+            (["gamma"], {"slip_direction": [1, 1, 1, 1, 1]}, "3 or 4"),
+            (
+                ["gamma"],
+                {
+                    "plane_miller": [1, 1, 1],
+                    "slip_direction": [1, 0, 0, 0],
+                },
+                "dimensions differ",
+            ),
+            (["gamma"], {"supercell_size": [0, 1, 2]}, "component 1"),
+            (["gamma"], {"supercell_size": [1, 1.5, 2]}, "component 2"),
+            (["gamma"], {"supercell_size": [1, 1, 0]}, "plane count"),
+            (["gamma"], {"min_slab_height": 0}, "positive"),
+            (["gamma"], {"max_atoms": 0}, "positive integer"),
+            (["gamma"], {"min_distance": -0.1}, "non-negative"),
+            (["gamma"], {"n_steps": 0}, "positive integer"),
+            (["gamma_surface"], {"n_steps_x": 0}, "positive integer"),
+            (["gamma_surface"], {"n_steps_y": 0}, "positive integer"),
+            (["gamma"], {"closed_loop": True}, "gamma_surface"),
+        )
+        for properties, overrides, message in cases:
+            with self.subTest(properties=properties, overrides=overrides):
+                errors = self.gen.validate_gamma_cli_options(
+                    properties, overrides
+                )
+                self.assertTrue(
+                    any(message in error for error in errors), errors
+                )
 
     def test_validate_config_and_parse_str_map(self):
         self.assertTrue(
@@ -506,6 +594,168 @@ class TestValidateInputs(unittest.TestCase):
             )
             self.assertEqual(errors, [])
             self.assertEqual(warnings, [])
+
+    def test_validate_gamma_guard_settings(self):
+        base = {
+            "type": "gamma",
+            "plane_miller": [1, 1, 1],
+            "slip_direction": [-1, 1, 0],
+        }
+        errors, warnings = self.validator.validate_properties(
+            [base], "lammps"
+        )
+        self.assertFalse(errors)
+        self.assertTrue(any("min_slab_height" in item for item in warnings))
+        self.assertTrue(any("max_atoms" in item for item in warnings))
+
+        invalid_cases = (
+            ({"supercell_size": [0, 1, 2]}, "supercell_size[0]"),
+            ({"supercell_size": [1, 1.5, 2]}, "supercell_size[1]"),
+            ({"supercell_size": [1, 1, float("inf")]}, "positive finite"),
+            ({"min_slab_height": 0}, "min_slab_height"),
+            ({"max_atoms": True}, "max_atoms"),
+            ({"min_distance": -0.1}, "min_distance"),
+            ({"n_steps": 0}, "n_steps"),
+        )
+        for update, message in invalid_cases:
+            with self.subTest(update=update):
+                prop = dict(base)
+                prop.update(update)
+                errors, _ = self.validator.validate_properties(
+                    [prop], "lammps"
+                )
+                self.assertTrue(
+                    any(message in item for item in errors), errors
+                )
+
+    def test_gamma_preflight_reports_slab_and_enforces_atom_limit(self):
+        from pymatgen.core import Lattice, Structure
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            conf = root / "conf"
+            conf.mkdir()
+            structure = Structure(
+                Lattice.cubic(4.0),
+                ["Al", "Al", "Al", "Al"],
+                [
+                    [0, 0, 0],
+                    [0, 0.5, 0.5],
+                    [0.5, 0, 0.5],
+                    [0.5, 0.5, 0],
+                ],
+            )
+            structure.to(filename=conf / "POSCAR", fmt="poscar")
+            (root / "INCAR").write_text(
+                "KSPACING = 100\nKGAMMA = .TRUE.\n"
+                "NCORE = 2\nKPAR = 1\n",
+                encoding="utf-8",
+            )
+            prop = {
+                "type": "gamma",
+                "plane_miller": [1, 1, 1],
+                "slip_direction": [-1, 1, 0],
+                "supercell_size": [1, 1, 2],
+                "min_slab_height": 1.0,
+                "max_atoms": 100,
+                "min_distance": 0.1,
+                "n_steps": 2,
+            }
+            param = {
+                "structures": ["conf"],
+                "interaction": {"type": "vasp", "incar": "INCAR"},
+                "properties": [prop],
+            }
+            reports, errors, warnings = (
+                self.validator.preflight_gamma_structures(param, root)
+            )
+            self.assertFalse(errors)
+            self.assertFalse(warnings)
+            self.assertEqual(len(reports), 1)
+            self.assertEqual(reports[0]["parent_atom_count"], 4)
+            self.assertLessEqual(reports[0]["atom_count"], 100)
+            self.assertGreaterEqual(reports[0]["slab_height"], 1.0)
+            self.assertEqual(reports[0]["expected_task_count"], 3)
+            self.assertEqual(
+                reports[0]["kpoints"],
+                {"style": "Gamma", "grid": [1, 1, 1]},
+            )
+
+            param["properties"][0]["max_atoms"] = 1
+            reports, errors, _ = self.validator.preflight_gamma_structures(
+                param, root
+            )
+            self.assertFalse(reports)
+            self.assertTrue(any("exceeding max_atoms=1" in item for item in errors))
+
+    def test_validate_vasp_parallel_and_vasp_gam_rules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            incar = root / "INCAR"
+            command = (
+                'bash -c "source /opt/intel/oneapi/setvars.sh && '
+                "ulimit -s unlimited && mpirun -n 8 "
+                '/opt/vasp.5.4.4/bin/vasp_gam"'
+            )
+            global_config = {
+                "vasp_run_command": command,
+                "scass_type": "c8_m16_cpu",
+            }
+            param = {
+                "interaction": {"type": "vasp", "incar": "INCAR"},
+                "properties": [{"type": "gamma"}],
+            }
+            gamma_report = {
+                "label": "synthetic Gamma slab",
+                "kpoints": {"style": "Gamma", "grid": [1, 1, 1]},
+            }
+
+            incar.write_text(
+                "NCORE = 2\nKPAR = 1\n", encoding="utf-8"
+            )
+            errors, warnings = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, [gamma_report]
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual(warnings, [])
+
+            report = dict(gamma_report)
+            report["kpoints"] = {"style": "Gamma", "grid": [2, 1, 1]}
+            errors, _ = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, [report]
+            )
+            self.assertTrue(any("1x1x1" in item for item in errors))
+
+            incar.write_text(
+                "NCORE = 3\nKPAR = 2\n", encoding="utf-8"
+            )
+            errors, _ = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, [gamma_report]
+            )
+            self.assertTrue(any("vasp_gam requires KPAR=1" in item for item in errors))
+            self.assertTrue(any("NCORE=3" in item for item in errors))
+
+            global_config["scass_type"] = "c4_m8_cpu"
+            errors, _ = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, [gamma_report]
+            )
+            self.assertTrue(any("must match Bohrium CPU" in item for item in errors))
+
+            global_config["scass_type"] = "c8_m16_cpu"
+            incar.write_text("KPAR = 1\n", encoding="utf-8")
+            errors, warnings = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, [gamma_report]
+            )
+            self.assertFalse(errors)
+            self.assertTrue(any("NCORE is not set" in item for item in warnings))
+
+            incar.write_text(
+                "NCORE = 2\nNPAR = 4\nKPAR = 1\n", encoding="utf-8"
+            )
+            errors, _ = self.validator.validate_vasp_parallel_settings(
+                param, global_config, root, [gamma_report]
+            )
+            self.assertTrue(any("same time" in item for item in errors))
 
     def test_validate_interaction(self):
         cases = (

@@ -499,7 +499,8 @@ KGAMMA = True
 
 ### VASP global.json Settings (Bohrium / dflow)
 
-> ⚠️ **Never** use bare `mpirun -n 16 vasp_std`. The Bohrium VASP image needs Intel oneAPI env + absolute binary path.
+The Bohrium VASP image needs the Intel oneAPI environment and an absolute
+VASP binary path. Use symbolic values when planning resources:
 
 ```json
 {
@@ -508,8 +509,8 @@ KGAMMA = True
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
     "vasp_image_name": "<USER-PROVIDED licensed VASP image — never invent a default>",
-    "vasp_run_command": "bash -c \"source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n 32 /opt/vasp.5.4.4/bin/vasp_std\"",
-    "scass_type": "c32_m128_cpu",
+    "vasp_run_command": "bash -c \"source <ONEAPI_SETVARS> && ulimit -s unlimited && mpirun -n <RANKS> <ABSOLUTE_VASP_BINARY>\"",
+    "scass_type": "<CPU_PROFILE_WITH_RANKS_CORES>",
     "group_size": 1,
     "pool_size": 1
 }
@@ -536,10 +537,32 @@ KGAMMA = True
 |-------|-----|
 | `source /opt/intel/oneapi/setvars.sh` | Loads Intel MPI / MKL |
 | `ulimit -s unlimited` | Avoids stack overflow on large cells |
-| Absolute `vasp_std` path | PATH `vasp_std` is unreliable |
-| `mpirun -n <N>` | `<N>` must match `scass_type` CPUs (`c32_*`→32, `c16_*`→16) |
+| Absolute `vasp_std` or `vasp_gam` path | PATH lookup is unreliable |
+| `mpirun -n <RANKS>` | `RANKS` must equal the CPU count encoded by `scass_type` |
 
 Local/debug Shell jobs may use a simpler command only when the host already has VASP + MPI on PATH; for Bohrium use the template above. `generate_config.py` emits the run_command template for `--backend vasp` but leaves `vasp_image_name` unset.
+
+### VASP executable and parallel guards
+
+The validator reads the run command, `scass_type`, generated KPOINTS, and the
+INCAR parallel tags together:
+
+- `vasp_gam` is allowed only when every representative Gamma slab actually
+  produces a Gamma-centered `1x1x1` grid. `KGAMMA=True` only selects centering;
+  it does not prove that the grid has one point.
+- Because the executable is configured globally, a job containing non-Gamma
+  properties must use `vasp_std`. When a relaxation section is present, its
+  source-cell grid must also be Gamma-centered `1x1x1`.
+- `vasp_gam` requires `KPAR=1`.
+- Let `R` be MPI ranks and `K` be `KPAR` (default `1`). `K` must divide `R`.
+- If `NCORE=C` is set, `C` must be a positive integer and divide `R/K`.
+- `NCORE` and `NPAR` must not both be set. Every explicit `NPAR` and `KPAR`
+  value must also be a positive integer.
+- Missing `NCORE` is a warning, because the best value depends on the licensed
+  executable, CPU profile, and system size.
+
+Use `vasp_std` whenever the generated grid has more than one k-point or is
+Monkhorst-Pack centered.
 
 ### VASP POTCAR Handling
 

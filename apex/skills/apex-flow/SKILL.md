@@ -132,6 +132,9 @@ Options to offer via AskQuestion:
   `program_id` and `bohrium_config.project_id` with `type=int`. A quoted numeric
   string is invalid. Upload the newly validated directory as a new outer job;
   never retry an outer job whose input snapshot was invalid.
+  For Gamma properties, also read the representative-slab report: parent/final
+  atom count, thickness, layer repeats, minimum distance, task count, and
+  generated KPOINTS. Stop on any explicit limit violation.
 9. **Screen image × machine before submit.** Before writing `global.json` or submitting, run:
   ```bash
    python scripts/validate_apex_combo.py list-combos --backend lammps --prefer gpu
@@ -218,20 +221,24 @@ Options to offer via AskQuestion:
    required. Only after a confirmed image exists, pass
    `--vasp-image <url>` to `generate_config.py create` (writes
    `vasp_image_name`).
-15. **MUST use a Bohrium-safe VASP `vasp_run_command` — never bare `vasp_std`.**
+15. **MUST use a Bohrium-safe VASP `vasp_run_command`.**
    After a licensed VASP image is resolved (Rule 14), `global.json` should use a
    command that sources Intel oneAPI, raises stack limit, and calls an absolute
    binary. Typical Bohrium layout:
    ```text
-   bash -c "source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n <N> /opt/vasp.5.4.4/bin/vasp_std"
+   bash -c "source <ONEAPI_SETVARS> && ulimit -s unlimited && mpirun -n <RANKS> <ABSOLUTE_VASP_BINARY>"
    ```
    Constraints:
    - Always `source /opt/intel/oneapi/setvars.sh` (Intel MPI / MKL env).
    - Always `ulimit -s unlimited` (avoids stack overflow on large cells).
-   - Prefer absolute binary path (PATH `vasp_std` is unreliable); adjust path if
-     the user-approved image differs.
-   - Align `<N>` with `scass_type` CPU count (`c32_*` → `-n 32`, `c16_*` → `-n 16`).
-   - Do **not** use bare `mpirun -n 16 vasp_std`.
+   - Prefer an absolute `vasp_std`/`vasp_gam` binary path; adjust it for the
+     user-approved image.
+   - Align `<RANKS>` with the CPU count encoded by `scass_type`.
+   - Use `vasp_gam` only when validation proves the generated KPOINTS is
+     Gamma-centered `1x1x1`; `KGAMMA=True` alone is not proof.
+   - `vasp_gam` requires `KPAR=1`. In general, `KPAR` must divide ranks, and
+     `NCORE` must divide ranks/KPAR. Do not combine `NCORE` and `NPAR`;
+     missing `NCORE` is a warning.
    `generate_config.py` writes the run_command template for `--backend vasp`
    and sets `vasp_image_name` only from `--vasp-image`.
 16. **STOP: Before submitting `gamma_surface`, run `apex preview` to check for overlapping atoms.**

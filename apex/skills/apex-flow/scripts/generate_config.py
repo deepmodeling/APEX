@@ -32,7 +32,9 @@ Usage:
 """
 
 import argparse
+import copy
 import json
+import math
 import os
 import re
 import shutil
@@ -860,7 +862,8 @@ def plan_structure_layout(sources: list) -> list:
 
 def build_param_json(structure_paths, interaction: dict,
                      properties: list, flow_type: str = "joint",
-                     relaxation_settings: dict = None) -> dict:
+                     relaxation_settings: dict = None,
+                     gamma_overrides: dict = None) -> dict:
     """Build param.json configuration.
 
     structure_paths: one path string or a list of path strings for `structures`.
@@ -904,10 +907,16 @@ def build_param_json(structure_paths, interaction: dict,
         is_dft = interaction.get("type") in ("abacus", "vasp")
         for prop_name in properties:
             if prop_name in PROPERTY_DEFAULTS:
-                prop_config = PROPERTY_DEFAULTS[prop_name].copy()
+                prop_config = copy.deepcopy(PROPERTY_DEFAULTS[prop_name])
                 # Apply DFT-specific overrides (smaller supercells, fewer points)
                 if is_dft and prop_name in DFT_PROPERTY_OVERRIDES:
                     prop_config.update(DFT_PROPERTY_OVERRIDES[prop_name])
+                if prop_name in {"gamma", "gamma_surface"}:
+                    prop_config.update(
+                        gamma_overrides_for_property(
+                            prop_name, gamma_overrides or {}
+                        )
+                    )
                 prop_configs.append(prop_config)
             else:
                 print(f"Warning: Unknown property '{prop_name}', skipping",
@@ -915,6 +924,177 @@ def build_param_json(structure_paths, interaction: dict,
         param["properties"] = prop_configs
 
     return param
+
+
+def _normalized_numeric_sequence(values):
+    """Keep integer-looking CLI values as ints while allowing transformed vectors."""
+    normalized = []
+    for value in values:
+        number = float(value)
+        normalized.append(int(number) if number.is_integer() else number)
+    return normalized
+
+
+def gamma_overrides_from_args(args) -> dict:
+    """Collect only explicitly supplied ``--gamma-*`` options."""
+    option_map = {
+        "plane_miller": "gamma_plane_miller",
+        "slip_direction": "gamma_slip_direction",
+        "supercell_size": "gamma_supercell_size",
+        "min_slab_height": "gamma_min_slab_height",
+        "max_atoms": "gamma_max_atoms",
+        "min_distance": "gamma_min_distance",
+        "n_steps": "gamma_n_steps",
+        "n_steps_x": "gamma_n_steps_x",
+        "n_steps_y": "gamma_n_steps_y",
+        "closed_loop": "gamma_closed_loop",
+    }
+    overrides = {}
+    for key, attr in option_map.items():
+        value = getattr(args, attr, None)
+        if value is None:
+            continue
+        if key in {"plane_miller", "slip_direction", "supercell_size"}:
+            value = _normalized_numeric_sequence(value)
+        overrides[key] = value
+    return overrides
+
+
+def gamma_overrides_for_property(prop_name: str, overrides: dict) -> dict:
+    """Return the subset of Gamma CLI overrides valid for one property type."""
+    common = {
+        "plane_miller",
+        "slip_direction",
+        "supercell_size",
+        "min_slab_height",
+        "max_atoms",
+        "min_distance",
+    }
+    allowed = common | (
+        {"n_steps"} if prop_name == "gamma"
+        else {"n_steps_x", "n_steps_y", "closed_loop"}
+    )
+    return {key: copy.deepcopy(value) for key, value in overrides.items()
+            if key in allowed}
+
+
+def validate_gamma_cli_options(properties: list, overrides: dict) -> list:
+    """Reject ambiguous or misplaced Gamma-only command-line options."""
+    if not overrides:
+        return []
+    errors = []
+    requested = set(properties)
+    gamma_types = requested & {"gamma", "gamma_surface"}
+    if not gamma_types:
+        return [
+            "--gamma-* options require --properties gamma and/or gamma_surface"
+        ]
+    if "n_steps" in overrides and "gamma" not in gamma_types:
+        errors.append("--gamma-n-steps requires --properties gamma")
+    surface_only = {"n_steps_x", "n_steps_y", "closed_loop"}
+    if surface_only & overrides.keys() and "gamma_surface" not in gamma_types:
+        errors.append(
+            "--gamma-n-steps-x/--gamma-n-steps-y/--gamma-closed-loop "
+            "require --properties gamma_surface"
+        )
+    plane = overrides.get("plane_miller")
+    direction = overrides.get("slip_direction")
+    if plane is not None and not 3 <= len(plane) <= 4:
+        errors.append("--gamma-plane-miller requires 3 or 4 components")
+    if direction is not None and not 3 <= len(direction) <= 4:
+        errors.append("--gamma-slip-direction requires 3 or 4 components")
+    if (
+        plane is not None
+        and direction is not None
+        and len(plane) != len(direction)
+    ):
+        errors.append(
+            "--gamma-plane-miller and --gamma-slip-direction dimensions differ"
+        )
+    for values, option in (
+        (plane, "--gamma-plane-miller"),
+        (direction, "--gamma-slip-direction"),
+    ):
+        if values is not None and (
+            any(not math.isfinite(float(value)) for value in values)
+            or not any(float(value) != 0 for value in values)
+        ):
+            errors.append(f"{option} must be a finite, non-zero vector")
+    for prop_name in gamma_types:
+        effective = copy.deepcopy(PROPERTY_DEFAULTS[prop_name])
+        effective.update(gamma_overrides_for_property(prop_name, overrides))
+        effective_plane = effective["plane_miller"]
+        effective_direction = effective["slip_direction"]
+        if (
+            len(effective_plane) == len(effective_direction)
+            and all(
+                math.isfinite(float(value))
+                for value in effective_plane + effective_direction
+            )
+            and not math.isclose(
+                sum(
+                    float(p) * float(d)
+                    for p, d in zip(effective_plane, effective_direction)
+                ),
+                0.0,
+                abs_tol=1.0e-10,
+            )
+        ):
+            errors.append(
+                f"{prop_name}: --gamma-slip-direction must lie on "
+                "--gamma-plane-miller in the input-cell basis"
+            )
+    supercell = overrides.get("supercell_size")
+    if supercell is not None:
+        for index, value in enumerate(supercell[:2]):
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value <= 0
+            ):
+                errors.append(
+                    f"--gamma-supercell-size component {index + 1} "
+                    "must be a positive integer"
+                )
+        if (
+            not math.isfinite(float(supercell[2]))
+            or float(supercell[2]) <= 0
+        ):
+            errors.append(
+                "--gamma-supercell-size plane count must be positive and finite"
+            )
+    for key, option in (
+        ("min_slab_height", "--gamma-min-slab-height"),
+        ("min_distance", "--gamma-min-distance"),
+    ):
+        if key in overrides:
+            value = float(overrides[key])
+            minimum_ok = value > 0 if key == "min_slab_height" else value >= 0
+            if not math.isfinite(value) or not minimum_ok:
+                qualifier = "positive" if key == "min_slab_height" else "non-negative"
+                errors.append(f"{option} must be {qualifier} and finite")
+    if "max_atoms" in overrides and (
+        not isinstance(overrides["max_atoms"], int)
+        or isinstance(overrides["max_atoms"], bool)
+        or overrides["max_atoms"] <= 0
+    ):
+        errors.append("--gamma-max-atoms must be a positive integer")
+    for key, option in (
+        ("n_steps", "--gamma-n-steps"),
+        ("n_steps_x", "--gamma-n-steps-x"),
+        ("n_steps_y", "--gamma-n-steps-y"),
+    ):
+        if key in overrides and (
+            not isinstance(overrides[key], int)
+            or isinstance(overrides[key], bool)
+            or overrides[key] <= 0
+        ):
+            errors.append(f"{option} must be a positive integer")
+    if "closed_loop" in overrides and not isinstance(
+        overrides["closed_loop"], bool
+    ):
+        errors.append("--gamma-closed-loop must be a boolean flag")
+    return errors
 
 
 # =============================================================================
@@ -993,6 +1173,47 @@ def main():
                         help="Model/potential file path")
     create.add_argument("--properties", nargs="+", required=True,
                         help="Property types to calculate")
+    create.add_argument(
+        "--gamma-plane-miller", nargs="+", type=float,
+        help="Gamma slip-plane indices in the actual input-cell basis",
+    )
+    create.add_argument(
+        "--gamma-slip-direction", nargs="+", type=float,
+        help="Gamma slip-direction components in the actual input-cell basis",
+    )
+    create.add_argument(
+        "--gamma-supercell-size", nargs=3, type=float,
+        metavar=("X", "Y", "PLANES"),
+        help="Gamma in-plane repeats and target Miller-plane spacings",
+    )
+    create.add_argument(
+        "--gamma-min-slab-height", type=float, metavar="ANGSTROM",
+        help="Minimum material thickness for Gamma slabs",
+    )
+    create.add_argument(
+        "--gamma-max-atoms", type=int, metavar="COUNT",
+        help="Maximum allowed atom count for a generated Gamma slab",
+    )
+    create.add_argument(
+        "--gamma-min-distance", type=float, metavar="ANGSTROM",
+        help="Minimum allowed periodic atom-pair distance",
+    )
+    create.add_argument(
+        "--gamma-n-steps", type=int, metavar="COUNT",
+        help="Gamma-line increments (the generated point count is COUNT + 1)",
+    )
+    create.add_argument(
+        "--gamma-n-steps-x", type=int, metavar="COUNT",
+        help="Gamma-surface increments along the x slip vector",
+    )
+    create.add_argument(
+        "--gamma-n-steps-y", type=int, metavar="COUNT",
+        help="Gamma-surface increments along the y slip vector",
+    )
+    create.add_argument(
+        "--gamma-closed-loop", action="store_true", default=None,
+        help="Derive periodic in-plane vectors for gamma_surface",
+    )
     create.add_argument("--flow-type", default="joint",
                         choices=["joint", "relax", "props"],
                         help="Workflow type (default: joint)")
@@ -1099,7 +1320,11 @@ def main():
     # -------------------------------------------------------------------------
     # Validate
     # -------------------------------------------------------------------------
+    gamma_overrides = gamma_overrides_from_args(args)
     errors = validate_config(args.backend, args.potential, args.properties)
+    errors.extend(
+        validate_gamma_cli_options(args.properties, gamma_overrides)
+    )
     if errors:
         for err in errors:
             print(f"ERROR: {err}", file=sys.stderr)
@@ -1211,7 +1436,11 @@ def main():
         orb_files=orb_files,
     )
     param_config = build_param_json(
-        structure_paths, interaction, args.properties, args.flow_type
+        structure_paths,
+        interaction,
+        args.properties,
+        args.flow_type,
+        gamma_overrides=gamma_overrides,
     )
 
     # -------------------------------------------------------------------------
@@ -1303,6 +1532,27 @@ def main():
         print(f"Potential:      {args.potential}")
     print(f"Structures:     {len(structure_paths)} ({', '.join(structure_paths)})")
     print(f"Properties:     {', '.join(args.properties)}")
+    for prop in param_config.get("properties", []):
+        if prop.get("type") in {"gamma", "gamma_surface"}:
+            task_count = (
+                int(prop.get("n_steps", 10)) + 1
+                if prop["type"] == "gamma"
+                else (
+                    int(prop.get("n_steps_x", prop.get("n_steps", 10))) + 1
+                ) * (
+                    int(
+                        prop.get(
+                            "n_steps_y",
+                            prop.get("n_steps_x", prop.get("n_steps", 10)),
+                        )
+                    ) + 1
+                )
+            )
+            print(
+                "Gamma config:   "
+                + json.dumps(prop, sort_keys=True)
+            )
+            print(f"Gamma tasks:    {task_count}")
     print(f"Flow type:      {args.flow_type}")
     print(f"Workflow name:  {workflow_name}")
     print(f"scass_type:     {global_config['scass_type']}")

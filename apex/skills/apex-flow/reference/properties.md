@@ -275,15 +275,14 @@ These parameters appear in most property configurations:
 
 **cal_setting defaults**: `relax_pos=true`, `relax_shape=false`, `relax_vol=false`
 
-**Complete working default**:
+**Backward-compatible default** (the safety limits remain unset unless the
+user supplies them):
 ```json
 {
     "type": "gamma",
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
-    "min_slab_height": 18,
-    "max_atoms": 216,
     "n_steps": 10
 }
 ```
@@ -335,15 +334,14 @@ Quick primary picks when the user has not specified a system (still confirm):
 
 **cal_setting defaults**: `relax_pos=true`, `relax_shape=false`, `relax_vol=false`
 
-**Complete working default**:
+**Backward-compatible default** (the safety limits remain unset unless the
+user supplies them):
 ```json
 {
     "type": "gamma_surface",
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
-    "min_slab_height": 18,
-    "max_atoms": 216,
     "closed_loop": false,
     "n_steps_x": 10,
     "n_steps_y": 10
@@ -358,6 +356,37 @@ Both properties also write `slab_generation.json`. The third
 `supercell_size` value is passed to Pymatgen as a plane count
 (`in_unit_planes=true`), preventing an intended two-layer slab from being
 promoted by floating-point round-off.
+
+### Generator options and pre-submit validation
+
+`generate_config.py create` keeps the legacy `--properties` interface and
+defaults unchanged. The following optional flags only apply when `gamma`
+and/or `gamma_surface` is requested:
+
+| CLI option | JSON field | Applies to |
+|---|---|---|
+| `--gamma-plane-miller <...>` | `plane_miller` | both |
+| `--gamma-slip-direction <...>` | `slip_direction` | both |
+| `--gamma-supercell-size <x> <y> <planes>` | `supercell_size` | both |
+| `--gamma-min-slab-height <angstrom>` | `min_slab_height` | both |
+| `--gamma-max-atoms <count>` | `max_atoms` | both |
+| `--gamma-min-distance <angstrom>` | `min_distance` | both |
+| `--gamma-n-steps <count>` | `n_steps` | `gamma` |
+| `--gamma-n-steps-x <count>` | `n_steps_x` | `gamma_surface` |
+| `--gamma-n-steps-y <count>` | `n_steps_y` | `gamma_surface` |
+| `--gamma-closed-loop` | `closed_loop=true` | `gamma_surface` |
+
+The generator prints the final Gamma JSON and expected task count. The input
+validator then uses the APEX Gamma core in a temporary directory to generate a
+representative slab for every local input structure. It reports parent/final
+atom count, material thickness, oriented-cell repeats, effective plane count,
+minimum periodic pair distance, expected task count, and generated VASP
+KPOINTS when applicable.
+
+Explicit safety limits are enforced before submission. Missing
+`min_slab_height` or `max_atoms` produces a compatibility warning rather than
+changing legacy behavior. This representative check does not replace the full
+displacement overlap check performed by `apex preview`.
 
 ⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with
 `plane_miller`. Canonical FCC/BCC/HCP systems: **README §4.10** (same table as `gamma`).

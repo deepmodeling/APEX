@@ -9,11 +9,15 @@ Usage:
 """
 
 import argparse
+import copy
 import glob
 import json
+import math
 import os
 import re
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -37,9 +41,9 @@ VALID_LAMMPS_TYPES = {
 # Valid backend types
 VALID_BACKENDS = {"vasp", "abacus"} | VALID_LAMMPS_TYPES
 
-# Bare PATH-based vasp_std is unreliable in Bohrium VASP images.
+# Bare PATH-based VASP executables are unreliable in Bohrium VASP images.
 _BARE_VASP_RUN_RE = re.compile(
-    r"^\s*mpirun\b.*\bvasp_std\s*$", re.IGNORECASE
+    r"^\s*mpirun\b.*\bvasp_(?:std|gam|ncl)\s*$", re.IGNORECASE
 )
 
 
@@ -209,6 +213,77 @@ def _input_has_kspacing(text: str) -> bool:
     return bool(re.search(r"(?im)^\s*kspacing\b", text))
 
 
+def _parse_incar_values(text: str) -> dict:
+    """Parse simple INCAR assignments, including semicolon-separated tags."""
+    values = {}
+    for match in re.finditer(
+        r"(?im)(?:^|;)\s*([A-Za-z][A-Za-z0-9_]*)\s*=\s*([^;!#\n]+)",
+        text,
+    ):
+        values[match.group(1).upper()] = match.group(2).strip()
+    return values
+
+
+def _parse_vasp_bool(value, default=False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    normalized = str(value).strip().strip(".").lower()
+    if normalized in {"true", "t", "yes", "y", "1"}:
+        return True
+    if normalized in {"false", "f", "no", "n", "0"}:
+        return False
+    raise ValueError(f"invalid VASP boolean value: {value!r}")
+
+
+def _positive_incar_int(values: dict, key: str, errors: list):
+    raw = values.get(key)
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        errors.append(f"VASP: {key} must be a positive integer, got {raw!r}")
+        return None
+    if value <= 0:
+        errors.append(f"VASP: {key} must be a positive integer, got {value}")
+        return None
+    return value
+
+
+def _effective_vasp_sampling(prop: dict, incar_values: dict):
+    cal_setting = prop.get("cal_setting") or {}
+    kspacing = cal_setting.get(
+        "kspacing", cal_setting.get("KSPACING", incar_values.get("KSPACING"))
+    )
+    kgamma = cal_setting.get(
+        "kgamma", cal_setting.get("KGAMMA", incar_values.get("KGAMMA"))
+    )
+    if kspacing is None:
+        return None, None
+    if isinstance(kspacing, list):
+        spacing = [float(value) for value in kspacing]
+    else:
+        spacing = float(kspacing)
+    return spacing, _parse_vasp_bool(kgamma, default=False)
+
+
+def _kpoint_summary(poscar: Path, kspacing, kgamma: bool) -> dict:
+    from apex.core.calculator.lib import vasp_utils
+
+    text = vasp_utils.make_kspacing_kpoints(
+        str(poscar), kspacing, kgamma
+    )
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 4:
+        raise RuntimeError("APEX generated an unreadable KPOINTS payload")
+    return {
+        "style": lines[2],
+        "grid": [int(value) for value in lines[3].split()[:3]],
+    }
+
+
 def validate_dft_kspacing(
     param_config: dict, base_dir: Path, interaction: dict
 ) -> tuple:
@@ -288,8 +363,8 @@ def validate_vasp_run_command(global_config: dict) -> tuple:
         errors.append(
             "VASP: vasp_run_command must use the Bohrium template "
             '(source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && '
-            "mpirun -n <N> /opt/vasp.5.4.4/bin/vasp_std); "
-            "bare 'mpirun -n N vasp_std' is not allowed"
+            "mpirun -n <RANKS> /opt/vasp.5.4.4/bin/<vasp_std|vasp_gam>); "
+            "a bare PATH-based VASP executable is not allowed"
         )
     else:
         if missing_setvars:
@@ -304,9 +379,180 @@ def validate_vasp_run_command(global_config: dict) -> tuple:
             )
         if missing_abs:
             warnings.append(
-                "VASP: prefer absolute binary "
-                "/opt/vasp.5.4.4/bin/vasp_std in vasp_run_command"
+                "VASP: prefer an absolute vasp_std/vasp_gam binary path "
+                "in vasp_run_command"
             )
+
+    return errors, warnings
+
+
+def _read_vasp_incar_values(interaction: dict, base_dir: Path) -> tuple:
+    incar_name = interaction.get("incar") or "INCAR"
+    incar_path = _resolve_under_base(str(incar_name), base_dir)
+    if not incar_path.is_file():
+        return {}, incar_path
+    text = incar_path.read_text(encoding="utf-8", errors="replace")
+    return _parse_incar_values(text), incar_path
+
+
+def _vasp_command_details(global_config: dict) -> dict:
+    command = (
+        global_config.get("vasp_run_command")
+        or global_config.get("run_command")
+        or ""
+    )
+    executable_match = re.search(
+        r"(?:^|[/\s])(?P<name>vasp_(?:std|gam|ncl))(?=$|[\s\"'])",
+        command,
+        re.IGNORECASE,
+    )
+    ranks_match = re.search(
+        r"\bmpirun\b[^;&|\n]*?(?:-n|-np)\s+(?P<ranks>\d+)",
+        command,
+        re.IGNORECASE,
+    )
+    scass_match = re.search(
+        r"\bc(?P<cores>\d+)_", str(global_config.get("scass_type") or "")
+    )
+    return {
+        "command": command,
+        "executable": (
+            executable_match.group("name").lower()
+            if executable_match else None
+        ),
+        "ranks": int(ranks_match.group("ranks")) if ranks_match else None,
+        "scass_cores": (
+            int(scass_match.group("cores")) if scass_match else None
+        ),
+    }
+
+
+def validate_vasp_parallel_settings(
+    param_config: dict,
+    global_config: dict,
+    base_dir: Path,
+    gamma_reports: list,
+) -> tuple:
+    """Validate executable, MPI, and INCAR parallel settings together."""
+    errors = []
+    warnings = []
+    interaction = param_config.get("interaction") or {}
+    incar_values, incar_path = _read_vasp_incar_values(interaction, base_dir)
+    details = _vasp_command_details(global_config)
+
+    executable = details["executable"]
+    if executable is None:
+        errors.append(
+            "VASP: cannot parse vasp_std/vasp_gam from vasp_run_command"
+        )
+    ranks = details["ranks"]
+    if ranks is None:
+        errors.append(
+            "VASP: cannot parse a positive MPI rank count from "
+            "'mpirun -n <RANKS>'"
+        )
+
+    scass_cores = details["scass_cores"]
+    if (
+        ranks is not None
+        and scass_cores is not None
+        and ranks != scass_cores
+    ):
+        errors.append(
+            f"VASP: MPI ranks ({ranks}) must match Bohrium CPU count "
+            f"from scass_type ({scass_cores})"
+        )
+
+    ncore = _positive_incar_int(incar_values, "NCORE", errors)
+    npar = _positive_incar_int(incar_values, "NPAR", errors)
+    kpar = _positive_incar_int(incar_values, "KPAR", errors)
+    if "NCORE" not in incar_values:
+        warnings.append(
+            f"VASP: NCORE is not set in '{incar_path}'; choose it explicitly "
+            "after considering MPI ranks and KPAR"
+        )
+    if ncore is not None and npar is not None:
+        errors.append("VASP: do not set NCORE and NPAR at the same time")
+
+    effective_kpar = 1 if kpar is None else kpar
+    if ranks is not None:
+        if ranks % effective_kpar:
+            errors.append(
+                f"VASP: KPAR={effective_kpar} must divide MPI ranks={ranks}"
+            )
+        elif ncore is not None:
+            ranks_per_kgroup = ranks // effective_kpar
+            if ranks_per_kgroup % ncore:
+                errors.append(
+                    f"VASP: NCORE={ncore} must divide "
+                    f"MPI ranks/KPAR={ranks_per_kgroup}"
+                )
+
+    if executable == "vasp_gam":
+        if effective_kpar != 1:
+            errors.append("VASP: vasp_gam requires KPAR=1")
+        configured_props = [
+            prop for prop in param_config.get("properties", [])
+            if isinstance(prop, dict)
+        ]
+        unsupported = [
+            prop.get("type") for prop in configured_props
+            if prop.get("type") not in {"gamma", "gamma_surface"}
+        ]
+        if unsupported:
+            errors.append(
+                "VASP: vasp_gam cannot be selected globally when non-Gamma "
+                f"properties are present ({unsupported}); use vasp_std"
+            )
+        if not gamma_reports:
+            errors.append(
+                "VASP: vasp_gam requires a successful Gamma slab preflight "
+                "to prove the generated KPOINTS grid"
+            )
+        sampling_reports = list(gamma_reports)
+        relaxation = param_config.get("relaxation")
+        if isinstance(relaxation, dict):
+            try:
+                kspacing, kgamma = _effective_vasp_sampling(
+                    relaxation, incar_values
+                )
+                for structure_path in _iter_structure_poscars(
+                    param_config, base_dir
+                ):
+                    if structure_path.name == "STRU":
+                        continue
+                    sampling_reports.append(
+                        {
+                            "label": f"relaxation for {structure_path}",
+                            "kpoints": (
+                                None if kspacing is None
+                                else _kpoint_summary(
+                                    structure_path, kspacing, kgamma
+                                )
+                            ),
+                        }
+                    )
+            except Exception as exc:
+                errors.append(
+                    f"VASP: cannot verify relaxation KPOINTS for vasp_gam: {exc}"
+                )
+        for report in sampling_reports:
+            kpoints = report.get("kpoints")
+            if (
+                not kpoints
+                or str(kpoints.get("style", "")).lower() != "gamma"
+                or kpoints.get("grid") != [1, 1, 1]
+            ):
+                label = report.get("label", "Gamma slab")
+                rendered = (
+                    "unavailable" if not kpoints
+                    else f"{kpoints.get('style')} {kpoints.get('grid')}"
+                )
+                errors.append(
+                    "VASP: vasp_gam is only valid for an actually generated "
+                    f"Gamma-centered 1x1x1 KPOINTS grid; {label} produced "
+                    f"{rendered}. KGAMMA=True alone is insufficient"
+                )
 
     return errors, warnings
 
@@ -454,6 +700,83 @@ def validate_interaction(interaction: dict) -> list:
     return errors, warnings
 
 
+def validate_gamma_settings(prop: dict, prefix: str) -> tuple:
+    """Mirror the public validation rules in ``gamma_slab.py``."""
+    errors = []
+    warnings = []
+    supercell = prop.get("supercell_size", [1, 1, 5])
+    if not isinstance(supercell, (list, tuple)) or len(supercell) != 3:
+        errors.append(f"{prefix}: gamma supercell_size must contain 3 values")
+    else:
+        for index, value in enumerate(supercell[:2]):
+            if (
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value <= 0
+            ):
+                errors.append(
+                    f"{prefix}: gamma supercell_size[{index}] "
+                    "must be a positive integer"
+                )
+        plane_count = supercell[2]
+        if (
+            isinstance(plane_count, bool)
+            or not isinstance(plane_count, (int, float))
+            or not math.isfinite(float(plane_count))
+            or plane_count <= 0
+        ):
+            errors.append(
+                f"{prefix}: gamma supercell_size[2] must be a positive "
+                "finite number of Miller-plane spacings"
+            )
+
+    min_height = prop.get("min_slab_height")
+    if min_height is None:
+        warnings.append(
+            f"{prefix}: min_slab_height is not set; confirm the generated "
+            "material thickness before submission"
+        )
+    elif (
+        isinstance(min_height, bool)
+        or not isinstance(min_height, (int, float))
+        or not math.isfinite(float(min_height))
+        or min_height <= 0
+    ):
+        errors.append(f"{prefix}: min_slab_height must be a positive finite number")
+
+    max_atoms = prop.get("max_atoms")
+    if max_atoms is None:
+        warnings.append(
+            f"{prefix}: max_atoms is not set; confirm the generated atom "
+            "count before submission"
+        )
+    elif (
+        not isinstance(max_atoms, int)
+        or isinstance(max_atoms, bool)
+        or max_atoms <= 0
+    ):
+        errors.append(f"{prefix}: max_atoms must be a positive integer")
+
+    min_distance = prop.get("min_distance", 0.2)
+    if (
+        isinstance(min_distance, bool)
+        or not isinstance(min_distance, (int, float))
+        or not math.isfinite(float(min_distance))
+        or min_distance < 0
+    ):
+        errors.append(f"{prefix}: min_distance must be non-negative and finite")
+
+    if prop.get("type") == "gamma":
+        n_steps = prop.get("n_steps", 10)
+        if (
+            not isinstance(n_steps, int)
+            or isinstance(n_steps, bool)
+            or n_steps <= 0
+        ):
+            errors.append(f"{prefix}: n_steps must be a positive integer")
+    return errors, warnings
+
+
 def validate_properties(properties: list, interaction_type: str) -> list:
     """Validate property configurations."""
     errors = []
@@ -542,17 +865,52 @@ def validate_properties(properties: list, interaction_type: str) -> list:
                 )
 
         if prop_type in {"gamma", "gamma_surface"}:
+            gamma_errors, gamma_warnings = validate_gamma_settings(prop, prefix)
+            errors.extend(gamma_errors)
+            warnings.extend(gamma_warnings)
             plane = prop.get("plane_miller")
             direction = prop.get("slip_direction")
             if not plane or not direction:
                 errors.append(
                     f"{prefix}: {prop_type} requires plane_miller and slip_direction"
                 )
+            elif not isinstance(plane, (list, tuple)) or not isinstance(
+                direction, (list, tuple)
+            ):
+                errors.append(
+                    f"{prefix}: plane_miller and slip_direction must be sequences"
+                )
             elif len(plane) != len(direction):
                 errors.append(
                     f"{prefix}: plane_miller and slip_direction dimensions differ"
                 )
-            elif sum(p * d for p, d in zip(plane, direction)) != 0:
+            elif not 3 <= len(plane) <= 4:
+                errors.append(
+                    f"{prefix}: plane_miller and slip_direction require "
+                    "3 or 4 components"
+                )
+            elif not all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(float(value))
+                for value in list(plane) + list(direction)
+            ):
+                errors.append(
+                    f"{prefix}: plane_miller and slip_direction must be "
+                    "finite numeric vectors"
+                )
+            elif not any(float(value) != 0 for value in plane) or not any(
+                float(value) != 0 for value in direction
+            ):
+                errors.append(
+                    f"{prefix}: plane_miller and slip_direction must be "
+                    "non-zero vectors"
+                )
+            elif not math.isclose(
+                sum(p * d for p, d in zip(plane, direction)),
+                0.0,
+                abs_tol=1.0e-10,
+            ):
                 errors.append(
                     f"{prefix}: slip_direction must lie on plane_miller"
                 )
@@ -575,6 +933,203 @@ def validate_properties(properties: list, interaction_type: str) -> list:
                 )
 
     return errors, warnings
+
+
+def _gamma_task_count(prop: dict) -> int:
+    if prop.get("type") == "gamma":
+        return int(prop.get("n_steps", 10)) + 1
+    n_steps_x = int(prop.get("n_steps_x", prop.get("n_steps", 10)))
+    n_steps_y = int(prop.get("n_steps_y", n_steps_x))
+    return (n_steps_x + 1) * (n_steps_y + 1)
+
+
+def preflight_gamma_structures(
+    param_config: dict, base_dir: Path
+) -> tuple:
+    """Generate one representative slab per structure and Gamma property."""
+    reports = []
+    errors = []
+    warnings = []
+    properties = [
+        (index, prop)
+        for index, prop in enumerate(param_config.get("properties", []))
+        if isinstance(prop, dict)
+        and prop.get("type") in {"gamma", "gamma_surface"}
+    ]
+    if not properties:
+        return reports, errors, warnings
+
+    structure_paths = _iter_structure_poscars(param_config, base_dir)
+    if not structure_paths:
+        errors.append(
+            "Gamma preflight: no local POSCAR/CONTCAR structure was resolved"
+        )
+        return reports, errors, warnings
+
+    interaction = param_config.get("interaction") or {}
+    if interaction.get("type") == "abacus":
+        warnings.append(
+            "Gamma preflight: representative STRU generation is not performed; "
+            "run apex preview before submission"
+        )
+        return reports, errors, warnings
+
+    incar_values = {}
+    if interaction.get("type") == "vasp":
+        incar_values, _ = _read_vasp_incar_values(interaction, base_dir)
+
+    from pymatgen.core.structure import Structure
+    from apex.core.property.Gamma import Gamma
+    from apex.core.property.GammaSurface import GammaSurface
+
+    for structure_path in structure_paths:
+        if structure_path.name == "STRU":
+            warnings.append(
+                f"Gamma preflight: skipped unsupported structure file "
+                f"'{structure_path}'"
+            )
+            continue
+        try:
+            parent_atom_count = len(Structure.from_file(structure_path))
+        except Exception as exc:
+            errors.append(
+                f"Gamma preflight: cannot read '{structure_path}': {exc}"
+            )
+            continue
+
+        for prop_index, original_prop in properties:
+            prop = copy.deepcopy(original_prop)
+            prop_type = prop["type"]
+            label = (
+                f"properties[{prop_index}] {prop_type} "
+                f"for {structure_path}"
+            )
+            prop["reproduce"] = False
+            for key in (
+                "init_from_suffix",
+                "output_suffix",
+                "init_data_path",
+                "start_confs_path",
+            ):
+                prop.pop(key, None)
+            if prop_type == "gamma":
+                prop["n_steps"] = 1
+            else:
+                prop["n_steps_x"] = 1
+                prop["n_steps_y"] = 1
+
+            previous_cwd = Path.cwd()
+            try:
+                with tempfile.TemporaryDirectory(
+                    prefix="apex-gamma-preflight-"
+                ) as temp_name:
+                    root = Path(temp_name)
+                    equi = root / "relaxation" / "relax_task"
+                    work = root / prop_type
+                    equi.mkdir(parents=True)
+                    shutil.copy2(structure_path, equi / "CONTCAR")
+                    (equi / "result.json").write_text(
+                        "{}\n", encoding="utf-8"
+                    )
+
+                    if prop_type == "gamma":
+                        task_paths = Gamma(
+                            prop, interaction
+                        ).make_confs(str(work), str(equi))
+                    else:
+                        task_paths = GammaSurface(
+                            prop, interaction
+                        ).make_confs(
+                            str(work),
+                            str(equi),
+                            require_relaxation_result=False,
+                        )
+                    if not task_paths:
+                        raise RuntimeError("no representative task was generated")
+
+                    metadata_path = work / "slab_generation.json"
+                    metadata = json.loads(
+                        metadata_path.read_text(encoding="utf-8")
+                    )
+                    task_poscar = Path(task_paths[0]) / "POSCAR"
+                    kpoints = None
+                    if interaction.get("type") == "vasp":
+                        kspacing, kgamma = _effective_vasp_sampling(
+                            original_prop, incar_values
+                        )
+                        if kspacing is not None:
+                            kpoints = _kpoint_summary(
+                                task_poscar, kspacing, kgamma
+                            )
+
+                    min_height = original_prop.get("min_slab_height")
+                    if (
+                        min_height is not None
+                        and metadata["slab_height"] + 1.0e-10
+                        < float(min_height)
+                    ):
+                        raise RuntimeError(
+                            f"generated material thickness "
+                            f"{metadata['slab_height']:.6f} A is below "
+                            f"min_slab_height={float(min_height):.6f} A"
+                        )
+
+                    reports.append(
+                        {
+                            "label": label,
+                            "property_index": prop_index,
+                            "property_type": prop_type,
+                            "structure": str(structure_path),
+                            "parent_atom_count": parent_atom_count,
+                            "atom_count": metadata["atom_count"],
+                            "slab_height": metadata["slab_height"],
+                            "effective_plane_spacings": metadata[
+                                "effective_plane_spacings"
+                            ],
+                            "oriented_cell_repeats": metadata[
+                                "oriented_cell_repeats"
+                            ],
+                            "minimum_pair_distance": metadata[
+                                "minimum_pair_distance"
+                            ],
+                            "expected_task_count": _gamma_task_count(
+                                original_prop
+                            ),
+                            "kpoints": kpoints,
+                        }
+                    )
+            except Exception as exc:
+                errors.append(f"Gamma preflight failed for {label}: {exc}")
+            finally:
+                os.chdir(previous_cwd)
+
+    if not reports and not errors:
+        errors.append("Gamma preflight did not produce a representative slab")
+    return reports, errors, warnings
+
+
+def print_gamma_preflight_reports(reports: list):
+    if not reports:
+        return
+    print("Gamma preflight:")
+    for report in reports:
+        kpoints = report.get("kpoints")
+        kpoint_text = (
+            "not available"
+            if not kpoints
+            else f"{kpoints['style']} {kpoints['grid']}"
+        )
+        print(f"  {report['label']}")
+        print(
+            "    atoms(parent/final)="
+            f"{report['parent_atom_count']}/{report['atom_count']}; "
+            f"thickness={report['slab_height']:.6f} A; "
+            f"plane spacings={report['effective_plane_spacings']:.8g}; "
+            f"layers={report['oriented_cell_repeats']}; "
+            f"minimum distance={report['minimum_pair_distance']:.6f} A; "
+            f"expected tasks={report['expected_task_count']}; "
+            f"KPOINTS={kpoint_text}"
+        )
 
 
 def validate_structures(param_config: dict, base_dir: Path) -> list:
@@ -611,6 +1166,7 @@ def main():
     all_errors = []
     all_warnings = []
     global_config = None
+    gamma_reports = []
 
     # Load param.json
     param_path = Path(args.param)
@@ -655,6 +1211,19 @@ def main():
     all_errors.extend(errors)
     all_warnings.extend(warnings)
 
+    # Build representative Gamma slabs before any remote submission.
+    if any(
+        isinstance(prop, dict)
+        and prop.get("type") in {"gamma", "gamma_surface"}
+        for prop in properties
+    ):
+        reports, errors, warnings = preflight_gamma_structures(
+            param_config, base_dir
+        )
+        gamma_reports.extend(reports)
+        all_errors.extend(errors)
+        all_warnings.extend(warnings)
+
     # VASP POTCAR filesystem check (prefix + per-element files)
     if interaction.get("type") == "vasp":
         required_elements = collect_structure_elements(param_config, base_dir)
@@ -673,6 +1242,13 @@ def main():
     if interaction.get("type") in ("vasp", "abacus"):
         errors, warnings = validate_dft_kspacing(
             param_config, base_dir, interaction
+        )
+        all_errors.extend(errors)
+        all_warnings.extend(warnings)
+
+    if interaction.get("type") == "vasp" and global_config is not None:
+        errors, warnings = validate_vasp_parallel_settings(
+            param_config, global_config, base_dir, gamma_reports
         )
         all_errors.extend(errors)
         all_warnings.extend(warnings)
@@ -696,6 +1272,7 @@ def main():
             )
 
     # Report
+    print_gamma_preflight_reports(gamma_reports)
     if all_warnings:
         print("WARNINGS:", file=sys.stderr)
         for w in all_warnings:
