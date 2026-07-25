@@ -57,6 +57,7 @@ APEX currently offers calculation methods for the following alloy properties:
   - [3.6 After Submission](#36-after-submission)
   - [3.7 Graphical Interface (GUI)](#37-graphical-interface-gui)
   - [3.8 Bohrium Account Defaults](#38-bohrium-account-defaults)
+  - [3.9 Agent Skill](#39-agent-skill)
 - [4. Detailed Parameter Reference](#4-detailed-parameter-reference)
   - [4.1 Global Configuration](#41-global-configuration-globaljson)
   - [4.2 Calculation Parameters](#42-calculation-parameters-paramjson)
@@ -458,6 +459,27 @@ When you run `apex submit -c global_bohrium.json`, APEX auto-fills these default
 - `apex_image_name`: `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`
 
 Priority rule: values in your `-c` json file override account defaults.
+
+### 3.9 Agent Skill
+
+APEX ships two Agent-skill editions with different execution assumptions:
+
+- `apex skill` prints a local Agent installation prompt. During installation,
+  the Agent asks whether calculations use Bohrium cloud, the local workstation,
+  or a local Slurm/PBS cluster, then installs the matching execution profile.
+  The Bohrium profile uses `apex account` and runs `apex submit` directly from
+  the local machine; it does not require an access-key ticket or outer job.
+- `apex skill --zip` writes `apex-flow.zip` for Bohrium Cloud/MatMaster. This
+  separate edition uses a ticket and a lightweight outer submission job because
+  the cloud container cannot read the user's local APEX account file.
+
+```shell
+# Print the local Agent installation prompt
+apex skill
+
+# Build the Bohrium Cloud/MatMaster upload archive
+apex skill --zip
+```
 
 
 

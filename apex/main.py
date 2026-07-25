@@ -19,10 +19,6 @@ from apex import (
     __version__,
 )
 from apex.config import Config
-from apex.step import do_step_from_args
-from apex.submit import submit_from_args
-from apex.archive import archive_from_args
-from apex.report import report_from_args
 from apex.utils import load_config_file
 from apex.task_failure import classify_apex_task_status
 
@@ -619,13 +615,16 @@ def parse_args():
     # Agent skill
     parser_skill = subparsers.add_parser(
         "skill",
-        help="Print an Agent prompt for installing apex-flow, or build a zip file for uploading to MatMaster",
+        help=(
+            "Print the local Agent installation prompt, or build the separate "
+            "Bohrium Cloud/MatMaster skill zip"
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_skill.add_argument(
         "--zip",
         action="store_true",
-        help="Write a zip of the bundled apex-flow",
+        help="Write the Bohrium Cloud/MatMaster apex-flow zip",
     )
     parser_skill.add_argument(
         "-o", "--output",
@@ -1274,6 +1273,8 @@ def main():
     # parse args
     parser, args = parse_args()
     if args.cmd == 'submit':
+        from apex.submit import submit_from_args
+
         header()
         try:
             submit_from_args(
@@ -1518,6 +1519,8 @@ def main():
                         f"under {os.path.join(work_dir, '.failed-artifacts')}"
                     )
     elif args.cmd == 'do':
+        from apex.step import do_step_from_args
+
         header()
         do_step_from_args(
             parameter=args.parameter,
@@ -1525,6 +1528,8 @@ def main():
             step=args.step
         )
     elif args.cmd == 'archive':
+        from apex.archive import archive_from_args
+
         archive_from_args(
             parameters=args.json,
             config_file=args.config,
@@ -1536,6 +1541,8 @@ def main():
             is_result=args.result
         )
     elif args.cmd == 'report':
+        from apex.report import report_from_args
+
         header()
         report_from_args(
             config_file=args.config,

@@ -494,18 +494,20 @@ class TestValidateInputs(unittest.TestCase):
     def test_validate_global(self):
         errors, warnings = self.validator.validate_global({})
         self.assertTrue(
-            any("Missing 'machine' section" in error for error in errors)
+            any("Missing local execution configuration" in error for error in errors)
         )
         self.assertTrue(
             any("Missing 'run_command'" in error for error in errors)
         )
-        self.assertTrue(warnings)
+        self.assertFalse(warnings)
 
         errors, warnings = self.validator.validate_global(
             {"machine": {}, "run_command": "run"}
         )
-        self.assertIn("Missing 'machine.batch_type'", errors)
-        self.assertTrue(warnings)
+        self.assertTrue(
+            any("machine.batch_type" in error for error in errors)
+        )
+        self.assertFalse(warnings)
 
         self.assertEqual(
             self.validator.validate_global(
@@ -517,6 +519,67 @@ class TestValidateInputs(unittest.TestCase):
             ),
             ([], []),
         )
+
+    def test_validate_global_execution_profiles(self):
+        data_root = get_skill_root() / "data"
+        bohrium_direct = json.loads(
+            (data_root / "global_bohrium_direct.json").read_text()
+        )
+        errors, warnings = self.validator.validate_global(bohrium_direct)
+        self.assertFalse(errors)
+        self.assertTrue(any("apex account --show" in warning for warning in warnings))
+
+        local_debug = json.loads(
+            (data_root / "global_local_debug.json").read_text()
+        )
+        self.assertEqual(
+            self.validator.validate_global(local_debug),
+            ([], []),
+        )
+
+        cluster_template = json.loads(
+            (data_root / "global_local_cluster_slurm.json").read_text()
+        )
+        errors, _ = self.validator.validate_global(cluster_template)
+        self.assertTrue(any("placeholders" in error for error in errors))
+
+        local_cluster = {
+            "context_type": "Local",
+            "run_command": "srun lmp -in in.lammps",
+            "machine": {
+                "batch_type": "Slurm",
+                "context_type": "Local",
+            },
+            "resources": {
+                "number_node": 1,
+                "custom_flags": ["#SBATCH --partition=compute"],
+            },
+        }
+        self.assertEqual(
+            self.validator.validate_global(local_cluster),
+            ([], []),
+        )
+
+        pbs_cluster = {
+            "context_type": "Local",
+            "run_command": "mpirun lmp -in in.lammps",
+            "machine": {
+                "batch_type": "PBS",
+                "context_type": "Local",
+            },
+            "resources": {"number_node": 1},
+        }
+        self.assertEqual(
+            self.validator.validate_global(pbs_cluster),
+            ([], []),
+        )
+
+        local_cluster["run_command"] = "<calculator command>"
+        local_cluster["resources"]["custom_flags"] = [
+            "#SBATCH --partition=<partition>"
+        ]
+        errors, _ = self.validator.validate_global(local_cluster)
+        self.assertTrue(any("placeholders" in error for error in errors))
 
     def test_validate_current_global_requires_integer_matching_project_ids(self):
         config = {

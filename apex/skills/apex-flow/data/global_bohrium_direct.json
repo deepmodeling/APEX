@@ -1,0 +1,12 @@
+{
+    "dflow_host": "https://workflows.deepmodeling.com",
+    "k8s_api_server": "https://workflows.deepmodeling.com",
+    "batch_type": "Bohrium",
+    "context_type": "Bohrium",
+    "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
+    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
+    "lammps_run_command": "lmp -in in.lammps",
+    "scass_type": "c8_m31_1 * NVIDIA T4",
+    "group_size": 1,
+    "pool_size": 1
+}

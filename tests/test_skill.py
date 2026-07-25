@@ -42,6 +42,15 @@ class TestApexSkill(unittest.TestCase):
             ).is_file()
         )
         self.assertTrue((root / "scripts" / "fetch_models.py").is_file())
+        local = root / "variants" / "local"
+        self.assertTrue((local / "SKILL.md").is_file())
+        self.assertTrue((local / "reference" / "submission.md").is_file())
+        for profile in (
+            "bohrium-direct.md",
+            "local-debug.md",
+            "local-cluster.md",
+        ):
+            self.assertTrue((local / "profiles" / profile).is_file())
 
     def test_no_hardcoded_project_id_in_skill_docs(self):
         root = get_skill_root()
@@ -95,6 +104,15 @@ class TestApexSkill(unittest.TestCase):
                 any(n.endswith("DPA-3.2-5M-OMat24.pth") for n in names)
             )
             self.assertFalse(any(n.endswith(".pt") for n in names))
+            self.assertFalse(any("/variants/" in n for n in names))
+            self.assertFalse(any("global_local_" in n for n in names))
+            self.assertFalse(any("global_bohrium_direct.json" in n for n in names))
+            with zipfile.ZipFile(out) as zf:
+                cloud_skill = zf.read(
+                    f"{SKILL_NAME}/SKILL.md"
+                ).decode("utf-8")
+            self.assertIn("outer Bohrium job", cloud_skill)
+            self.assertIn("bohrium_config.ticket", cloud_skill)
 
     def test_skill_agent_prompt(self):
         buf = io.StringIO()
@@ -105,6 +123,15 @@ class TestApexSkill(unittest.TestCase):
         self.assertIn(SKILL_NAME, out)
         self.assertIn("apex skill --zip", out)
         self.assertIn("MatMaster", out)
+        self.assertIn("Bohrium cloud", out)
+        self.assertIn("local", out)
+        self.assertIn("local cluster", out)
+        self.assertIn("bohrium-direct.md", out)
+        self.assertIn("local-debug.md", out)
+        self.assertIn("local-cluster.md", out)
+        self.assertIn("variants/local", out)
+        self.assertIn("get_skill_root", out)
+        self.assertNotIn(str(get_skill_root()), out)
 
 
 class TestValidateApexCombo(unittest.TestCase):

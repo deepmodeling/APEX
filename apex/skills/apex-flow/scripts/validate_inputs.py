@@ -562,32 +562,40 @@ def validate_global(global_config: dict) -> list:
     errors = []
     warnings = []
 
-    # generate_config.py writes the current, top-level APEX schema. Keep
-    # accepting the older nested-machine schema for existing user configs.
-    is_current_schema = any(
-        key in global_config
-        for key in ("dflow_host", "context_type", "bohrium_config", "program_id")
+    machine = global_config.get("machine")
+    machine = machine if isinstance(machine, dict) else {}
+    top_context_values = [
+        global_config.get("context_type"),
+        global_config.get("batch_type"),
+    ]
+    is_bohrium = (
+        global_config.get("dflow_host") == "https://workflows.deepmodeling.com"
+        or isinstance(global_config.get("bohrium_config"), dict)
+        or any(
+            isinstance(value, str) and "bohrium" in value.lower()
+            for value in top_context_values
+        )
     )
 
-    if is_current_schema:
+    if is_bohrium:
         for key in ("batch_type", "context_type"):
             if not global_config.get(key):
                 errors.append(f"Missing '{key}' in global.json")
 
         program_id = global_config.get("program_id")
-        if not isinstance(program_id, int) or isinstance(program_id, bool):
+        if program_id is not None and (
+            not isinstance(program_id, int) or isinstance(program_id, bool)
+        ):
             errors.append(
                 "'program_id' must be an unquoted JSON integer, not a string; "
-                "generate global.json with "
-                "generate_config.py"
+                "use `apex account` or regenerate global.json"
             )
-        elif program_id <= 0:
+        elif isinstance(program_id, int) and program_id <= 0:
             errors.append("'program_id' must be a positive integer")
 
         bohrium_config = global_config.get("bohrium_config")
-        if not isinstance(bohrium_config, dict):
-            errors.append("Missing 'bohrium_config' section in global.json")
-        else:
+        ticket_mode = isinstance(bohrium_config, dict)
+        if ticket_mode:
             project_id = bohrium_config.get("project_id")
             if not isinstance(project_id, int) or isinstance(project_id, bool):
                 errors.append(
@@ -610,22 +618,29 @@ def validate_global(global_config: dict) -> list:
                     "Missing non-empty 'bohrium_config.ticket'; regenerate "
                     "global.json with generate_config.py"
                 )
+            if program_id is None:
+                errors.append(
+                    "Ticket-based Bohrium config requires integer 'program_id'"
+                )
+        else:
+            warnings.append(
+                "Bohrium direct-submit profile uses credentials from "
+                "`apex account`; verify them with `apex account --show`"
+            )
 
-        machine = global_config.get("machine")
-        if isinstance(machine, dict):
-            remote_profile = machine.get("remote_profile")
-            if isinstance(remote_profile, dict) and "program_id" in remote_profile:
-                nested_id = remote_profile["program_id"]
-                if not isinstance(nested_id, int) or isinstance(nested_id, bool):
-                    errors.append(
-                        "'machine.remote_profile.program_id' must be a JSON "
-                        "integer, not a quoted string"
-                    )
-                elif nested_id != program_id:
-                    errors.append(
-                        "'machine.remote_profile.program_id' must match "
-                        "'program_id'"
-                    )
+        remote_profile = machine.get("remote_profile")
+        if isinstance(remote_profile, dict) and "program_id" in remote_profile:
+            nested_id = remote_profile["program_id"]
+            if not isinstance(nested_id, int) or isinstance(nested_id, bool):
+                errors.append(
+                    "'machine.remote_profile.program_id' must be a JSON "
+                    "integer, not a quoted string"
+                )
+            elif program_id is not None and nested_id != program_id:
+                errors.append(
+                    "'machine.remote_profile.program_id' must match "
+                    "'program_id'"
+                )
 
         if not global_config.get("scass_type"):
             errors.append("Missing 'scass_type' in global.json")
@@ -644,19 +659,33 @@ def validate_global(global_config: dict) -> list:
         errors.extend(rc_errors)
         warnings.extend(rc_warnings)
     else:
-        # Legacy nested-machine schema.
-        if "machine" not in global_config:
-            errors.append("Missing 'machine' section in global.json")
-        else:
-            machine = global_config["machine"]
-            if "batch_type" not in machine:
+        # Local debug and DPDispatcher cluster modes do not use Bohrium auth.
+        top_batch = global_config.get("batch_type")
+        nested_batch = machine.get("batch_type")
+        batch_type = nested_batch or top_batch
+        if not batch_type:
+            if not machine:
+                errors.append(
+                    "Missing local execution configuration: set top-level "
+                    "'batch_type' or provide 'machine.batch_type'"
+                )
+            else:
                 errors.append("Missing 'machine.batch_type'")
 
-        if "resources" not in global_config:
+        if (
+            isinstance(batch_type, str)
+            and batch_type.lower() not in {"shell"}
+            and "resources" not in global_config
+        ):
             warnings.append("No 'resources' section - will use defaults")
 
         if "run_command" not in global_config:
             errors.append("Missing 'run_command' in global.json")
+
+        if re.search(r"<[^>]+>", json.dumps(global_config)):
+            errors.append(
+                "Replace all <...> placeholders in local/cluster global.json"
+            )
 
     return errors, warnings
 
