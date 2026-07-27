@@ -6,6 +6,7 @@ import tempfile
 import unittest
 
 from monty.serialization import dumpfn, loadfn
+from pymatgen.io.vasp import Incar
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 __package__ = "tests"
@@ -195,10 +196,16 @@ Direct
                 },
                 poscar,
             ).make_input_file(tmp, "finite_t_latt", task_param)
+            with open(os.path.join(tmp, "INCAR.nvt")) as fp:
+                nvt = fp.read()
             with open(os.path.join(tmp, "INCAR.equi")) as fp:
                 equi = fp.read()
             with open(os.path.join(tmp, "INCAR")) as fp:
                 staged = fp.read()
+            self.assertIn("ISIF = 2", nvt)
+            self.assertIn("NSW = 0", nvt)
+            self.assertNotIn("LANGEVIN_GAMMA_L", nvt)
+            self.assertNotIn("PMASS", nvt)
             self.assertIn("MDALGO = 3", equi)
             self.assertEqual(equi, staged)
             self.assertIn("ISIF = 3", equi)
@@ -206,10 +213,116 @@ Direct
             self.assertIn("LANGEVIN_GAMMA_L = 10.0", equi)
             self.assertIn("PMASS = 1000.0", equi)
             self.assertNotIn("SMASS", equi)
-            self.assertEqual(["OUTCAR", "CONTCAR", "XDATCAR"], VASP(
+            self.assertEqual(
+                ["OUTCAR", "outlog", "OSZICAR", "CONTCAR", "XDATCAR"],
+                VASP(
                 {"type": "vasp", "incar": incar, "potcars": {"Si": "Si"}},
                 poscar,
-            ).backward_files("finite_t_latt"))
+                ).backward_files("finite_t_latt"),
+            )
+
+    def test_vasp_segmented_nvt_temperature_schedule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            poscar = os.path.join(tmp, "POSCAR")
+            incar = os.path.join(tmp, "INCAR.base")
+            with open(poscar, "w") as fp:
+                fp.write(self.POSCAR)
+            with open(incar, "w") as fp:
+                fp.write("ENCUT=300\nKSPACING=0.5\n")
+            with open(os.path.join(tmp, "POTCAR"), "w") as fp:
+                fp.write("ENMAX = 200.0; ENMIN = 150.0\n")
+            dumpfn(
+                {"temperature": 900, "supercell_size": [1, 1, 1]},
+                os.path.join(tmp, "FiniteTlatt.json"),
+            )
+            task_param = {
+                "type": "finite_t_latt",
+                "cal_type": "static",
+                "cal_setting": {
+                    "nvt_temperature_schedule": [300, 500, 700, 900],
+                    "nvt_step": 50,
+                    "equi_step": 100,
+                    "ave_step": 300,
+                    "timestep_fs": 1.0,
+                    "encut": 300,
+                    "langevin_gamma": 10.0,
+                },
+            }
+            VASP(
+                {
+                    "type": "vasp",
+                    "incar": incar,
+                    "potcars": {"Si": "Si"},
+                },
+                poscar,
+            ).make_input_file(tmp, "finite_t_latt", task_param)
+
+            for index, temperatures in enumerate(
+                ((300, 500), (500, 700), (700, 900))
+            ):
+                staged = Incar.from_file(
+                    os.path.join(tmp, f"INCAR.nvt_{index:03d}")
+                )
+                self.assertEqual(staged["NSW"], 50)
+                self.assertEqual(staged["ISIF"], 2)
+                self.assertEqual(staged["TEBEG"], temperatures[0])
+                self.assertEqual(staged["TEEND"], temperatures[1])
+
+            plan = loadfn(os.path.join(tmp, "apex_vasp_stage_plan.json"))
+            self.assertEqual(plan["task_type"], "finite_t_latt")
+            self.assertEqual(
+                [stage["expected_ionic_steps"] for stage in plan["stages"]],
+                [50, 50, 50, 100, 300],
+            )
+            self.assertEqual(
+                [stage["name"] for stage in plan["stages"][:3]],
+                [
+                    "nvt_000_300K_to_500K",
+                    "nvt_001_500K_to_700K",
+                    "nvt_002_700K_to_900K",
+                ],
+            )
+            command = open(os.path.join(tmp, "run_command")).read()
+            self.assertIn("mv OUTCAR OUTCAR.nvt_000", command)
+            self.assertIn("mv OSZICAR OSZICAR.nvt_000", command)
+            self.assertIn("cp CONTCAR CONTCAR.nvt_000", command)
+
+    def test_vasp_schedule_must_end_at_target_temperature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            poscar = os.path.join(tmp, "POSCAR")
+            incar = os.path.join(tmp, "INCAR.base")
+            with open(poscar, "w") as fp:
+                fp.write(self.POSCAR)
+            with open(incar, "w") as fp:
+                fp.write("ENCUT=300\nKSPACING=0.5\n")
+            with open(os.path.join(tmp, "POTCAR"), "w") as fp:
+                fp.write("ENMAX = 200.0; ENMIN = 150.0\n")
+            dumpfn(
+                {"temperature": 900, "supercell_size": [1, 1, 1]},
+                os.path.join(tmp, "FiniteTlatt.json"),
+            )
+            task_param = {
+                "type": "finite_t_latt",
+                "cal_type": "static",
+                "cal_setting": {
+                    "nvt_temperature_schedule": [300, 600],
+                    "nvt_step": 50,
+                    "equi_step": 100,
+                    "ave_step": 300,
+                    "encut": 300,
+                },
+            }
+            with self.assertRaisesRegex(
+                ValueError, "must match.*target temperature"
+            ):
+                VASP(
+                    {
+                        "type": "vasp",
+                        "incar": incar,
+                        "potcars": {"Si": "Si"},
+                    },
+                    poscar,
+                ).make_input_file(tmp, "finite_t_latt", task_param)
 
     def test_cell_statistics_preserve_legacy_result_shape(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -241,6 +354,37 @@ Direct
             self.assertEqual([90.0, 90.0, 90.0], stats["angles"]["mean"])
             self.assertEqual(4, stats["cell"]["sample_count"])
             self.assertGreater(stats["volume"]["std"], 0)
+
+    def test_vasp_cell_statistics_drop_pre_ionic_initial_cell(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            task = os.path.join(tmp, "task.000000")
+            os.makedirs(task)
+            with open(os.path.join(task, "OUTCAR"), "w") as fp:
+                for index, length in enumerate((4.0, 6.0, 8.0, 10.0)):
+                    fp.write(
+                        " direct lattice vectors reciprocal lattice vectors\n"
+                        f" {length} 0 0 0 0 0\n"
+                        f" 0 {length} 0 0 0 0\n"
+                        f" 0 0 {length} 0 0 0\n"
+                    )
+                    if index:
+                        fp.write(
+                            " POSITION TOTAL-FORCE (eV/Angst)\n"
+                        )
+            prop = FiniteTlatt(
+                {
+                    "type": "finite_t_latt",
+                    "supercell_size": [2, 2, 2],
+                    "cal_setting": {"temperature": [500]},
+                },
+                {"type": "vasp"},
+            )
+            result, _ = prop._compute_lower(
+                os.path.join(tmp, "result.json"), [task], {}
+            )
+            stats = result["_metadata"]["temperatures"]["500"]
+            self.assertEqual(3, stats["sample_count"])
+            self.assertEqual([4.0, 4.0, 4.0], stats["lengths"]["mean"])
 
     def test_vasp_md_defaults_and_potcar_encut_validation(self):
         with tempfile.TemporaryDirectory() as tmp:

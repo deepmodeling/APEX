@@ -221,7 +221,13 @@ class FiniteTlatt(Property):
 
     def _cell_statistics(self, task_dir: str, supercell_size: List[int]) -> Dict:
         if self.inter_param["type"] == "vasp":
-            cells = self._vasp_cells(os.path.join(task_dir, "OUTCAR"))
+            outcar = os.path.join(task_dir, "OUTCAR")
+            cells = self._vasp_cells(outcar)
+            ionic_steps = self._vasp_ionic_steps(outcar)
+            # VASP prints the initial cell before the first ionic step. Keep
+            # only cell samples aligned with production ionic frames.
+            if ionic_steps and len(cells) > ionic_steps:
+                cells = cells[-ionic_steps:]
         else:
             cells = []
             box_file = os.path.join(task_dir, "average_box.txt")
@@ -324,6 +330,19 @@ class FiniteTlatt(Property):
                 continue
             cells.append(cell)
         return cells
+
+    @staticmethod
+    def _vasp_ionic_steps(outcar):
+        count = 0
+        with open(outcar, encoding="utf-8", errors="ignore") as fp:
+            for line in fp:
+                if re.match(
+                    r"^\s*POSITION\s+TOTAL-FORCE(?:\s|$)",
+                    line,
+                    flags=re.IGNORECASE,
+                ):
+                    count += 1
+        return count
 
     def _variable(self, temp: float) -> str:
         return (

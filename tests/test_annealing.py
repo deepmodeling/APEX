@@ -495,7 +495,21 @@ def test_annealing_vasp_inputs_and_abacus_rejection(tmp_path):
     assert "TEEND = 900.0" in vasp_ramp
     assert "NSW = 20" in vasp_ramp
     assert "SMASS" not in vasp_ramp
-    assert vasp.backward_files("annealing") == ["OUTCAR", "XDATCAR", "CONTCAR"]
+    assert vasp.backward_files("annealing") == [
+        "OUTCAR",
+        "outlog",
+        "OSZICAR",
+        "XDATCAR",
+        "CONTCAR",
+    ]
+    stage_plan = loadfn(vasp_dir / "apex_vasp_stage_plan.json")
+    assert stage_plan["task_type"] == "annealing"
+    assert [stage["expected_ionic_steps"] for stage in stage_plan["stages"]] == [
+        10,
+        20,
+        40,
+        30,
+    ]
 
     with pytest.raises(NotImplementedError, match="does not support.*ABACUS"):
         Annealing({"type": "annealing"}, {"type": "abacus"})

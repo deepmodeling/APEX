@@ -26,6 +26,7 @@ from apex.op.property_ops import (
     _is_failed_task_status,
 )
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.op.RunVASP import RunVASP
 from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.core.lib.vasp_runtime import build_kpoint_aware_vasp_command
 from apex.core.lib import dispatcher as dispatcher_module
@@ -37,7 +38,11 @@ from apex.task_failure import (
     is_lammps_header_only_log,
     load_and_classify_task_status,
 )
-from apex.utils import apex_task_succeeded, all_apex_task_status_succeeded
+from apex.utils import (
+    all_apex_task_status_succeeded,
+    apex_task_succeeded,
+    get_task_type,
+)
 from apex.core.property.Property import is_failed_task_result
 try:
     from context import write_poscar
@@ -498,6 +503,592 @@ class TestSimplePropertySteps(unittest.TestCase):
             "vasp_std",
             vasp_run.parameters["run_image_config"]["command"],
         )
+
+
+class TestRunVASP(unittest.TestCase):
+    @staticmethod
+    def _write_common_inputs(task_dir):
+        (task_dir / "POSCAR").write_text("original-poscar\n")
+        (task_dir / "INCAR").write_text("NSW = 1\n")
+        (task_dir / "POTCAR").write_text("potcar\n")
+        (task_dir / "KPOINTS").write_text(
+            "Automatic mesh\n0\nGamma\n1 1 1\n0 0 0\n"
+        )
+        (task_dir / "fake_vasp.py").write_text(
+            "from pathlib import Path\n"
+            "import re\n"
+            "incar = Path('INCAR').read_text()\n"
+            "match = re.search(r'NSW\\s*=\\s*(\\d+)', incar)\n"
+            "nsw = match.group(1) if match else 'unset'\n"
+            "step_count = int(nsw) if nsw != 'unset' else 0\n"
+            "with Path('calls.txt').open('a') as stream:\n"
+            "    stream.write(nsw + '\\n')\n"
+            "Path('OUTCAR').write_text(\n"
+            "    ''.join(\n"
+            "        ' POSITION                                       "
+            "TOTAL-FORCE (eV/Angst)\\n'\n"
+            "        for _ in range(step_count)\n"
+            "    )\n"
+            "    + 'General timing and accounting informations for this job:\\n'\n"
+            "    + 'Total CPU time used (sec): 1.0\\n'\n"
+            "    + 'Elapsed time (sec): 1.0\\n'\n"
+            "    + 'Voluntary context switches: 1\\n'\n"
+            "    + 'extra wrapper line after the VASP footer\\n'\n"
+            ")\n"
+            "Path('OSZICAR').write_text(\n"
+            "    ''.join(f'{step} T= 300 E= 0\\n' "
+            "for step in range(1, step_count + 1))\n"
+            ")\n"
+            "Path('CONTCAR').write_text('contcar NSW=' + nsw + '\\n')\n"
+            "Path('XDATCAR').write_text('xdatcar NSW=' + nsw + '\\n')\n"
+        )
+
+    @staticmethod
+    def _op_input(task_dir, task_name, command, backward_list=None):
+        return OPIO({
+            "task_name": task_name,
+            "task_path": task_dir,
+            "backward_list": backward_list or [
+                "OUTCAR", "CONTCAR", "XDATCAR"
+            ],
+            "log_name": "outlog",
+            "backward_dir_name": "backward_dir",
+            "run_image_config": {"command": command},
+            "optional_artifact": None,
+            "optional_input": {},
+        })
+
+    def test_vasp_backend_is_wired_to_apex_run_op(self):
+        task_type, run_op = get_task_type({"interaction": {"type": "vasp"}})
+        self.assertEqual(task_type, "vasp")
+        self.assertIs(run_op, RunVASP)
+
+    def test_single_stage_vasp_still_runs(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = RunVASP().execute(self._op_input(
+                    task_dir, "single", "python fake_vasp.py"
+                ))
+            finally:
+                os.chdir(cwd)
+
+            backward = root / result["backward_dir"]
+            self.assertTrue((backward / "OUTCAR").is_file())
+            status = loadfn(backward / "apex_vasp_stage_status.json")
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(status["task_type"], "single_stage")
+            self.assertTrue(status["stages"][0]["footer_complete"])
+            self.assertEqual(
+                (root / "single" / "calls.txt").read_text().splitlines(),
+                ["1"],
+            )
+
+    def test_finite_t_latt_runs_both_writable_incar_stages(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            original_poscar = (task_dir / "POSCAR").read_text()
+            (task_dir / "task.json").write_text(
+                '{"type": "finite_t_latt"}\n'
+            )
+            (task_dir / "INCAR.equi").write_text("NSW = 100\n")
+            (task_dir / "INCAR.production").write_text("NSW = 300\n")
+            (task_dir / "run_command").write_text(
+                "set -e\n"
+                "cp INCAR.equi INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "mv OUTCAR OUTCAR.equi\n"
+                "[ ! -f XDATCAR ] || mv XDATCAR XDATCAR.equi\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.production INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = RunVASP().execute(self._op_input(
+                    task_dir,
+                    "finite",
+                    "APEX_RUN_COMMAND='python fake_vasp.py' bash run_command",
+                ))
+            finally:
+                os.chdir(cwd)
+
+            backward = root / result["backward_dir"]
+            self.assertEqual(
+                (root / "finite" / "calls.txt").read_text().splitlines(),
+                ["100", "300"],
+            )
+            self.assertTrue((backward / "OUTCAR.equi").is_file())
+            self.assertTrue((backward / "XDATCAR.equi").is_file())
+            status = loadfn(backward / "apex_vasp_stage_status.json")
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(
+                [stage["name"] for stage in status["stages"]],
+                ["equi", "production"],
+            )
+            self.assertEqual(
+                [stage["observed_ionic_steps"] for stage in status["stages"]],
+                [100, 300],
+            )
+            self.assertTrue(all(
+                stage["footer_complete"] for stage in status["stages"]
+            ))
+            # Stage switching must mutate only the OP working copy.
+            self.assertEqual((task_dir / "INCAR").read_text(), "NSW = 1\n")
+            self.assertEqual((task_dir / "POSCAR").read_text(), original_poscar)
+
+    def test_finite_t_latt_runs_nvt_before_npt_stages(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "task.json").write_text(
+                '{"type": "finite_t_latt"}\n'
+            )
+            (task_dir / "INCAR.nvt").write_text("NSW = 50\nISIF = 2\n")
+            (task_dir / "INCAR.equi").write_text("NSW = 100\nISIF = 3\n")
+            (task_dir / "INCAR.production").write_text(
+                "NSW = 300\nISIF = 3\n"
+            )
+            (task_dir / "run_command").write_text(
+                "set -e\n"
+                "cp INCAR.nvt INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "mv OUTCAR OUTCAR.nvt\n"
+                "[ ! -f XDATCAR ] || mv XDATCAR XDATCAR.nvt\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.equi INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "mv OUTCAR OUTCAR.equi\n"
+                "[ ! -f XDATCAR ] || mv XDATCAR XDATCAR.equi\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.production INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = RunVASP().execute(self._op_input(
+                    task_dir,
+                    "finite-three-stage",
+                    "APEX_RUN_COMMAND='python fake_vasp.py' bash run_command",
+                ))
+            finally:
+                os.chdir(cwd)
+
+            backward = root / result["backward_dir"]
+            self.assertEqual(
+                (
+                    root / "finite-three-stage" / "calls.txt"
+                ).read_text().splitlines(),
+                ["50", "100", "300"],
+            )
+            self.assertTrue((backward / "OUTCAR.nvt").is_file())
+            self.assertTrue((backward / "OUTCAR.equi").is_file())
+            status = loadfn(backward / "apex_vasp_stage_status.json")
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(
+                [stage["name"] for stage in status["stages"]],
+                ["nvt", "equi", "production"],
+            )
+            self.assertEqual(
+                [stage["expected_ionic_steps"] for stage in status["stages"]],
+                [50, 100, 300],
+            )
+            self.assertEqual(
+                [stage["observed_ionic_steps"] for stage in status["stages"]],
+                [50, 100, 300],
+            )
+
+    def test_failed_vasp_preserves_current_stage_evidence(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "task.json").write_text(
+                '{"type": "finite_t_latt"}\n'
+            )
+            (task_dir / "INCAR.nvt").write_text("NSW = 50\nISIF = 2\n")
+            (task_dir / "INCAR.equi").write_text("NSW = 100\nISIF = 3\n")
+            (task_dir / "INCAR.production").write_text(
+                "NSW = 300\nISIF = 3\n"
+            )
+            (task_dir / "fake_fail.py").write_text(
+                "from pathlib import Path\n"
+                "import re\n"
+                "incar = Path('INCAR').read_text()\n"
+                "nsw = int(re.search(r'NSW\\s*=\\s*(\\d+)', incar).group(1))\n"
+                "if nsw == 50:\n"
+                "    Path('OUTCAR').write_text(\n"
+                "        ''.join(' POSITION TOTAL-FORCE (eV/Angst)\\n' "
+                "for _ in range(nsw))\n"
+                "        + 'General timing and accounting informations\\n'\n"
+                "        + 'Total CPU time used (sec): 1\\n'\n"
+                "        + 'Elapsed time (sec): 1\\n'\n"
+                "    )\n"
+                "    Path('OSZICAR').write_text(\n"
+                "        ''.join(f'{step} T= 300 E= 0\\n' "
+                "for step in range(1, nsw + 1))\n"
+                "    )\n"
+                "    Path('CONTCAR').write_text('completed nvt structure\\n')\n"
+                "    Path('XDATCAR').write_text('completed nvt trajectory\\n')\n"
+                "else:\n"
+                "    Path('OUTCAR').write_text('partial ionic step\\n')\n"
+                "    Path('OSZICAR').write_text('DAV: 1\\n')\n"
+                "    Path('CONTCAR').write_text('partial structure\\n')\n"
+                "    raise SystemExit(7)\n"
+            )
+            (task_dir / "run_command").write_text(
+                "set -e\n"
+                "cp INCAR.nvt INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "mv OUTCAR OUTCAR.nvt\n"
+                "mv OSZICAR OSZICAR.nvt\n"
+                "cp CONTCAR CONTCAR.nvt\n"
+                "mv XDATCAR XDATCAR.nvt\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.equi INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "mv OUTCAR OUTCAR.equi\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.production INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+            )
+            dflow_tmp = root / "dflow-tmp"
+            (dflow_tmp / "inputs" / "artifacts").mkdir(parents=True)
+            (dflow_tmp / "outputs" / "artifacts").mkdir(parents=True)
+            op = RunVASP()
+            op.tmp_root = str(dflow_tmp)
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                with self.assertRaises(TransientError):
+                    op.execute(self._op_input(
+                        task_dir,
+                        "finite-failed",
+                        (
+                            "APEX_RUN_COMMAND='python fake_fail.py' "
+                            "bash run_command"
+                        ),
+                    ))
+            finally:
+                os.chdir(cwd)
+
+            local_evidence = (
+                root / "finite-failed" / "backward_dir"
+            )
+            packed_evidence = (
+                dflow_tmp / "outputs" / "artifacts" / "backward_dir"
+            )
+            for evidence in (local_evidence, packed_evidence):
+                self.assertTrue((evidence / "OUTCAR").is_file())
+                self.assertTrue((evidence / "OSZICAR").is_file())
+                self.assertTrue((evidence / "INCAR").is_file())
+                self.assertTrue((evidence / "outlog").is_file())
+                self.assertTrue((evidence / "OUTCAR.nvt").is_file())
+                self.assertTrue((evidence / "OSZICAR.nvt").is_file())
+                self.assertTrue((evidence / "CONTCAR.nvt").is_file())
+                self.assertTrue((evidence / "XDATCAR.nvt").is_file())
+                failure = loadfn(evidence / "apex_vasp_failure.json")
+                self.assertEqual(
+                    failure["current_or_next_stage"], "equi"
+                )
+                self.assertEqual(failure["error_type"], "TransientError")
+                status = loadfn(
+                    evidence / "apex_vasp_stage_status.json"
+                )
+                self.assertEqual(status["state"], "failed")
+                self.assertEqual(
+                    status["missing_or_incomplete_stages"],
+                    ["equi", "production"],
+                )
+
+    def test_finite_t_latt_rejects_short_stage_with_complete_footer(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "task.json").write_text(
+                '{"type": "finite_t_latt"}\n'
+            )
+            (task_dir / "INCAR.equi").write_text("NSW = 3\n")
+            (task_dir / "INCAR.production").write_text("NSW = 5\n")
+            (task_dir / "fake_short.py").write_text(
+                "from pathlib import Path\n"
+                "Path('OUTCAR').write_text(\n"
+                "    ' POSITION TOTAL-FORCE (eV/Angst)\\n'\n"
+                "    'General timing and accounting informations\\n'\n"
+                "    'Total CPU time used (sec): 1\\n'\n"
+                "    'Elapsed time (sec): 1\\n'\n"
+                ")\n"
+                "Path('OSZICAR').write_text('1 T= 300 E= 0\\n')\n"
+                "Path('CONTCAR').write_text('partial\\n')\n"
+                "Path('XDATCAR').write_text('partial\\n')\n"
+            )
+            (task_dir / "run_command").write_text(
+                "set -e\n"
+                "cp INCAR.equi INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "mv OUTCAR OUTCAR.equi\n"
+                "mv OSZICAR OSZICAR.equi\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.production INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                with self.assertRaises(TransientError):
+                    RunVASP().execute(self._op_input(
+                        task_dir,
+                        "finite-short",
+                        "APEX_RUN_COMMAND='python fake_short.py' bash run_command",
+                    ))
+            finally:
+                os.chdir(cwd)
+
+            status = loadfn(
+                root / "finite-short" / "backward_dir"
+                / "apex_vasp_stage_status.json"
+            )
+            self.assertEqual(status["state"], "failed")
+            self.assertEqual(
+                status["stages"][0]["observed_ionic_steps"], 1
+            )
+            self.assertIn(
+                "ionic_step_count_mismatch",
+                status["stages"][0]["failure_reasons"][0],
+            )
+
+    def test_single_stage_allows_early_convergence_with_normal_footer(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "INCAR").write_text("NSW = 20\n")
+            (task_dir / "fake_vasp.py").write_text(
+                (task_dir / "fake_vasp.py").read_text().replace(
+                    "range(step_count)", "range(2)"
+                )
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = RunVASP().execute(self._op_input(
+                    task_dir, "relax-early", "python fake_vasp.py"
+                ))
+            finally:
+                os.chdir(cwd)
+
+            status = loadfn(
+                root / result["backward_dir"]
+                / "apex_vasp_stage_status.json"
+            )
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(
+                status["stages"][0]["expected_ionic_steps"], 20
+            )
+            self.assertEqual(
+                status["stages"][0]["observed_ionic_steps"], 2
+            )
+
+    def test_single_stage_rejects_missing_normal_footer(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "fake_no_footer.py").write_text(
+                "from pathlib import Path\n"
+                "Path('OUTCAR').write_text(' POSITION TOTAL-FORCE\\n')\n"
+                "Path('CONTCAR').write_text('partial\\n')\n"
+                "Path('XDATCAR').write_text('partial\\n')\n"
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                with self.assertRaises(TransientError):
+                    RunVASP().execute(self._op_input(
+                        task_dir, "no-footer", "python fake_no_footer.py"
+                    ))
+            finally:
+                os.chdir(cwd)
+
+            status = loadfn(
+                root / "no-footer" / "backward_dir"
+                / "apex_vasp_stage_status.json"
+            )
+            self.assertFalse(status["stages"][0]["footer_complete"])
+            self.assertTrue(
+                status["stages"][0]["failure_reasons"][0].startswith(
+                    "missing_footer_markers:"
+                )
+            )
+
+    def test_single_stage_rejects_footer_outside_tail_region(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "fake_stale_footer.py").write_text(
+                "from pathlib import Path\n"
+                "footer = (\n"
+                "    'General timing and accounting informations\\n'\n"
+                "    'Total CPU time used (sec): 1\\n'\n"
+                "    'Elapsed time (sec): 1\\n'\n"
+                ")\n"
+                "Path('OUTCAR').write_text(\n"
+                "    footer + ''.join(f'incomplete tail {i}\\n' "
+                "for i in range(300))\n"
+                ")\n"
+                "Path('OSZICAR').write_text('1 T= 300 E= 0\\n')\n"
+                "Path('CONTCAR').write_text('partial\\n')\n"
+                "Path('XDATCAR').write_text('partial\\n')\n"
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                with self.assertRaises(TransientError):
+                    RunVASP().execute(self._op_input(
+                        task_dir,
+                        "stale-footer",
+                        "python fake_stale_footer.py",
+                    ))
+            finally:
+                os.chdir(cwd)
+
+            status = loadfn(
+                root / "stale-footer" / "backward_dir"
+                / "apex_vasp_stage_status.json"
+            )
+            self.assertFalse(status["stages"][0]["footer_complete"])
+
+    def test_failure_destination_discovers_real_pythonop_tmp_ancestor(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dflow_tmp = Path(tmpdir) / "tmp"
+            (dflow_tmp / "inputs" / "artifacts").mkdir(parents=True)
+            (dflow_tmp / "outputs" / "artifacts").mkdir(parents=True)
+            work_dir = (
+                dflow_tmp
+                / "confs"
+                / "hcp_Ti_36"
+                / "finite_t_latt_00"
+                / "task.000000"
+            )
+            work_dir.mkdir(parents=True)
+            cwd = os.getcwd()
+            try:
+                os.chdir(work_dir)
+                destinations = RunVASP()._failure_destinations(
+                    "backward_dir"
+                )
+            finally:
+                os.chdir(cwd)
+
+            self.assertIn(
+                (
+                    dflow_tmp
+                    / "outputs"
+                    / "artifacts"
+                    / "backward_dir"
+                ).resolve(),
+                [path.resolve() for path in destinations],
+            )
+
+    def test_single_stage_cannot_pass_finite_t_latt_validation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "task.json").write_text(
+                '{"type": "finite_t_latt"}\n'
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                with self.assertRaisesRegex(
+                    TransientError, "equi"
+                ):
+                    RunVASP().execute(self._op_input(
+                        task_dir, "incomplete", "python fake_vasp.py"
+                    ))
+            finally:
+                os.chdir(cwd)
+
+            status = loadfn(
+                root / "incomplete" / "backward_dir"
+                / "apex_vasp_stage_status.json"
+            )
+            self.assertEqual(status["state"], "failed")
+            self.assertEqual(
+                status["missing_or_incomplete_stages"],
+                ["equi", "production"],
+            )
+
+    def test_annealing_validates_every_outcar_stage(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            (task_dir / "task.json").write_text('{"type": "annealing"}\n')
+            (task_dir / "INCAR.eq").write_text("NSW = 10\n")
+            (task_dir / "INCAR.production").write_text("NSW = 20\n")
+            (task_dir / "run_command").write_text(
+                "set -e\n"
+                "rm -f OUTCAR.apex XDATCAR.apex\n"
+                "cp INCAR.eq INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "printf '\\nAPEX_STAGE eq\\n' >> OUTCAR.apex\n"
+                "cat OUTCAR >> OUTCAR.apex\n"
+                "cp CONTCAR POSCAR\n"
+                "cp INCAR.production INCAR\n"
+                'eval "$APEX_RUN_COMMAND"\n'
+                "printf '\\nAPEX_STAGE production\\n' >> OUTCAR.apex\n"
+                "cat OUTCAR >> OUTCAR.apex\n"
+                "mv OUTCAR.apex OUTCAR\n"
+            )
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = RunVASP().execute(self._op_input(
+                    task_dir,
+                    "annealing",
+                    "APEX_RUN_COMMAND='python fake_vasp.py' bash run_command",
+                ))
+            finally:
+                os.chdir(cwd)
+
+            backward = root / result["backward_dir"]
+            status = loadfn(backward / "apex_vasp_stage_status.json")
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(
+                [stage["name"] for stage in status["stages"]],
+                ["eq", "production"],
+            )
+            self.assertEqual(
+                [stage["observed_ionic_steps"] for stage in status["stages"]],
+                [10, 20],
+            )
+            self.assertEqual(
+                (root / "annealing" / "calls.txt").read_text().splitlines(),
+                ["10", "20"],
+            )
 
 
 class TestRunLAMMPSDebug(unittest.TestCase):
