@@ -112,7 +112,10 @@ def make_gamma_slab_generator(
             min_vacuum_size=0,
             center_slab=True,
             in_unit_planes=True,
-            lll_reduce=True,
+            # A three-dimensional LLL reduction can mix the slab-normal
+            # lattice vector into the in-plane basis. Gamma geometry is
+            # reduced only after the physical fault frame is known.
+            lll_reduce=False,
             reorient_lattice=False,
             primitive=False,
         )
