@@ -195,6 +195,7 @@ class SimplePropertySteps(Steps):
                     "run_image_config": {"command": property_run_command},
                     "task_name": make.outputs.parameters["task_names"],
                     "backward_list": make.outputs.parameters["backward_list"],
+                    "log_name": "outlog",
                 },
                 artifacts={
                     "task_path": make.outputs.artifacts["task_paths"]

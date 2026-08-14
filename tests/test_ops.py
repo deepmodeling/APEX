@@ -491,6 +491,7 @@ class TestSimplePropertySteps(unittest.TestCase):
             vasp_run.parameters["backward_list"],
             "Props-make-backward_list",
         )
+        self.assertEqual(vasp_run.parameters["log_name"], "outlog")
         self.assertIn(
             "APEX_RUN_COMMAND=",
             vasp_run.parameters["run_image_config"]["command"],
