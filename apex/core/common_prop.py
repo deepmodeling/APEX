@@ -18,6 +18,7 @@ from apex.core.property.FiniteTlatt import FiniteTlatt
 from apex.core.property.GammaSurface import GammaSurface
 from apex.core.property.Gruneisen import Gruneisen
 from apex.core.property.Annealing import Annealing
+from apex.core.property.MeltingPoint import MeltingPoint
 from apex.core.lib.utils import create_path
 from apex.core.lib.util import collect_task
 from apex.core.lib.dispatcher import make_submission
@@ -69,6 +70,11 @@ def make_property_instance(parameters, inter_param):
         return Gruneisen(parameters, inter_param)
     elif prop_type in ["annealing", "Annealing"]:
         return Annealing(parameters, inter_param)
+    elif prop_type in ["melting_point", "two_phase_melting"]:
+        if prop_type == "two_phase_melting":
+            parameters = dict(parameters)
+            parameters["type"] = "melting_point"
+        return MeltingPoint(parameters, inter_param)
     else:
         raise RuntimeError(f"unknown APEX type {prop_type}")
 
@@ -202,7 +208,11 @@ def run_property(confs, inter_param, property_list, mdata):
             # dispatch the tasks
             # POSCAR here is useless
             virtual_calculator = make_calculator(inter_param_prop, "POSCAR")
-            forward_files = virtual_calculator.forward_files(property_type)
+            inter_type = inter_param_prop["type"]
+            if inter_type in lammps_task_type:
+                forward_files = virtual_calculator.forward_files(property_type, jj)
+            else:
+                forward_files = virtual_calculator.forward_files(property_type)
             forward_common_files = virtual_calculator.forward_common_files(
                 property_type
             )
@@ -210,7 +220,6 @@ def run_property(confs, inter_param, property_list, mdata):
             #    backward_files += logs
             # ...
             task_type = get_task_type({"interaction": inter_param})
-            inter_type = inter_param_prop["type"]
             work_path = path_to_work
             if rerun_finished:
                 all_task = tmp_task_list

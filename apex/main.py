@@ -548,6 +548,17 @@ def parse_args():
         default=0.0,
         help="Shift the rendered viewport vertically by a fraction of the data span; positive values move the structure downward",
     )
+    parser_preview.add_argument(
+        "--gif-view",
+        choices=("auto", "default", "slip-plane", "parent-bc", "both"),
+        default="auto",
+        help=(
+            "Gamma projection: auto writes both scientific views for gamma "
+            "and gamma_surface; alternatively preserve the legacy Cartesian "
+            "view, look normal to the slip plane, look normal to the parent "
+            "bc plane, or explicitly write both views"
+        ),
+    )
 
     ##########################################
     # GUI
@@ -608,6 +619,17 @@ def parse_args():
     parser_account.add_argument("--context-type", dest="context_type", type=str, default=None)
     parser_account.add_argument("--email", type=str, default=None)
     parser_account.add_argument("--password", type=str, default=None)
+    parser_account.add_argument("--access-key", dest="access_key", type=str, default=None)
+    parser_account.add_argument(
+        "--clear",
+        nargs="?",
+        const="all",
+        choices=("all", "access-key", "email"),
+        help=(
+            "Clear both login methods when used alone, or clear only "
+            "'access-key' or the email/password pair"
+        ),
+    )
     parser_account.add_argument("--program-id", dest="program_id", type=int, default=None)
     parser_account.add_argument("--apex-image-name", dest="apex_image_name", type=str, default=None)
 
@@ -1571,7 +1593,8 @@ def main():
     elif args.cmd == 'preview':
         from apex.preview import preview_from_args
 
-        preview_from_args(args)
+        for output_path in preview_from_args(args):
+            print(output_path)
     elif args.cmd == 'skill':
         from apex.skill import skill_from_args
 

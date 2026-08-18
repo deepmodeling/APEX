@@ -37,6 +37,29 @@ def incar_upper(dincar):
     return Incar(standard_incar)
 
 
+def _poscar_coordinate_block(lines, natoms):
+    """Return the coordinate header and atom lines for a VASP 5 POSCAR.
+
+    VASP writes ``Selective dynamics`` between the species/count lines and
+    the coordinate mode when constraints are present.  Gamma workflows that
+    start from a VASP-relaxed CONTCAR must preserve that extra header and its
+    per-atom flags instead of assuming that coordinates always start at line
+    index eight.
+    """
+    header_index = 7
+    selective = lines[header_index].strip().lower().startswith("s")
+    coordinate_mode_index = header_index + int(selective)
+    coordinate_start = coordinate_mode_index + 1
+    positions = lines[coordinate_start : coordinate_start + int(natoms)]
+    if len(positions) != int(natoms) or any(not line.split() for line in positions):
+        raise RuntimeError(
+            f"Malformed POSCAR coordinate block: expected {int(natoms)} atom lines"
+        )
+    header = ["Selective dynamics"] if selective else []
+    header.append(lines[coordinate_mode_index].strip())
+    return header, positions
+
+
 def regulate_poscar(poscar_in, poscar_out):
     with open(poscar_in, "r") as fp:
         lines = fp.read().split("\n")
@@ -51,7 +74,7 @@ def regulate_poscar(poscar_in, poscar_out):
     for nn, cc in zip(names, counts):
         uniq_count[uniq_name.index(nn)] += cc
     natoms = np.sum(uniq_count)
-    posis = lines[8 : 8 + natoms]
+    coordinate_header, posis = _poscar_coordinate_block(lines, natoms)
     all_lines = []
     for ele in uniq_name:
         ele_lines = []
@@ -64,7 +87,7 @@ def regulate_poscar(poscar_in, poscar_out):
     ret = lines[0:5]
     ret.append(" ".join(uniq_name))
     ret.append(" ".join([str(ii) for ii in uniq_count]))
-    ret.append("Direct")
+    ret.extend(coordinate_header)
     ret += all_lines
     with open(poscar_out, "w") as fp:
         fp.write("\n".join(ret))
@@ -75,11 +98,11 @@ def sort_poscar(poscar_in, poscar_out, new_names):
         lines = fp.read().split("\n")
     names = lines[5].split()
     counts = [int(ii) for ii in lines[6].split()]
-    new_counts = np.zeros(len(counts), dtype=int)
+    new_counts = np.zeros(len(new_names), dtype=int)
     for nn, cc in zip(names, counts):
         new_counts[new_names.index(nn)] += cc
     natoms = np.sum(new_counts)
-    posis = lines[8 : 8 + natoms]
+    coordinate_header, posis = _poscar_coordinate_block(lines, natoms)
     all_lines = []
     for ele in new_names:
         ele_lines = []
@@ -92,7 +115,7 @@ def sort_poscar(poscar_in, poscar_out, new_names):
     ret = lines[0:5]
     ret.append(" ".join(new_names))
     ret.append(" ".join([str(ii) for ii in new_counts]))
-    ret.append("Direct")
+    ret.extend(coordinate_header)
     ret += all_lines
     with open(poscar_out, "w") as fp:
         fp.write("\n".join(ret))
@@ -548,5 +571,4 @@ def make_vasp_kpoints_from_incar(work_dir, jdata):
     kp = Kpoints.from_string(ret)
     kp.write_file("KPOINTS")
     os.chdir(cwd)
-
 

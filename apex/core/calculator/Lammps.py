@@ -59,6 +59,14 @@ def _render_phonon_input(conf, type_map, interaction, model_param, task_param=No
     )
 
 
+def _render_melting_point_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.MeltingPoint import render_melting_point_lammps_input
+
+    return render_melting_point_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
 def _finitetlatt_file_manifest(model_files, default_manifest):
     from apex.core.property.FiniteTlatt.lammps import get_lammps_file_manifest
 
@@ -89,6 +97,7 @@ PROPERTY_LAMMPS_INPUT_RENDERERS = {
     "gamma": _render_gamma_input,
     "gamma_surface": _render_gamma_input,
     "phonon": _render_phonon_input,
+    "melting_point": _render_melting_point_input,
 }
 
 PROPERTY_LAMMPS_FILE_MANIFESTS = {
@@ -301,7 +310,15 @@ class Lammps(Task):
                 )
                 maxeval = cal_setting["maxeval"]
 
-            if task_type == "finite_t_latt":
+            if task_type == "melting_point":
+                fc = _render_melting_point_input(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    task_param,
+                )
+            elif task_type == "finite_t_latt":
                 fc = lammps_utils.make_lammps_FiniteTlatt(
                     "conf.lmp",
                     self.type_map,
@@ -454,7 +471,7 @@ class Lammps(Task):
         except Exception:
             task_param = {}
         task_type = task_param.get("type", task_param.get("cal_type"))
-        if task_type in ["annealing", "Annealing"]:
+        if task_type in ["annealing", "Annealing", "melting_point"]:
             return None
 
         log_lammps = os.path.join(output_dir, "log.lammps")
@@ -677,10 +694,22 @@ class Lammps(Task):
         }
         return result_dict
 
-    def forward_files(self, property_type="relaxation"):
+    def forward_files(self, property_type="relaxation", task_param=None):
         model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
         if property_type == "finite_t_latt":
             return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
+        elif property_type == "melting_point":
+            files = [
+                "in.lammps",
+                "variable_MeltingPoint.in",
+                "MeltingPoint.json",
+            ]
+            restart_files = (task_param or {}).get("cal_setting", {}).get(
+                "restart_files"
+            )
+            if restart_files is not None:
+                files.append("restart.coexistence.start")
+            return files + model_files
         elif property_type in ["annealing", "Annealing"]:
             return ["in.lammps", "variable_Annealing.in"] + model_files
         elif property_type == "finite_t_elastic":
@@ -702,6 +731,8 @@ class Lammps(Task):
         if property_type not in ["eos"]:
             if property_type == "finite_t_latt":
                 return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
+            elif property_type == "melting_point":
+                return ["in.lammps"] + model_files
             elif property_type in ["annealing", "Annealing"]:
                 return ["in.lammps", "variable_Annealing.in"] + model_files
             elif property_type == "finite_t_elastic":
@@ -730,6 +761,14 @@ class Lammps(Task):
             ]
         elif property_type == "finite_t_latt":
             return ["log.lammps", "outlog"] + debug_files + ["dump.relax", "average_box.txt"]
+        elif property_type == "melting_point":
+            return [
+                "log.lammps",
+                "outlog",
+                *debug_files,
+                "dump.melting",
+                "restart.melting.*",
+            ]
         elif property_type in ["annealing", "Annealing"]:
             return [
                 "log.lammps",

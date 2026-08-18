@@ -6,6 +6,7 @@ import tempfile
 import logging
 import copy
 import json
+from pathlib import Path
 from typing import List
 from multiprocessing import Pool
 from monty.serialization import loadfn
@@ -237,6 +238,18 @@ def pack_upload_dir(
     if prop_prefix:
         prop_prefix_base = prop_prefix.split('/')[0]
         include_dirs.add(prop_prefix_base)
+    # Melting-point continuations may provide one restart per temperature.
+    # These files are scientific inputs, so stage their containing top-level
+    # directories alongside models and custom input files.
+    if prop_param:
+        for prop in prop_param.get("properties", []):
+            if prop.get("type") not in {"melting_point", "two_phase_melting"}:
+                continue
+            for restart_file in prop.get("cal_setting", {}).get("restart_files", []):
+                if not os.path.isabs(restart_file):
+                    restart_prefix = Path(restart_file).parts[0]
+                    if restart_prefix not in ("", ".", ".."):
+                        include_dirs.add(restart_prefix)
     confs = relax_confs + prop_confs
     assert len(confs) > 0, "No configuration path indicated!"
     conf_dirs = []

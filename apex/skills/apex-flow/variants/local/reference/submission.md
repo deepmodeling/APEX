@@ -11,8 +11,11 @@ mode is recorded in `execution-profile.md`; read it before preparing a job.
 | local | None | Local Agent machine | Same workstation |
 | local cluster | Scheduler/user login | Cluster login node | Slurm/PBS compute nodes |
 
-Do not require `BOHRIUM_ACCESS_KEY` or a ticket in this local edition. Those are
-used by the separate `apex skill --zip` Cloud/MatMaster edition, where an outer
+Do not require the `BOHRIUM_ACCESS_KEY` environment variable or serialize a
+ticket in this local edition. Bohrium-direct reads the masked credentials saved
+by `apex account`; when AccessKey authentication is selected, dflow exchanges
+that key for a short-lived ticket at runtime. Explicit ticket packaging is used
+by the separate `apex skill --zip` Cloud/MatMaster edition, where an outer
 container cannot read the user's local account file.
 
 ## Common Preparation

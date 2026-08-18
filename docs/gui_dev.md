@@ -114,11 +114,12 @@ Provides a visual overlay editor for `apex account` stored credentials within th
 - `email`
 - `program_id`
 - `password` (overwrite only, no echo)
+- `access_key` (overwrite only, no echo)
 
 ### 6.3 Security Policy
 
-- The page never displays plaintext passwords; only shows "Set / Not Set".
-- The password input field is cleared after saving.
+- The page never displays plaintext passwords or AccessKeys; only shows "Set / Not Set".
+- The password and AccessKey input fields are cleared after saving.
 - The underlying file is still written by `save_account_config()`.
 
 ### 6.4 Related Functions

@@ -229,10 +229,38 @@ class FlowGenerator:
                     break
             if sum(len(chunk) for chunk in chunks) >= max_chars:
                 break
-        result = "\n".join(chunks)
+        result = FlowGenerator._redact_log_secrets("\n".join(chunks))
         if len(result) > max_chars:
             result = "<truncated>\n" + result[-max_chars:]
         return result
+
+    @staticmethod
+    def _redact_log_secrets(text: str) -> str:
+        def redact_value(match):
+            value = match.group(2)
+            quote = (
+                value[0]
+                if len(value) >= 2
+                and value[0] in {'"', "'"}
+                and value[-1] == value[0]
+                else ""
+            )
+            return f"{match.group(1)}{quote}[REDACTED]{quote}"
+
+        authorization = re.compile(
+            r'(?im)(\bauthorization\b["\']?\s*[:=]\s*)'
+            r'("[^"]*"|\'[^\']*\'|(?:bearer\s+)?[^\s,;]+)'
+        )
+        text = authorization.sub(redact_value, text)
+        secret_key = re.compile(
+            r'(?i)(\b(?:access[_-]?key|app[_-]?key|password|ticket)\b["\']?\s*[:=]\s*)'
+            r'("[^"]*"|\'[^\']*\'|[^\s,;&}\]]+)'
+        )
+        text = secret_key.sub(redact_value, text)
+        env_secret = re.compile(
+            r'(?i)(\b(?:BOHRIUM_ACCESS_KEY|BOHRIUM_APP_KEY|BOHR_TICKET)=)([^\s]+)'
+        )
+        return env_secret.sub(r'\1[REDACTED]', text)
 
     @staticmethod
     def _failure_cause_from_excerpt(excerpt: str) -> str:

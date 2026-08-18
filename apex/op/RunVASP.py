@@ -546,6 +546,32 @@ class RunVASP(RunVasp):
                 run_image_config,
                 optional_input,
             )
+        except FileNotFoundError as error:
+            # Some dflow/fpop combinations pass a runtime ``log_name`` that
+            # differs from the calculator's declared ``outlog`` backward
+            # file.  VASP has already finished successfully at this point,
+            # but upstream fpop then aborts while packaging the nonexistent
+            # alias and discards every expensive output.  Recover only when
+            # the scientific completion gate passes and the missing path is
+            # exactly a declared backward file; genuine VASP/input failures
+            # still propagate unchanged.
+            missing = Path(error.filename).name if error.filename else ""
+            status = self._validate_stages()
+            if (
+                status.get("state") != "succeeded"
+                or missing not in set(backward_list)
+                or missing != "outlog"
+                or not Path(log_name).is_file()
+            ):
+                raise
+            shutil.copy2(Path(log_name), Path(missing))
+            backward_dir = Path(backward_dir_name)
+            backward_dir.mkdir(parents=True, exist_ok=True)
+            for name in dict.fromkeys([log_name, *backward_list]):
+                source = Path(name)
+                if source.is_file():
+                    shutil.copy2(source, backward_dir / source.name)
+            backward_dir_name = str(backward_dir)
         except TransientError as error:
             if "could not check the exact cause" not in str(error):
                 raise
