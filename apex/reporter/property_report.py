@@ -281,13 +281,68 @@ class DecohesiveReport(PropertyReport):
         return build_table(df), df
 
 
+class MeltingPointReport(PropertyReport):
+    """Report a q6/interface-velocity two-phase melting bracket."""
+
+    @staticmethod
+    def plotly_graph(res_data: dict, name: str, **kwargs):
+        rows = res_data.get("temperatures", [])
+        x_values = [row.get("temperature_K") for row in rows]
+        y_values = [row.get("interface_velocity_mean_A_per_ps") for row in rows]
+        error_values = [
+            row.get("interface_velocity_standard_error_A_per_ps") or 0.0
+            for row in rows
+        ]
+        trace = go.Scatter(
+            name=name,
+            x=x_values,
+            y=y_values,
+            error_y={"type": "data", "array": error_values, "visible": True},
+            mode="lines+markers",
+        )
+        layout = go.Layout(
+            title="Two-phase Coexistence Melting Point",
+            xaxis={"title": "Temperature (K)"},
+            yaxis={"title": "Interface velocity (Å/ps)", "zeroline": True},
+        )
+        return [trace], layout
+
+    @staticmethod
+    def dash_table(res_data: dict, decimal: int = 6, **kwargs):
+        bracket = res_data.get("bracket", {})
+        rows = []
+        for item in res_data.get("temperatures", []):
+            mean_velocity = item.get("interface_velocity_mean_A_per_ps")
+            rows.append({
+                "Temperature (K)": item.get("temperature_K"),
+                "Replicas": item.get("replica_count"),
+                "Outcome": item.get("consensus_outcome"),
+                "Interface velocity (Å/ps)": (
+                    None
+                    if mean_velocity is None
+                    else round(mean_velocity, decimal)
+                ),
+                "Replica std (Å/ps)": (
+                    None
+                    if item.get("interface_velocity_std_A_per_ps") is None
+                    else round(item["interface_velocity_std_A_per_ps"], decimal)
+                ),
+                "Estimated Tm (K)": bracket.get("estimated_melting_temperature_K"),
+                "Half-width (K)": bracket.get("uncertainty_half_width_K"),
+            })
+        df = pd.DataFrame(rows)
+        return build_table(df), df
+
+
 class FiniteTlattReport(PropertyReport):
     """Report lattice parameters as a function of temperature."""
 
     @staticmethod
     def _normalized_data(res_data, relax_abc=None):
         data = {}
-        for value in res_data.values():
+        for key, value in res_data.items():
+            if str(key).startswith("_"):
+                continue
             if isinstance(value, (list, tuple)) and len(value) >= 4:
                 a, b, c, temp = (
                     float(value[0]),

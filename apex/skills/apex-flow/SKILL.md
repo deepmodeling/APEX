@@ -132,6 +132,9 @@ Options to offer via AskQuestion:
   `program_id` and `bohrium_config.project_id` with `type=int`. A quoted numeric
   string is invalid. Upload the newly validated directory as a new outer job;
   never retry an outer job whose input snapshot was invalid.
+  For Gamma properties, also read the representative-slab report: parent/final
+  atom count, thickness, layer repeats, minimum distance, task count, and
+  generated KPOINTS. Stop on any explicit limit violation.
 9. **Screen image × machine before submit.** Before writing `global.json` or submitting, run:
   ```bash
    python scripts/validate_apex_combo.py list-combos --backend lammps --prefer gpu
@@ -218,20 +221,26 @@ Options to offer via AskQuestion:
    required. Only after a confirmed image exists, pass
    `--vasp-image <url>` to `generate_config.py create` (writes
    `vasp_image_name`).
-15. **MUST use a Bohrium-safe VASP `vasp_run_command` — never bare `vasp_std`.**
+15. **MUST use a Bohrium-safe VASP `vasp_run_command`.**
    After a licensed VASP image is resolved (Rule 14), `global.json` should use a
    command that sources Intel oneAPI, raises stack limit, and calls an absolute
    binary. Typical Bohrium layout:
    ```text
-   bash -c "source /opt/intel/oneapi/setvars.sh && ulimit -s unlimited && mpirun -n <N> /opt/vasp.5.4.4/bin/vasp_std"
+   bash -c "source <ONEAPI_SETVARS> && ulimit -s unlimited && mpirun -n <RANKS> <ABSOLUTE_VASP_BINARY>"
    ```
    Constraints:
    - Always `source /opt/intel/oneapi/setvars.sh` (Intel MPI / MKL env).
    - Always `ulimit -s unlimited` (avoids stack overflow on large cells).
-   - Prefer absolute binary path (PATH `vasp_std` is unreliable); adjust path if
-     the user-approved image differs.
-   - Align `<N>` with `scass_type` CPU count (`c32_*` → `-n 32`, `c16_*` → `-n 16`).
-   - Do **not** use bare `mpirun -n 16 vasp_std`.
+   - Prefer an absolute `vasp_std`/`vasp_gam` binary path; adjust it for the
+     user-approved image.
+   - Align `<RANKS>` with the CPU count encoded by `scass_type`.
+   - APEX selects the executable per generated task: Gamma-centered `1x1x1`
+     uses `vasp_gam`; every other grid uses `vasp_std`. This applies to every
+     property and relaxation, not only Gamma/GammaSurface workflows.
+     `KGAMMA=True` alone is not proof—the generated `KPOINTS` is authoritative.
+   - Any task that resolves to `vasp_gam` requires `KPAR=1`. In general,
+     `KPAR` must divide ranks, and `NCORE` must divide ranks/KPAR. Do not
+     combine `NCORE` and `NPAR`; missing `NCORE` is a warning.
    `generate_config.py` writes the run_command template for `--backend vasp`
    and sets `vasp_image_name` only from `--vasp-image`.
 16. **STOP: Before submitting `gamma_surface`, run `apex preview` to check for overlapping atoms.**
@@ -268,10 +277,10 @@ Options to offer via AskQuestion:
 | Gamma surface    | `gamma_surface`    | All         | 2D GSFE map                               |
 | Cohesive         | `cohesive`         | All         | Cohesive energy curve                     |
 | Decohesive       | `decohesive`       | All         | Ideal work of separation                  |
-| Finite-T lattice | `finite_t_latt`    | All         | Lattice parameter vs temperature (NPT MD) |
+| Finite-T lattice | `finite_t_latt`    | LAMMPS/VASP | Lattice parameter vs temperature (NPT MD) |
 | Finite-T elastic | `finite_t_elastic` | LAMMPS only | Elastic constants at finite temperature   |
 | Grüneisen        | `gruneisen`        | All         | Grüneisen parameters & thermal expansion  |
-| Annealing        | `annealing`        | All         | Heat-hold-quench MD cycle                 |
+| Annealing        | `annealing`        | LAMMPS/VASP | Heat-hold-quench MD cycle                 |
 
 
 > See `reference/properties.md` for full parameter details of each property.
@@ -327,7 +336,7 @@ See `reference/submission.md` for the full validated template.
 
 ## Key Additional Rules
 
-1. **LAMMPS-only properties**: `finite_t_elastic` only works with LAMMPS. `finite_t_latt` and `annealing` also support VASP Langevin–Parrinello–Rahman NpT and ABACUS Nose–Hoover-style NpT.
+1. **Finite-temperature backend limits**: `finite_t_elastic` is LAMMPS-only. `finite_t_latt` and `annealing` support LAMMPS and VASP, but not ABACUS. VASP uses `MDALGO=3` and requires a binary compiled with `-Dtbdyn`; annealing `protocol="coexistence"` is a fixed-temperature equilibration plus production run.
 2. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
 3. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
 4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
@@ -401,5 +410,3 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 | `reference/lammps_potentials.md` | LAMMPS potential type details and examples                                                                                                            |
 | `reference/rss_workflow.md`      | RSS structure generation workflow                                                                                                                     |
 | `reference/examples.md`          | Complete worked examples for common scenarios                                                                                                         |
-
-

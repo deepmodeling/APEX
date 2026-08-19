@@ -747,6 +747,7 @@ def _load_account_state(account_path: Optional[str] = None) -> Dict[str, Any]:
         "email": str(merged.get("email") or ""),
         "program_id": str(program_id) if program_id not in (None, "") else "",
         "password_set": bool(merged.get("password")),
+        "access_key_set": bool(merged.get("access_key")),
     }
 
 
@@ -754,6 +755,7 @@ def _render_account_summary(account_state: Dict[str, Any]) -> str:
     email = account_state.get("email") or "(未设置)"
     program_id = account_state.get("program_id") or "(未设置)"
     password_status = "已设置 (隐藏)" if account_state.get("password_set") else "未设置"
+    access_key_status = "已设置 (隐藏)" if account_state.get("access_key_set") else "未设置"
     config_path = account_state.get("path") or "(unknown)"
     return "\n".join(
         [
@@ -761,6 +763,7 @@ def _render_account_summary(account_state: Dict[str, Any]) -> str:
             f"Email: {email}",
             f"Program ID: {program_id}",
             f"Password: {password_status}",
+            f"AccessKey: {access_key_status}",
         ]
     )
 
@@ -778,6 +781,7 @@ def _save_account_overwrite(
     email: str,
     password: str,
     program_id_text: str,
+    access_key: str = "",
     account_path: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     path_obj = get_account_config_path(account_path)
@@ -790,6 +794,7 @@ def _save_account_overwrite(
     clean_email = (email or "").strip()
     clean_password = (password or "").strip()
     clean_program_id = (program_id_text or "").strip()
+    clean_access_key = (access_key or "").strip()
 
     if clean_email:
         merged["email"] = clean_email
@@ -797,6 +802,9 @@ def _save_account_overwrite(
     if clean_password:
         merged["password"] = clean_password
         updates_applied.append("password")
+    if clean_access_key:
+        merged["access_key"] = clean_access_key
+        updates_applied.append("access_key")
     if clean_program_id:
         try:
             merged["program_id"] = int(clean_program_id)
@@ -2780,7 +2788,7 @@ class ApexGuiApp:
         return dbc.Tab(
             label="Account",
             children=[
-                html.P("底层对应 `apex account`，密码仅支持覆盖保存，不会在界面显示。", className="text-muted"),
+                html.P("底层对应 `apex account`，密码和 AccessKey 仅支持覆盖保存，不会在界面显示。", className="text-muted"),
                 dbc.Row(
                     [
                         dbc.Col(
@@ -2805,6 +2813,14 @@ class ApexGuiApp:
                                     type="password",
                                     value="",
                                     placeholder="输入新密码以覆盖",
+                                ),
+                                html.Br(),
+                                dbc.Label("AccessKey (留空表示保持当前 AccessKey 不变)"),
+                                dbc.Input(
+                                    id="account-access-key",
+                                    type="password",
+                                    value="",
+                                    placeholder="输入新 AccessKey 以覆盖",
                                 ),
                                 html.Br(),
                                 dbc.Button("刷新", id="account-refresh", color="secondary", className="me-2"),
@@ -3635,6 +3651,7 @@ class ApexGuiApp:
             Output("account-email", "value"),
             Output("account-program-id", "value"),
             Output("account-password", "value"),
+            Output("account-access-key", "value"),
             Output("account-summary", "children"),
             Output("account-feedback", "children"),
             Input("account-refresh", "n_clicks"),
@@ -3642,15 +3659,20 @@ class ApexGuiApp:
             State("account-email", "value"),
             State("account-program-id", "value"),
             State("account-password", "value"),
+            State("account-access-key", "value"),
             prevent_initial_call=True,
         )
-        def _handle_account(_refresh_clicks, _save_clicks, email_value, program_id_value, password_value):
+        def _handle_account(
+            _refresh_clicks, _save_clicks, email_value, program_id_value,
+            password_value, access_key_value
+        ):
             triggered_id = _resolve_triggered_id()
             if triggered_id == "account-save":
                 feedback, account_state = _save_account_overwrite(
                     email=email_value or "",
                     password=password_value or "",
                     program_id_text=program_id_value or "",
+                    access_key=access_key_value or "",
                 )
             else:
                 account_state = _load_account_state()
@@ -3658,6 +3680,7 @@ class ApexGuiApp:
             return (
                 account_state.get("email", ""),
                 account_state.get("program_id", ""),
+                "",
                 "",
                 _render_account_summary(account_state),
                 _brief_feedback(feedback),

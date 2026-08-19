@@ -1,8 +1,9 @@
 import os
 import logging
+import re
 
 from dpdata import LabeledSystem
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 from pymatgen.core.structure import Structure
 from pymatgen.io.vasp import Incar, Kpoints
 
@@ -15,6 +16,8 @@ upload_packages.append(__file__)
 
 
 class VASP(Task):
+    _STAGE_PLAN = "apex_vasp_stage_plan.json"
+
     def __init__(self, inter_parameter, path_to_poscar):
         self.inter = inter_parameter
         self.inter_type = inter_parameter["type"]
@@ -22,6 +25,89 @@ class VASP(Task):
         self.potcar_prefix = inter_parameter.get("potcar_prefix", "")
         self.potcars = inter_parameter["potcars"]
         self.path_to_poscar = path_to_poscar
+
+    @staticmethod
+    def _validate_md_encut(incar, potcar_path):
+        """Validate ENCUT against POTCAR ENMAX values without retaining POTCAR data."""
+        if not os.path.isfile(potcar_path) or "ENCUT" not in incar:
+            return
+        enmax_values = []
+        with open(potcar_path, encoding="utf-8", errors="ignore") as fp:
+            for line in fp:
+                match = re.search(r"\bENMAX\s*=\s*([-+0-9.eE]+)", line)
+                if match:
+                    enmax_values.append(float(match.group(1)))
+        if not enmax_values:
+            return
+        required = 1.3 * max(enmax_values)
+        actual = float(incar["ENCUT"])
+        if actual + 1.0e-12 < required:
+            raise ValueError(
+                f"ENCUT={actual:g} eV is below the MD minimum of 1.3 * "
+                f"max(POTCAR ENMAX)={required:g} eV"
+            )
+
+    @classmethod
+    def _md_base_incar(
+        cls, template, cal_setting, timestep_fs, pressure, gamma
+    ):
+        defaults = {
+            "PREC": "Accurate",
+            "EDIFF": 1.0e-6,
+            "ISMEAR": 1,
+            "SIGMA": 0.2,
+            "LASPH": True,
+            "LREAL": "Auto",
+            "ALGO": "Normal",
+            "IBRION": 0,
+            "MDALGO": 3,
+            "ISIF": 3,
+            "ISYM": 0,
+            "LWAVE": False,
+            "LCHARG": False,
+            "NBLOCK": 1,
+        }
+        base = Incar(dict(template))
+        for tag, default in defaults.items():
+            base[tag] = cal_setting.get(tag.lower(), cal_setting.get(tag, default))
+        base.update(
+            {
+                "POTIM": timestep_fs,
+                "PSTRESS": pressure,
+                "LANGEVIN_GAMMA": gamma,
+                "LANGEVIN_GAMMA_L": float(
+                    cal_setting.get("langevin_gamma_l", 10.0)
+                ),
+                "PMASS": float(cal_setting.get("pmass", 1000.0)),
+            }
+        )
+        base.pop("SMASS", None)
+        for key in ("ediffg", "encut", "kspacing", "kgamma"):
+            if key in cal_setting:
+                base[key.upper()] = cal_setting[key]
+        return base
+
+    @staticmethod
+    def _archive_stage_commands(suffix):
+        return [
+            f"mv OUTCAR OUTCAR.{suffix}\n",
+            f"[ ! -f OSZICAR ] || mv OSZICAR OSZICAR.{suffix}\n",
+            f"cp CONTCAR CONTCAR.{suffix}\n",
+            f"[ ! -f XDATCAR ] || mv XDATCAR XDATCAR.{suffix}\n",
+            "cp CONTCAR POSCAR\n",
+        ]
+
+    @classmethod
+    def _write_stage_plan(cls, output_dir, task_type, stages):
+        dumpfn(
+            {
+                "schema": "apex.vasp.stage-plan/v1",
+                "task_type": task_type,
+                "stages": stages,
+            },
+            os.path.join(output_dir, cls._STAGE_PLAN),
+            indent=4,
+        )
 
     def make_potential_files(self, output_dir):
         potcar_not_link_list = {"vacancy", "interstitial"}
@@ -69,6 +155,325 @@ class VASP(Task):
         prop_type = task_param.get("type", "relaxation")
         cal_type = task_param["cal_type"]
         cal_setting = task_param["cal_setting"]
+        md_incar = incar_relax
+        if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
+            md_incar = incar_upper(
+                Incar.from_file(os.path.abspath(cal_setting["input_prop"]))
+            )
+
+        if task_type == "finite_t_latt":
+            metadata = loadfn(os.path.join(output_dir, "FiniteTlatt.json"))
+            temperature = float(metadata["temperature"])
+            timestep_fs = float(
+                cal_setting.get(
+                    "timestep_fs", 1000.0 * float(cal_setting.get("timestep", 0.001))
+                )
+            )
+            pressure = float(cal_setting.get("pressure_kbar", 0.0))
+            species = []
+            for site in Structure.from_file(self.path_to_poscar):
+                name = site.specie.symbol
+                if name not in species:
+                    species.append(name)
+            gamma = cal_setting.get("langevin_gamma", 10.0)
+            if isinstance(gamma, (int, float)):
+                gamma = [float(gamma)] * len(species)
+            else:
+                gamma = [float(value) for value in gamma]
+            if len(gamma) != len(species):
+                raise ValueError(
+                    "langevin_gamma must contain one value per POSCAR species"
+                )
+
+            base = self._md_base_incar(
+                md_incar, cal_setting, timestep_fs, pressure, gamma
+            )
+            base.update({"TEBEG": temperature, "TEEND": temperature})
+            self._validate_md_encut(base, os.path.join(output_dir, "POTCAR"))
+            equi = Incar(dict(base))
+            equi["NSW"] = int(cal_setting["equi_step"])
+            production = Incar(dict(base))
+            production["NSW"] = int(cal_setting["ave_step"])
+            equi.write_file(os.path.join(output_dir, "INCAR.equi"))
+            production.write_file(os.path.join(output_dir, "INCAR.production"))
+            # Keep a conventional INCAR for VASP tooling and for the APEX Run
+            # OP's mandatory-input validation. The staged command replaces it
+            # explicitly before each VASP invocation.
+            equi.write_file(os.path.join(output_dir, "INCAR"))
+
+            kspacing = base.get("KSPACING")
+            if kspacing is None:
+                raise RuntimeError("KSPACING must be given in INCAR")
+            kgamma = base.get("KGAMMA", False)
+            ret = vasp_utils.make_kspacing_kpoints(
+                self.path_to_poscar, kspacing, kgamma
+            )
+            Kpoints.from_str(ret).write_file(os.path.join(output_dir, "KPOINTS"))
+            stage_plan = []
+            commands = ["set -e\n"]
+
+            schedule = cal_setting.get("nvt_temperature_schedule")
+            nvt_step = int(cal_setting.get("nvt_step", 0))
+            if schedule is not None:
+                try:
+                    schedule = [float(value) for value in schedule]
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        "nvt_temperature_schedule must be a numeric list"
+                    ) from exc
+                if len(schedule) < 2:
+                    raise ValueError(
+                        "nvt_temperature_schedule must contain at least "
+                        "a start and end temperature"
+                    )
+                if nvt_step <= 0:
+                    raise ValueError(
+                        "nvt_step must be positive when "
+                        "nvt_temperature_schedule is given"
+                    )
+                if abs(schedule[-1] - temperature) > 1.0e-8:
+                    raise ValueError(
+                        "the final nvt_temperature_schedule temperature must "
+                        "match the finite_t_latt target temperature"
+                    )
+                for index, (first_temp, last_temp) in enumerate(
+                    zip(schedule[:-1], schedule[1:])
+                ):
+                    suffix = f"nvt_{index:03d}"
+                    incar_name = f"INCAR.{suffix}"
+                    outcar_name = f"OUTCAR.{suffix}"
+                    oszicar_name = f"OSZICAR.{suffix}"
+                    nvt = Incar(dict(base))
+                    nvt.update({
+                        "ISIF": 2,
+                        "NSW": nvt_step,
+                        "TEBEG": first_temp,
+                        "TEEND": last_temp,
+                    })
+                    for key in ("LANGEVIN_GAMMA_L", "PMASS", "PSTRESS"):
+                        nvt.pop(key, None)
+                    nvt.write_file(os.path.join(output_dir, incar_name))
+                    if index == 0:
+                        nvt.write_file(os.path.join(output_dir, "INCAR.nvt"))
+                    stage_plan.append({
+                        "name": (
+                            f"nvt_{index:03d}_{first_temp:g}K_to_"
+                            f"{last_temp:g}K"
+                        ),
+                        "incar": incar_name,
+                        "outcar": outcar_name,
+                        "oszicar": oszicar_name,
+                        "contcar": f"CONTCAR.{suffix}",
+                        "xdatcar": f"XDATCAR.{suffix}",
+                        "expected_ionic_steps": nvt_step,
+                        "temperature_start_K": first_temp,
+                        "temperature_end_K": last_temp,
+                    })
+                    commands.extend([
+                        f"cp {incar_name} INCAR\n",
+                        'eval "$APEX_RUN_COMMAND"\n',
+                        *self._archive_stage_commands(suffix),
+                    ])
+            else:
+                nvt = Incar(dict(base))
+                nvt["ISIF"] = 2
+                nvt["NSW"] = nvt_step
+                for key in ("LANGEVIN_GAMMA_L", "PMASS", "PSTRESS"):
+                    nvt.pop(key, None)
+                nvt.write_file(os.path.join(output_dir, "INCAR.nvt"))
+                if nvt_step > 0:
+                    stage_plan.append({
+                        "name": "nvt",
+                        "incar": "INCAR.nvt",
+                        "outcar": "OUTCAR.nvt",
+                        "oszicar": "OSZICAR.nvt",
+                        "contcar": "CONTCAR.nvt",
+                        "xdatcar": "XDATCAR.nvt",
+                        "expected_ionic_steps": nvt_step,
+                        "temperature_start_K": temperature,
+                        "temperature_end_K": temperature,
+                    })
+                    commands.extend([
+                        "cp INCAR.nvt INCAR\n",
+                        'eval "$APEX_RUN_COMMAND"\n',
+                        *self._archive_stage_commands("nvt"),
+                    ])
+
+            stage_plan.append({
+                "name": "equi",
+                "incar": "INCAR.equi",
+                "outcar": "OUTCAR.equi",
+                "oszicar": "OSZICAR.equi",
+                "contcar": "CONTCAR.equi",
+                "xdatcar": "XDATCAR.equi",
+                "expected_ionic_steps": int(equi["NSW"]),
+                "temperature_start_K": temperature,
+                "temperature_end_K": temperature,
+            })
+            commands.extend([
+                "cp INCAR.equi INCAR\n",
+                'eval "$APEX_RUN_COMMAND"\n',
+                *self._archive_stage_commands("equi"),
+            ])
+            stage_plan.append({
+                "name": "production",
+                "incar": "INCAR.production",
+                "outcar": "OUTCAR",
+                "oszicar": "OSZICAR",
+                "contcar": "CONTCAR",
+                "xdatcar": "XDATCAR",
+                "expected_ionic_steps": int(production["NSW"]),
+                "temperature_start_K": temperature,
+                "temperature_end_K": temperature,
+            })
+            commands.extend([
+                "cp INCAR.production INCAR\n",
+                'eval "$APEX_RUN_COMMAND"\n',
+            ])
+            with open(os.path.join(output_dir, "run_command"), "w") as fp:
+                fp.writelines(commands)
+            self._write_stage_plan(
+                output_dir, "finite_t_latt", stage_plan
+            )
+            return
+
+        if task_type == "annealing":
+            metadata = loadfn(os.path.join(output_dir, "Annealing.json"))
+            timestep_fs = float(metadata["timestep_fs"])
+            pressure = float(cal_setting.get("pressure_kbar", 0.0))
+            species = []
+            for site in Structure.from_file(self.path_to_poscar):
+                name = site.specie.symbol
+                if name not in species:
+                    species.append(name)
+            gamma = cal_setting.get("langevin_gamma", 10.0)
+            if isinstance(gamma, (int, float)):
+                gamma = [float(gamma)] * len(species)
+            else:
+                gamma = [float(value) for value in gamma]
+            if len(gamma) != len(species):
+                raise ValueError(
+                    "langevin_gamma must contain one value per POSCAR species"
+                )
+            base = self._md_base_incar(
+                md_incar, cal_setting, timestep_fs, pressure, gamma
+            )
+            self._validate_md_encut(base, os.path.join(output_dir, "POTCAR"))
+            if metadata.get("protocol", "ramp_cool") == "coexistence":
+                stages = [
+                    (
+                        "equi",
+                        metadata["target_temp"],
+                        metadata["target_temp"],
+                        metadata["equi_step"],
+                    ),
+                    (
+                        "production",
+                        metadata["target_temp"],
+                        metadata["target_temp"],
+                        metadata["production_step"],
+                    ),
+                ]
+            else:
+                stages = [
+                    (
+                        "eq",
+                        metadata["start_temp"],
+                        metadata["start_temp"],
+                        metadata["equi_step"],
+                    ),
+                    (
+                        "ramp",
+                        metadata["start_temp"],
+                        metadata["target_temp"],
+                        metadata["ramp_step"],
+                    ),
+                    (
+                        "decline",
+                        metadata["target_temp"],
+                        metadata["end_temp"],
+                        metadata["cool_step"],
+                    ),
+                    (
+                        "final_eq",
+                        metadata["end_temp"],
+                        metadata["end_temp"],
+                        metadata["final_equi_step"],
+                    ),
+                ]
+            for name, first_temp, last_temp, nsteps in stages:
+                incar = Incar(dict(base))
+                incar.update(
+                    {
+                        "TEBEG": float(first_temp),
+                        "TEEND": float(last_temp),
+                        "NSW": int(nsteps),
+                    }
+                )
+                incar.write_file(os.path.join(output_dir, f"INCAR.{name}"))
+            # Keep a stable transfer manifest across both protocols.
+            if metadata.get("protocol", "ramp_cool") == "coexistence":
+                aliases = {
+                    "eq": "equi",
+                    "ramp": "equi",
+                    "decline": "production",
+                    "final_eq": "production",
+                }
+            else:
+                aliases = {"equi": "eq", "production": "final_eq"}
+            for alias, source in aliases.items():
+                Incar.from_file(
+                    os.path.join(output_dir, f"INCAR.{source}")
+                ).write_file(os.path.join(output_dir, f"INCAR.{alias}"))
+            # The APEX Run OP requires INCAR during task staging. The staged
+            # command still selects the appropriate INCAR.<stage> at runtime.
+            Incar.from_file(
+                os.path.join(output_dir, f"INCAR.{stages[0][0]}")
+            ).write_file(os.path.join(output_dir, "INCAR"))
+
+            kspacing = base.get("KSPACING")
+            if kspacing is None:
+                raise RuntimeError("KSPACING must be given in INCAR")
+            ret = vasp_utils.make_kspacing_kpoints(
+                self.path_to_poscar, kspacing, base.get("KGAMMA", False)
+            )
+            Kpoints.from_str(ret).write_file(os.path.join(output_dir, "KPOINTS"))
+            stage_plan = []
+            with open(os.path.join(output_dir, "run_command"), "w") as fp:
+                fp.write("set -e\nrm -f OUTCAR.apex XDATCAR.apex\n")
+                for name, _first, _last, nsteps in stages:
+                    if int(nsteps) <= 0:
+                        continue
+                    fp.write(
+                        f"cp INCAR.{name} INCAR\n"
+                        'eval "$APEX_RUN_COMMAND"\n'
+                        f"printf '\\nAPEX_STAGE {name}\\n' >> OUTCAR.apex\n"
+                        "cat OUTCAR >> OUTCAR.apex\n"
+                        f"printf '\\nAPEX_STAGE {name}\\n' >> XDATCAR.apex\n"
+                        "[ ! -f XDATCAR ] || cat XDATCAR >> XDATCAR.apex\n"
+                        f"cp OUTCAR OUTCAR.{name}\n"
+                        f"[ ! -f OSZICAR ] || cp OSZICAR OSZICAR.{name}\n"
+                        f"cp CONTCAR CONTCAR.{name}\n"
+                        f"[ ! -f XDATCAR ] || cp XDATCAR XDATCAR.{name}\n"
+                        "cp CONTCAR POSCAR\n"
+                    )
+                    stage_plan.append({
+                        "name": name,
+                        "incar": f"INCAR.{name}",
+                        "outcar": f"OUTCAR.{name}",
+                        "oszicar": f"OSZICAR.{name}",
+                        "contcar": f"CONTCAR.{name}",
+                        "xdatcar": f"XDATCAR.{name}",
+                        "expected_ionic_steps": int(nsteps),
+                        "temperature_start_K": float(_first),
+                        "temperature_end_K": float(_last),
+                    })
+                fp.write(
+                    "mv OUTCAR.apex OUTCAR\n"
+                    "[ ! -f XDATCAR.apex ] || mv XDATCAR.apex XDATCAR\n"
+                )
+            self._write_stage_plan(output_dir, "annealing", stage_plan)
+            return
 
         # user input INCAR for APEX calculation
         if "input_prop" in cal_setting and os.path.isfile(cal_setting["input_prop"]):
@@ -200,6 +605,10 @@ class VASP(Task):
             os.symlink(target, link_name)
 
     def compute(self, output_dir):
+        task_json = os.path.join(output_dir, "task.json")
+        task_param = loadfn(task_json) if os.path.isfile(task_json) else {}
+        if task_param.get("type") in {"finite_t_latt", "annealing"}:
+            return None
         outcar = os.path.join(output_dir, "OUTCAR")
         if not os.path.isfile(outcar):
             logging.warning("cannot find OUTCAR in " + output_dir + " skip")
@@ -233,9 +642,37 @@ class VASP(Task):
         return outcar_dict
 
     def forward_files(self, property_type="relaxation"):
+        if property_type == "finite_t_latt":
+            return [
+                "INCAR.nvt",
+                "INCAR.nvt.*",
+                "INCAR.equi",
+                "INCAR.production",
+                self._STAGE_PLAN,
+                "run_command",
+                "POSCAR",
+                "KPOINTS",
+                "POTCAR",
+            ]
+        if property_type == "annealing":
+            return [
+                "INCAR.eq",
+                "INCAR.ramp",
+                "INCAR.decline",
+                "INCAR.final_eq",
+                "INCAR.equi",
+                "INCAR.production",
+                self._STAGE_PLAN,
+                "run_command",
+                "POSCAR",
+                "KPOINTS",
+                "POTCAR",
+            ]
         return ["INCAR", "POSCAR", "KPOINTS", "POTCAR"]
 
     def forward_common_files(self, property_type="relaxation"):
+        if property_type in {"finite_t_latt", "annealing"}:
+            return ["POTCAR"]
         potcar_not_link_list = ["vacancy", "interstitial"]
         if property_type == "elastic":
             return ["INCAR", "KPOINTS", "POTCAR"]
@@ -245,6 +682,10 @@ class VASP(Task):
             return ["INCAR", "POTCAR"]
 
     def backward_files(self, property_type="relaxation"):
+        if property_type == "finite_t_latt":
+            return ["OUTCAR", "outlog", "OSZICAR", "CONTCAR", "XDATCAR"]
+        if property_type == "annealing":
+            return ["OUTCAR", "outlog", "OSZICAR", "XDATCAR", "CONTCAR"]
         if property_type in {"phonon", "gruneisen"}:
             return ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"]
         else:

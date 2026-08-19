@@ -1,4 +1,5 @@
 import glob
+import hashlib
 import json
 import logging
 import os
@@ -7,30 +8,83 @@ import re
 import dpdata
 import numpy as np
 from monty.serialization import dumpfn, loadfn
-from pymatgen.analysis.diffraction.tem import TEMCalculator
 from pymatgen.core.structure import Structure
-from pymatgen.core.surface import SlabGenerator
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
 from apex.core.lib.slab_orientation import SlabSlipSystem
+from apex.core.lib.parent_lattice_mapping import (
+    resolve_parent_slip_geometry,
+    resolve_parent_supercell,
+)
 from apex.core.lib.trans_tools import direction_miller_bravais_to_miller
 from apex.core.lib.trans_tools import plane_miller_bravais_to_miller
 from apex.core.lib.trans_tools import trans_mat_basis
 from apex.core.property.Property import Property, is_failed_task_result
+from apex.core.property.gamma_slab import get_first_gamma_slab
+from apex.core.property.gamma_slab import make_gamma_slab_generator
+from apex.core.property.gamma_slab import validate_gamma_slab_settings
+from apex.core.property.gamma_slab import validate_generated_gamma_slab
+from apex.core.property.gamma_geometry import (
+    build_parent_gamma_slab,
+    validate_gamma_cell_geometry,
+    validate_vacuum_size,
+)
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro
 from apex.core.reproduce import post_repro
-from apex.core.structure import StructureInfo
+from apex.core.structure import (
+    StructureInfo,
+    normalize_parent_lattice_hint,
+    resolve_parent_lattice_hint,
+)
 from dflow.python import upload_packages
 
 upload_packages.append(__file__)
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _resolve_require_orthogonal_cell(parameter, default=False):
+    explicit = parameter.get("require_orthogonal_cell", None)
+    legacy_alias = parameter.get("orthogonalize_cell", None)
+    for key, candidate in (
+        ("require_orthogonal_cell", explicit),
+        ("orthogonalize_cell", legacy_alias),
+    ):
+        if candidate is not None and not isinstance(candidate, (bool, np.bool_)):
+            raise ValueError(f"gamma_surface {key} must be a boolean")
+    if explicit is not None and legacy_alias is not None and explicit != legacy_alias:
+        raise ValueError(
+            "gamma_surface require_orthogonal_cell and orthogonalize_cell disagree"
+        )
+    value = explicit if explicit is not None else legacy_alias
+    if value is None:
+        value = default
+    if legacy_alias:
+        logging.info(
+            "gamma_surface orthogonalize_cell=true is a strict geometry gate; "
+            "APEX does not Gram-Schmidt periodic cells"
+        )
+    parameter["require_orthogonal_cell"] = bool(value)
+    return bool(value)
 
 
 class GammaSurface(Property):
     """Calculation of generalized stacking fault energy surface."""
 
     def __init__(self, parameter, inter_param=None):
+        self.parent_lattice = normalize_parent_lattice_hint(
+            parameter.get("parent_lattice")
+        )
+        if self.parent_lattice is not None:
+            parameter["parent_lattice"] = self.parent_lattice
         self._add_fix_explicit = "add_fix" in parameter
         parameter["reproduce"] = parameter.get("reproduce", False)
         self.reprod = parameter["reproduce"]
@@ -52,8 +106,22 @@ class GammaSurface(Property):
                 self.plane_shift = parameter["plane_shift"]
                 parameter["supercell_size"] = parameter.get("supercell_size", (1, 1, 5))
                 self.supercell_size = parameter["supercell_size"]
-                parameter["vacuum_size"] = parameter.get("vacuum_size", 0)
-                self.vacuum_size = parameter["vacuum_size"]
+                parameter["min_slab_height"] = parameter.get(
+                    "min_slab_height", None
+                )
+                self.min_slab_height = parameter["min_slab_height"]
+                parameter["max_atoms"] = parameter.get("max_atoms", None)
+                self.max_atoms = parameter["max_atoms"]
+                parameter["min_distance"] = parameter.get("min_distance", 0.2)
+                self.min_distance = parameter["min_distance"]
+                parameter["vacuum_size"] = parameter.get("vacuum_size", 20)
+                self.vacuum_size = validate_vacuum_size(
+                    parameter["vacuum_size"], "GammaSurface"
+                )
+                parameter["vacuum_size"] = self.vacuum_size
+                self.require_orthogonal_cell = _resolve_require_orthogonal_cell(
+                    parameter
+                )
                 parameter["add_fix"] = parameter.get(
                     "add_fix", ["true", "true", "false"]
                 )
@@ -207,6 +275,7 @@ class GammaSurface(Property):
                         "slip_length_y.json",
                         "slip_vector_x.json",
                         "slip_vector_y.json",
+                        "gamma_geometry.json",
                     ):
                         source = os.path.join(init_from_task, metadata)
                         if not os.path.exists(source):
@@ -260,8 +329,26 @@ class GammaSurface(Property):
                 ss = Structure.from_file("CONTCAR.direct")
                 os.chdir(cwd)
                 st = StructureInfo(ss)
-                self.structure_type = st.lattice_structure
-                self.conv_std_structure = st.conventional_structure
+                self.detected_structure_type = st.lattice_structure
+                self.structure_type, self.structure_type_source = (
+                    resolve_parent_lattice_hint(
+                        self.detected_structure_type, self.parent_lattice
+                    )
+                )
+                if self.structure_type_source == "user_override":
+                    logging.info(
+                        "GammaSurface parent_lattice=%s overrides automatic "
+                        "structure classification %s without changing the input "
+                        "geometry.",
+                        self.structure_type,
+                        self.detected_structure_type,
+                    )
+                # A parent hint defines the crystallographic index basis for a
+                # disordered supercell. Preserve the exact relaxed row basis so
+                # the integer parent-supercell mapping remains traceable.
+                self.conv_std_structure = (
+                    ss if self.parent_lattice is not None else st.conventional_structure
+                )
                 relax_a = self.conv_std_structure.lattice.a
                 relax_b = self.conv_std_structure.lattice.b
                 relax_c = self.conv_std_structure.lattice.c
@@ -278,13 +365,27 @@ class GammaSurface(Property):
                     self.closed_loop = bool(closed_loop)
                     self.plane_shift = type_param.get("plane_shift", self.plane_shift)
                     self.supercell_size = type_param.get("supercell_size", self.supercell_size)
+                    self.min_slab_height = type_param.get(
+                        "min_slab_height", self.min_slab_height
+                    )
+                    self.max_atoms = type_param.get("max_atoms", self.max_atoms)
+                    self.min_distance = type_param.get(
+                        "min_distance", self.min_distance
+                    )
                     self.vacuum_size = type_param.get("vacuum_size", self.vacuum_size)
+                    self.require_orthogonal_cell = _resolve_require_orthogonal_cell(
+                        type_param, self.require_orthogonal_cell
+                    )
                     self.add_fix = type_param.get("add_fix", self.add_fix)
                     self.n_steps_x = type_param.get(
                         "n_steps_x", type_param.get("n_steps", self.n_steps_x)
                     )
                     self.n_steps = self.n_steps_x
                     self.n_steps_y = type_param.get("n_steps_y", self.n_steps_y)
+
+                self.vacuum_size = validate_vacuum_size(
+                    self.vacuum_size, "GammaSurface"
+                )
 
                 if not (self.plane_miller and self.slip_direction):
                     raise RuntimeError(
@@ -319,14 +420,121 @@ class GammaSurface(Property):
                         "Please double check generated slab structures.",
                         self.structure_type,
                     )
+                (
+                    self.supercell_size,
+                    self.min_slab_height,
+                    self.max_atoms,
+                    self.min_distance,
+                ) = validate_gamma_slab_settings(
+                    self.supercell_size,
+                    self.min_slab_height,
+                    self.max_atoms,
+                    self.min_distance,
+                )
 
-                plane_miller, _, slip_length_x, Q = self.__convert_input_miller(
-                    self.conv_std_structure
-                )
-                slab = self.__gen_slab_pmg(
-                    self.conv_std_structure, plane_miller, trans_matrix=Q
-                )
+                self.parent_mapping = None
+                self.parent_slip_geometry = None
+                self.gamma_geometry = None
+                parent_slip_vector_x = None
+                if self.parent_lattice is not None:
+                    self.parent_mapping = resolve_parent_supercell(
+                        self.conv_std_structure, self.parent_lattice
+                    )
+                    self.parent_slip_geometry = resolve_parent_slip_geometry(
+                        self.conv_std_structure,
+                        self.parent_mapping,
+                        self.plane_miller,
+                        self.slip_direction,
+                        self.slip_length,
+                    )
+                    built = build_parent_gamma_slab(
+                        self.conv_std_structure,
+                        self.parent_slip_geometry,
+                        self.supercell_size,
+                        self.supercell_size[2],
+                        self.min_slab_height,
+                        self.vacuum_size,
+                        self.plane_shift,
+                        self.require_orthogonal_cell,
+                    )
+                    slab = built.slab
+                    self._gamma_upper_indices = built.upper_indices
+                    self._gamma_lower_indices = built.lower_indices
+                    self._slab_generation_metadata = built.generation_metadata
+                    self.slab_generation = validate_generated_gamma_slab(
+                        slab,
+                        built.generation_metadata,
+                        self.supercell_size[:2],
+                        self.max_atoms,
+                        self.min_distance,
+                        "GammaSurface",
+                    )
+                    self.slab_generation.update(built.metadata)
+                    parent_slip_vector_x = (
+                        self.parent_slip_geometry.local_frame
+                        @ self.parent_slip_geometry.burgers_vector_cart
+                    )
+                    slip_length_x = float(np.linalg.norm(parent_slip_vector_x))
+                    self.gamma_geometry = {
+                        "parent_mapping": self.parent_mapping.as_dict(),
+                        "slip_geometry": self.parent_slip_geometry.as_dict(),
+                        "slab_geometry": built.metadata,
+                        "source_structure": {
+                            "path": os.path.abspath(equi_contcar),
+                            "sha256": _sha256_file(equi_contcar),
+                            "atom_count": len(self.conv_std_structure),
+                        },
+                    }
+                else:
+                    plane_miller, _, slip_length_x, Q = self.__convert_input_miller(
+                        self.conv_std_structure
+                    )
+                    slab = self.__gen_slab_pmg(
+                        self.conv_std_structure, plane_miller, trans_matrix=Q
+                    )
+                    cell_geometry = validate_gamma_cell_geometry(
+                        slab,
+                        require_orthogonal=self.require_orthogonal_cell,
+                        property_name="GammaSurface",
+                    )
+                    self.slab_generation.update(
+                        {
+                            "interface_count": 1 if self.vacuum_size > 0 else 2,
+                            "cell_geometry": cell_geometry,
+                            "require_orthogonal_cell": self.require_orthogonal_cell,
+                        }
+                    )
+                    self.gamma_geometry = {
+                        "parent_mapping": None,
+                        "slip_geometry": None,
+                        "slab_geometry": {
+                            "interface_count": self.slab_generation["interface_count"],
+                            "added_vacuum_angstrom": self.vacuum_size,
+                            "cell_geometry": cell_geometry,
+                            "require_orthogonal_cell": self.require_orthogonal_cell,
+                        },
+                        "source_structure": {
+                            "path": os.path.abspath(equi_contcar),
+                            "sha256": _sha256_file(equi_contcar),
+                            "atom_count": len(self.conv_std_structure),
+                        },
+                    }
                 self.atom_num = len(slab.sites)
+                self.slab_generation.update(
+                    {
+                        "detected_structure_type": self.detected_structure_type,
+                        "effective_parent_lattice": self.structure_type,
+                        "structure_type_source": self.structure_type_source,
+                    }
+                )
+                dumpfn(
+                    self.slab_generation,
+                    os.path.join(path_to_work, "slab_generation.json"),
+                )
+                dumpfn(
+                    self.gamma_geometry,
+                    os.path.join(path_to_work, "gamma_geometry.json"),
+                )
 
                 os.chdir(path_to_work)
                 if os.path.exists(POSCAR):
@@ -339,26 +547,39 @@ class GammaSurface(Property):
                         slab, slip_vector_x
                     )
                     self.__validate_closed_loop(
-                        slab, slip_vector_x, slip_vector_y
+                        slab,
+                        slip_vector_x,
+                        slip_vector_y,
+                        getattr(self, "_gamma_upper_indices", None),
                     )
                     slip_length_x = float(np.linalg.norm(slip_vector_x))
                     slip_length_y = float(np.linalg.norm(slip_vector_y))
                 else:
-                    slip_length_x = self.__resolve_slip_length(
-                        slip_length_x, relax_a, relax_b, relax_c
-                    )
+                    if parent_slip_vector_x is not None:
+                        slip_vector_x = np.asarray(
+                            parent_slip_vector_x, dtype=float
+                        )
+                        slip_length_x = float(np.linalg.norm(slip_vector_x))
+                    else:
+                        slip_length_x = self.__resolve_slip_length(
+                            slip_length_x, relax_a, relax_b, relax_c
+                        )
+                        slip_vector_x = np.array([slip_length_x, 0.0, 0.0])
                     if self.slip_length_y is None:
                         slip_length_y = slip_length_x
                     else:
                         slip_length_y = self.__resolve_slip_length(
                             self.slip_length_y, relax_a, relax_b, relax_c
                         )
-                    slip_vector_x = np.array([slip_length_x, 0.0, 0.0])
                     slip_vector_y = np.array([0.0, slip_length_y, 0.0])
                 self.slip_length = slip_length_x
                 self.slip_length_y = slip_length_y
 
-                top_atoms = np.where(slab.frac_coords[:, 2] > 0.5)[0]
+                top_atoms = getattr(
+                    self,
+                    "_gamma_upper_indices",
+                    np.where(slab.frac_coords[:, 2] > 0.5)[0],
+                )
                 n_steps_x = self.n_steps_x
                 n_steps_y = self.n_steps_y
 
@@ -386,6 +607,14 @@ class GammaSurface(Property):
                                 frac_coords=False,
                                 to_unit_cell=True,
                             )
+                        validate_generated_gamma_slab(
+                            slab_task,
+                            self._slab_generation_metadata,
+                            self.supercell_size[:2],
+                            self.max_atoms,
+                            self.min_distance,
+                            f"GammaSurface task ({idx_x}, {idx_y})",
+                        )
 
                         slab_task.to("POSCAR.tmp", "POSCAR")
                         vasp_utils.regulate_poscar("POSCAR.tmp", "POSCAR")
@@ -407,6 +636,7 @@ class GammaSurface(Property):
                             },
                             "displacement.json",
                         )
+                        dumpfn(self.gamma_geometry, "gamma_geometry.json")
                         count += 1
 
         os.chdir(cwd)
@@ -503,10 +733,15 @@ class GammaSurface(Property):
         slab: Structure,
         slip_vector_x: np.ndarray,
         slip_vector_y: np.ndarray,
+        upper_indices=None,
         tol: float = 1e-8,
     ) -> None:
         """Verify that translating the upper slab closes all grid corners."""
-        top_atoms = np.where(slab.frac_coords[:, 2] > 0.5)[0]
+        top_atoms = (
+            np.asarray(upper_indices, dtype=int)
+            if upper_indices is not None
+            else np.where(slab.frac_coords[:, 2] > 0.5)[0]
+        )
         if len(top_atoms) == 0 or len(top_atoms) == len(slab):
             raise RuntimeError(
                 "Cannot define gamma_surface fault plane: the slab is not split "
@@ -557,14 +792,20 @@ class GammaSurface(Property):
         combined_key = "x".join([plane_str, slip_str])
         l2_normalize_1d = lambda v: v / np.linalg.norm(v, 2)
 
-        dir_dict = SlabSlipSystem.atomic_system_dict()
+        # Match Gamma line: use physical recommendations when available, and
+        # otherwise warn before falling back to an in-plane geometry check.
+        dir_dict = SlabSlipSystem.recommended_system_dict()
         try:
             system = dir_dict[self.structure_type]
             plane_miller, x_miller, xy_miller, stored_slip_length = system[combined_key].values()
         except KeyError:
             logging.warning(
-                "Input slip system is not pre-defined in GammaSurface. "
-                "Please double check generated slab structure."
+                "Warning:\n"
+                "The input slip system is not one of the physically recommended "
+                "FCC/BCC/HCP systems in README section 4.10.\n"
+                "GammaSurface is falling back to a geometric construction and will "
+                "only check that slip_direction lies on plane_miller. Double-check "
+                "the generated slab, especially for HCP or structure type \"other\"."
             )
             x_miller = slip_direction
             if not slip_length:
@@ -598,38 +839,25 @@ class GammaSurface(Property):
             y_cartesian_unit_vector = l2_normalize_1d(
                 np.cross(z_cartesian_unit_vector, x_cartesian_unit_vector)
             )
-        finally:
-            reoriented_basis = np.array(
-                [x_cartesian_unit_vector, y_cartesian_unit_vector, z_cartesian_unit_vector]
-            )
-            Q = trans_mat_basis(reoriented_basis)
+        reoriented_basis = np.array(
+            [x_cartesian_unit_vector, y_cartesian_unit_vector, z_cartesian_unit_vector]
+        )
+        Q = trans_mat_basis(reoriented_basis)
 
         return plane_miller, x_miller, slip_length, Q
 
     def __gen_slab_pmg(self, structure: Structure, plane_miller, trans_matrix=None) -> Structure:
-        tem_calc_obj = TEMCalculator()
-        spacing_dict = tem_calc_obj.get_interplanar_spacings(self.conv_std_structure, [plane_miller])
-        slab_size = spacing_dict[plane_miller] * self.supercell_size[2]
-        slab_gen = SlabGenerator(
+        slab_gen, generation_metadata = make_gamma_slab_generator(
             structure,
-            miller_index=plane_miller,
-            min_slab_size=slab_size,
-            min_vacuum_size=0,
-            center_slab=True,
-            in_unit_planes=False,
-            lll_reduce=True,
-            reorient_lattice=False,
-            primitive=False,
+            plane_miller,
+            self.supercell_size[2],
+            self.min_slab_height,
         )
-        slabs_pmg = slab_gen.get_slabs(ftol=0.001)
-        matching_slabs = [
-            slab for slab in slabs_pmg if slab.miller_index == plane_miller
-        ]
-        if not matching_slabs:
+        slab = get_first_gamma_slab(slab_gen, ftol=0.001)
+        if slab.miller_index != tuple(plane_miller):
             raise RuntimeError(
                 f"Cannot generate a gamma_surface slab for Miller plane {plane_miller}"
             )
-        slab = matching_slabs[0]
         if trans_matrix is not None and np.asarray(trans_matrix).any():
             reoriented_lattice_vectors = [trans_matrix.dot(v) for v in slab.lattice.matrix]
             slab = Structure(
@@ -669,6 +897,26 @@ class GammaSurface(Property):
         slab.translate_sites(list(range(len(slab))), [0, 0, 0.5 - avg_c - plane_shift_frac])
         slab.make_supercell(
             scaling_matrix=[self.supercell_size[0], self.supercell_size[1], 1]
+        )
+        self._slab_generation_metadata = generation_metadata
+        self.slab_generation = validate_generated_gamma_slab(
+            slab,
+            generation_metadata,
+            self.supercell_size[:2],
+            self.max_atoms,
+            self.min_distance,
+            "GammaSurface",
+        )
+        self.slab_generation.update(
+            {
+                "min_slab_height": self.min_slab_height,
+                "max_atoms": self.max_atoms,
+                "min_distance_threshold": self.min_distance,
+                "vacuum_size": self.vacuum_size,
+            }
+        )
+        logging.info(
+            "GammaSurface slab generation: %s", self.slab_generation
         )
         return slab
 
@@ -796,6 +1044,31 @@ class GammaSurface(Property):
             ref_energy = task_result_slab_equi["energies"][-1]
             ref_natoms = np.sum(task_result_slab_equi["atom_numbs"])
             equi_epa_slab = ref_energy / ref_natoms
+            geometry_file = os.path.join(all_tasks[0], "gamma_geometry.json")
+            interface_count = (
+                1 if getattr(self, "vacuum_size", 20.0) > 0 else 2
+            )
+            if os.path.isfile(geometry_file):
+                geometry = loadfn(geometry_file)
+                interface_count = int(
+                    geometry.get("slab_geometry", {}).get(
+                        "interface_count", interface_count
+                    )
+                )
+            if interface_count not in (1, 2):
+                raise RuntimeError(
+                    f"Invalid GammaSurface interface_count={interface_count}"
+                )
+            reference_cell = np.asarray(
+                task_result_slab_equi["cells"][-1], dtype=float
+            )
+            reference_area = float(
+                np.linalg.norm(np.cross(reference_cell[0], reference_cell[1]))
+            )
+            if not np.isfinite(reference_area) or reference_area <= 0.0:
+                raise RuntimeError(
+                    "GammaSurface reference task has an invalid in-plane area"
+                )
 
             for ii in all_tasks:
                 structure_dir = os.path.basename(ii)
@@ -824,8 +1097,20 @@ class GammaSurface(Property):
                             task_result["cells"][-1][0], task_result["cells"][-1][1]
                         )
                     )
+                    if not np.isclose(
+                        area, reference_area, rtol=1.0e-8, atol=1.0e-8
+                    ):
+                        raise RuntimeError(
+                            "GammaSurface task in-plane area changed relative to "
+                            f"the (0,0) reference: {area:.12g} vs "
+                            f"{reference_area:.12g} A^2"
+                        )
                     cf = 1.60217657e-16 / 1e-20 * 0.001
-                    sfe = (task_result["energies"][-1] - ref_energy) / area * cf
+                    sfe = (
+                        (task_result["energies"][-1] - ref_energy)
+                        / (area * interface_count)
+                        * cf
+                    )
                 ptr_data += (
                     "%-25s  %7.3f  %7.3f  %7.3f  %7.3f  "
                     "%7.3f  %7.3f  %7.3f  %7.3f  %8.3f %8.3f\n"

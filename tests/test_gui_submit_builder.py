@@ -263,6 +263,36 @@ class TestGuiSubmitBuilder(unittest.TestCase):
         self.assertIn("gamma_surface", vasp)
         self.assertIn("gamma_surface", abacus)
 
+    def test_profile_gamma_surface_defaults_use_primary_slip_systems(self):
+        expected_top_level = {
+            "plane_miller": [1, 1, 1],
+            "slip_direction": [-1, 1, 0],
+        }
+        expected_overrides = {
+            "bcc": {
+                "plane_miller": [1, 1, 0],
+                "slip_direction": [-1, 1, 1],
+            },
+            "hcp": {
+                "plane_miller": [0, 0, 0, 1],
+                "slip_direction": [2, -1, -1, 0],
+            },
+        }
+
+        for profile in ("lammps", "vasp", "abacus"):
+            with self.subTest(profile=profile):
+                template = _load_profile_param_template(profile)
+                surface = next(
+                    prop
+                    for prop in template["properties"]
+                    if prop["type"] == "gamma_surface"
+                )
+                for key, value in expected_top_level.items():
+                    self.assertEqual(surface[key], value)
+                for structure_type, expected in expected_overrides.items():
+                    self.assertEqual(surface[structure_type], expected)
+                self.assertTrue(surface["closed_loop"])
+
     def test_lammps_interaction_types_exclude_vasp_abacus(self):
         options = [item["value"] for item in _interaction_type_options_for_profile("lammps", "meam")]
         self.assertNotIn("vasp", options)
@@ -392,22 +422,27 @@ class TestGuiSubmitBuilder(unittest.TestCase):
                 email="user@example.com",
                 password="secret-password",
                 program_id_text="1234",
+                access_key="secret-access-key",
                 account_path=account_path,
             )
             self.assertTrue(feedback["ok"])
             self.assertEqual(account_state["email"], "user@example.com")
             self.assertEqual(account_state["program_id"], "1234")
             self.assertTrue(account_state["password_set"])
+            self.assertTrue(account_state["access_key_set"])
 
             summary = _render_account_summary(account_state)
             self.assertIn("Email: user@example.com", summary)
             self.assertIn("Program ID: 1234", summary)
             self.assertIn("Password: 已设置", summary)
+            self.assertIn("AccessKey: 已设置", summary)
             self.assertNotIn("secret-password", summary)
+            self.assertNotIn("secret-access-key", summary)
 
             with open(account_path, "r", encoding="utf-8") as f:
                 on_disk = json.load(f)
             self.assertEqual(on_disk["password"], "secret-password")
+            self.assertEqual(on_disk["access_key"], "secret-access-key")
 
     def test_account_overwrite_requires_integer_program_id(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -430,6 +465,7 @@ class TestGuiSubmitBuilder(unittest.TestCase):
             self.assertEqual(state["email"], "")
             self.assertEqual(state["program_id"], "")
             self.assertFalse(state["password_set"])
+            self.assertFalse(state["access_key_set"])
 
     def test_read_latest_workflow_id(self):
         with tempfile.TemporaryDirectory() as tmpdir:

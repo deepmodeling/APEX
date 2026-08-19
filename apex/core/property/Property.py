@@ -10,21 +10,38 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 
+def _result_energies(result):
+    """Extract energies from a task result payload.
+
+    Supports:
+    - flat dicts / mapping-like objects with top-level ``energies``
+      (rehydrated dpdata LabeledSystem)
+    - calculator ``as_dict`` payloads with nested ``data.energies``
+    """
+    try:
+        return result["energies"]
+    except Exception:
+        pass
+    if not isinstance(result, dict):
+        return None
+    data = result.get("data")
+    if isinstance(data, dict):
+        return data.get("energies")
+    return None
+
+
 def is_failed_task_result(result) -> bool:
     """Return True when a task result cannot be used for property aggregation.
 
-    Accepts plain dicts and mapping-like objects such as dpdata LabeledSystem
-    (fixture ``result_task.json`` files often load as the latter).
+    Accepts plain dicts, calculator ``as_dict`` payloads (``data.energies``),
+    and mapping-like objects such as dpdata LabeledSystem (fixture
+    ``result_task.json`` files often load as the latter).
     """
     if result is None:
         return True
     if isinstance(result, dict) and result.get("failed") is True:
         return True
-    try:
-        energies = result["energies"]
-    except Exception:
-        return True
-    return energies is None
+    return _result_energies(result) is None
 
 
 def _task_marked_failed(task_dir: str) -> bool:

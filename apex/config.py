@@ -33,14 +33,14 @@ class Config:
     phone: str = None
     email: str = None
     password: str = None
+    access_key: str = None
+    app_key: str = None
     program_id: int = None
     job_type: str = "container"
     platform: str = "ali"
 
     # OpenAPI Sandbox config
-    access_key: str = None
     project_id: int = None
-    app_key: str = "agent"
     machine_type: str = None
     image_address: str = None
     output_log: bool = False
@@ -270,12 +270,17 @@ class Config:
                 "app_key": self.app_key or "agent",
             }
         else:
-            # Legacy Bohrium mode uses email/password
+            # Legacy Bohrium supports either email/password or AccessKey.
             bohrium_config = {
                 "username": self.email,
                 "phone": self.phone,
                 "password": self.password,
-                "project_id": self.program_id
+                "project_id": self.program_id,
+                "access_key": self.access_key,
+                # dflow sends this header when exchanging an AccessKey for a ticket.
+                "app_key": self.app_key if self.app_key is not None else (
+                    "" if self.access_key else None
+                ),
             }
         if self.bohrium_config:
             update_dict(bohrium_config, self.bohrium_config)

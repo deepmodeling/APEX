@@ -11,9 +11,9 @@ from monty.serialization import loadfn
 from decimal import Decimal
 from dflow.python import OP
 from dflow.python import upload_packages
-from fpop.vasp import RunVasp
 from fpop.abacus import RunAbacus
 from apex.op.RunLAMMPS import RunLAMMPS
+from apex.op.RunVASP import RunVASP
 from apex.account import merge_bohrium_defaults
 from apex.core.calculator import LAMMPS_INTER_TYPE
 
@@ -219,7 +219,7 @@ def get_task_type(d: dict) -> (str, Type[OP]):
     interaction_type = d['interaction']['type']
     if interaction_type == 'vasp':
         task_type = 'vasp'
-        run_op = RunVasp
+        run_op = RunVASP
     elif interaction_type == 'abacus':
         task_type = 'abacus'
         run_op = RunAbacus

@@ -33,7 +33,7 @@ DEFAULT_OPENAPI_CONFIG = {
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
 }
 
-SENSITIVE_KEYS = {"password", "access_key"}
+SENSITIVE_KEYS = {"password", "access_key", "app_key"}
 ACCOUNT_FILE_ENV = "APEX_ACCOUNT_FILE"
 
 
@@ -114,8 +114,14 @@ def _is_openapi_context(config_dict: dict) -> bool:
             value = machine.get(key)
             if isinstance(value, str) and value.lower() == "openapi":
                 return True
-    return any(
-        key in config_dict for key in ("access_key", "machine_type")
+    dflow_config = config_dict.get("dflow_config", {})
+    if isinstance(dflow_config, dict):
+        if dflow_config.get("host") == SANDBOX_DFLOW_HOST:
+            return True
+    return (
+        config_dict.get("dflow_host") == SANDBOX_DFLOW_HOST
+        or config_dict.get("k8s_api_server") == SANDBOX_DFLOW_HOST
+        or "machine_type" in config_dict
     )
 
 
@@ -135,14 +141,18 @@ def _is_bohrium_context(config_dict: dict) -> bool:
                 return True
         remote_profile = machine.get("remote_profile", {})
         if isinstance(remote_profile, dict) and any(
-                key in remote_profile for key in ("email", "password", "program_id")):
+                key in remote_profile
+                for key in ("email", "password", "program_id", "project_id", "access_key")):
             return True
     dflow_config = config_dict.get("dflow_config", {})
     if isinstance(dflow_config, dict):
         if dflow_config.get("host") == BOHRIUM_WORKFLOWS_HOST:
             return True
     return any(
-        key in config_dict for key in ("email", "password", "program_id", "phone", "bohrium_config")
+        key in config_dict
+        for key in (
+            "email", "password", "program_id", "phone", "access_key", "bohrium_config"
+        )
     ) or config_dict.get("dflow_host") == BOHRIUM_WORKFLOWS_HOST
 
 
@@ -213,8 +223,9 @@ def merge_bohrium_defaults(
     merged = copy.deepcopy(DEFAULT_BOHRIUM_CONFIG)
     _deep_update(merged, account_config)
     _deep_update(merged, user_config)
+    auth_fields = () if merged.get("access_key") else ("email", "password")
     missing_required = [
-        key for key in ("email", "password", "program_id")
+        key for key in (*auth_fields, "program_id")
         if merged.get(key) in (None, "")
     ]
     if missing_required:
@@ -246,15 +257,53 @@ def _prompt_program_id(default: Optional[int]) -> Optional[int]:
 
 
 def prompt_for_account_fields(current_config: dict) -> dict:
+    current_method = "access-key" if current_config.get("access_key") else "email"
+    print("Select Bohrium authentication method:")
+    print("  1) Email/password")
+    print("  2) AccessKey")
+    while True:
+        choice = input(
+            f"Authentication method [1/2, empty keeps {current_method}]: "
+        ).strip().lower()
+        if not choice:
+            method = current_method
+            break
+        if choice in {"1", "email", "email/password", "email-password"}:
+            method = "email"
+            break
+        if choice in {"2", "access", "access-key", "accesskey"}:
+            method = "access-key"
+            break
+        print("Choose 1 for email/password or 2 for AccessKey.")
+
     updated = {}
-    email = _prompt_value("Bohrium email", current_config.get("email"))
-    if email is not None:
-        updated["email"] = email
-    password = getpass("Bohrium password [leave empty to keep current]: ").strip()
-    if password:
-        updated["password"] = password
-    elif current_config.get("password"):
-        updated["password"] = current_config["password"]
+    if method == "email":
+        # Selecting password authentication must disable AccessKey precedence.
+        updated["access_key"] = None
+        email = _prompt_value("Bohrium email", current_config.get("email"))
+        if email is not None:
+            updated["email"] = email
+        password = getpass(
+            "Bohrium password [leave empty to keep current]: "
+        ).strip()
+        if password:
+            updated["password"] = password
+        elif current_config.get("password"):
+            updated["password"] = current_config["password"]
+    else:
+        access_key = getpass(
+            "Bohrium AccessKey [leave empty to keep current]: "
+        ).strip()
+        if access_key:
+            updated["access_key"] = access_key
+        elif current_config.get("access_key"):
+            updated["access_key"] = current_config["access_key"]
+
+    if method == "access-key":
+        program_id = _prompt_program_id(current_config.get("program_id"))
+        if program_id is not None:
+            updated["program_id"] = program_id
+        return updated
     program_id = _prompt_program_id(current_config.get("program_id"))
     if program_id is not None:
         updated["program_id"] = program_id
@@ -273,6 +322,16 @@ def account_from_args(args) -> None:
     current_raw = load_account_config(account_path)
     current = copy.deepcopy(DEFAULT_BOHRIUM_CONFIG)
     _deep_update(current, current_raw)
+    account_changed = False
+    clear_target = getattr(args, "clear", None)
+    clear_keys = {
+        "all": ("email", "password", "access_key"),
+        "email": ("email", "password"),
+        "access-key": ("access_key",),
+    }
+    for key in clear_keys.get(clear_target, ()):
+        if current.pop(key, None) is not None:
+            account_changed = True
 
     cli_updates = {}
     for key in (
@@ -282,6 +341,7 @@ def account_from_args(args) -> None:
             "context_type",
             "email",
             "password",
+            "access_key",
             "program_id",
             "apex_image_name",
     ):
@@ -289,14 +349,19 @@ def account_from_args(args) -> None:
         if value is not None:
             cli_updates[key] = value
 
-    if not cli_updates and not args.show and not args.non_interactive:
+    if (
+        not cli_updates
+        and clear_target is None
+        and not args.show
+        and not args.non_interactive
+    ):
         cli_updates = prompt_for_account_fields(current)
 
-    if cli_updates:
+    if cli_updates or account_changed:
         _deep_update(current, cli_updates)
         saved_path = save_account_config(current, account_path)
         print(f"Saved account config to {saved_path}")
 
-    if args.show or not cli_updates:
+    if args.show or not (cli_updates or account_changed):
         print(json.dumps(mask_sensitive_config(current), indent=2))
         print(f"Config path: {account_path}")

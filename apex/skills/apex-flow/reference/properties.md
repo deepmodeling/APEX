@@ -263,35 +263,57 @@ These parameters appear in most property configurations:
 |-----------|-----------|------|---------|-------------|
 | `plane_miller` | **REQUIRED** | list[int] | `[1,1,1]` | Slip plane Miller indices |
 | `slip_direction` | **REQUIRED** | list[int] | `[-1,1,0]` | Slip direction (**must lie ON the plane**) |
+| `parent_lattice` | optional | str/null | `null` | Parent lattice for RSS/SQS. Gamma line automatically infers the integer parent-supercell mapping and treats the Miller/direction inputs as parent indices without symmetrizing the supplied geometry |
 | `slip_length` | optional | float | `null` | Total slip distance (Å); auto if null |
 | `plane_shift` | optional | int/float | `0` | Shift of slip plane position |
-| `supercell_size` | optional | list[int] | `[1,1,5]` | Supercell for slab |
-| `vacuum_size` | optional | float | `0` | Vacuum above slab (Å) |
+| `supercell_size` | optional | list[int] | `[1,1,5]` | In-plane replication and target Miller-plane spacings |
+| `min_slab_height` | optional | float/null | `null` | Auto-add oriented-cell repeats until this material thickness (Å) is reached |
+| `max_atoms` | optional | int/null | `null` | Stop if the generated slab exceeds this atom count |
+| `min_distance` | optional | float | `0.2` | Stop if a periodic atom-pair distance is below this value (Å) |
+| `vacuum_size` | optional | float | `20` | Vacuum above slab (Å) |
+| `require_orthogonal_cell` | optional | bool | `false` | Fail unless the generated slab is an orthogonal Cartesian-z zero-tilt cell; never changes periodic boundaries |
 | `n_steps` | optional | int | `10` | Number of slip increments |
+| `displacement_points` | optional | list[float]/null | `null` | Explicit unique fractions in `[0,1]`; must include `0` and, when set, replaces the uniform `n_steps` grid |
 | `add_fix` | optional | list[str] | `["true","true","false"]` | Selective dynamics per axis |
 
 **cal_setting defaults**: `relax_pos=true`, `relax_shape=false`, `relax_vol=false`
 
-**Complete working default**:
+**Backward-compatible default** (the safety limits remain unset unless the
+user supplies them):
 ```json
 {
     "type": "gamma",
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
+    "vacuum_size": 20,
     "n_steps": 10
 }
 ```
 
-**Output**: Stacking fault energy (mJ/m²) vs displacement fraction.
+For endpoint-only work, for example, set
+`"displacement_points": [0.0, 0.5]`. APEX sorts the fractions and fails if
+they are duplicated, outside `[0,1]`, non-finite, or omit the required zero
+reference. The generated task count is exactly the number of explicit points.
+
+**Output**: Stacking fault energy (J/m²) vs displacement fraction. Multiply by
+1000 only when a plot or table explicitly uses mJ/m².
 
 ⚠️ **CRITICAL CONSTRAINT**: The `slip_direction` **must be a vector ON the slip plane** (dot product with `plane_miller` must equal zero).
 
-**Canonical slip systems (FCC / BCC / HCP):** use the predefined table in the
-APEX repository **README §4.10 Gamma line/surface** — do not invent planes or
-directions outside that table without explicit user confirmation. Nested
+**Physically recommended slip systems (FCC / BCC / HCP):** use the table in
+the APEX repository **README §4.10 Gamma line/surface**. Systems outside that
+registry are allowed, but APEX warns and falls back to checking only that the
+direction lies on the plane; inspect the generated slab manually. Nested
 `fcc` / `bcc` / `hcp` blocks in `param.json` override top-level
 `plane_miller` / `slip_direction` for the matching lattice type (see README).
+When chemical disorder or a large supercell makes symmetry detection return
+`other`, set `parent_lattice` explicitly. For Gamma line APEX automatically
+maps parent indices into the actual relaxed supercell, uses the true reciprocal
+normal and elementary parent Burgers translation, freezes the fault split before
+vacuum is added, and writes `gamma_geometry.json`. Mapping, layer-gap split,
+minimum distance, and parent-translation topology are fail-closed validations;
+RSS relaxed-coordinate and chemical `u=1` mismatches are diagnostic metadata.
 
 Quick primary picks when the user has not specified a system (still confirm):
 
@@ -315,38 +337,94 @@ Quick primary picks when the user has not specified a system (still confirm):
 |-----------|-----------|------|---------|-------------|
 | `plane_miller` | **REQUIRED** | list[int] | `[1,1,1]` | Slip plane |
 | `slip_direction` | **REQUIRED** | list[int] | `[-1,1,0]` | x-direction of 2D grid (**must lie ON the plane**) |
+| `parent_lattice` | optional | str/null | `null` | Explicit `bcc`, `fcc`, or `hcp` parent hint for RSS/disordered supercells; infers the integer parent-supercell mapping and treats plane/direction as parent indices without changing the supplied geometry |
 | `slip_length` | optional | float | `null` | Slip distance in x |
 | `slip_length_y` | optional | float | `null` | Slip distance in y |
 | `plane_shift` | optional | int/float | `0` | Slip plane shift |
-| `supercell_size` | optional | list[int] | `[1,1,5]` | Supercell |
-| `vacuum_size` | optional | float | `0` | Vacuum (Å) |
+| `supercell_size` | optional | list[int] | `[1,1,5]` | In-plane replication and target Miller-plane spacings |
+| `min_slab_height` | optional | float/null | `null` | Auto-add oriented-cell repeats until this material thickness (Å) is reached |
+| `max_atoms` | optional | int/null | `null` | Stop if the generated slab exceeds this atom count |
+| `min_distance` | optional | float | `0.2` | Stop if a periodic atom-pair distance is below this value (Å) |
+| `vacuum_size` | optional | float | `20` | Vacuum (Å); set `0` explicitly only for a bulk-like periodic fault model |
+| `require_orthogonal_cell` | optional | bool | `false` | Fail unless the generated slab is an orthogonal Cartesian-z zero-tilt cell; never Gram-Schmidts the lattice |
 | `closed_loop` | optional | bool | `false` | Derive a periodic, possibly oblique in-plane basis |
-| `n_steps_x` | optional | int | `10` | Grid points in x |
-| `n_steps_y` | optional | int | `n_steps_x` | Grid points in y |
+| `n_steps_x` | optional | int | `10` | Grid increments in x; produces `n_steps_x+1` fractions |
+| `n_steps_y` | optional | int | `n_steps_x` | Grid increments in y; produces `n_steps_y+1` fractions |
 | `add_fix` | optional | list[str] | `["true","true","false"]` | Selective dynamics |
 
 **cal_setting defaults**: `relax_pos=true`, `relax_shape=false`, `relax_vol=false`
 
-**Complete working default**:
+**Backward-compatible core default** (the safety limits remain unset unless
+the user supplies them):
 ```json
 {
     "type": "gamma_surface",
     "plane_miller": [1, 1, 1],
     "slip_direction": [-1, 1, 0],
     "supercell_size": [1, 1, 5],
+    "vacuum_size": 20,
     "closed_loop": false,
     "n_steps_x": 10,
     "n_steps_y": 10
 }
 ```
 
+The shipped generator and GUI profile templates set `closed_loop=true` as the
+recommended 2D default. Omitting the field still preserves the legacy core
+behavior above.
+
 **Output**: 2D grid of SFE values (J/m²), (n_steps_x+1) × (n_steps_y+1) points.
 With `closed_loop=true`, `slip_length` and `slip_length_y` must be omitted.
 APEX records the periodic basis vectors and the true Cartesian displacement of
 every grid point; use this mode for oblique or disordered supercells.
+Both properties also write `slab_generation.json`. The third
+`supercell_size` value is passed to Pymatgen as a plane count
+(`in_unit_planes=true`), preventing an intended two-layer slab from being
+promoted by floating-point round-off.
+Both also write `gamma_geometry.json`, use the same frozen material-internal
+fault split, and divide by its recorded `interface_count`: one with vacuum,
+two for a fully periodic zero-vacuum cell. Task areas must match the reference.
+`orthogonalize_cell=true` is accepted as a backward-compatible alias for the
+strict `require_orthogonal_cell` gate; it never modifies the lattice.
 
-⚠️ **Same constraint as gamma**: `slip_direction` must have zero dot product with
-`plane_miller`. Canonical FCC/BCC/HCP systems: **README §4.10** (same table as `gamma`).
+### Generator options and pre-submit validation
+
+`generate_config.py create` keeps the legacy `--properties` interface and
+defaults unchanged. The following optional flags only apply when `gamma`
+and/or `gamma_surface` is requested:
+
+| CLI option | JSON field | Applies to |
+|---|---|---|
+| `--gamma-parent-lattice {bcc,fcc,hcp}` | `parent_lattice` | both |
+| `--gamma-plane-miller <...>` | `plane_miller` | both |
+| `--gamma-slip-direction <...>` | `slip_direction` | both |
+| `--gamma-supercell-size <x> <y> <planes>` | `supercell_size` | both |
+| `--gamma-vacuum-size <angstrom>` | `vacuum_size` | both |
+| `--gamma-require-orthogonal-cell` | `require_orthogonal_cell=true` | both |
+| `--gamma-min-slab-height <angstrom>` | `min_slab_height` | both |
+| `--gamma-max-atoms <count>` | `max_atoms` | both |
+| `--gamma-min-distance <angstrom>` | `min_distance` | both |
+| `--gamma-n-steps <count>` | `n_steps` | `gamma` |
+| `--gamma-displacement-points <u...>` | `displacement_points` | `gamma` |
+| `--gamma-n-steps-x <count>` | `n_steps_x` | `gamma_surface` |
+| `--gamma-n-steps-y <count>` | `n_steps_y` | `gamma_surface` |
+| `--gamma-closed-loop` | `closed_loop=true` | `gamma_surface` |
+
+The generator prints the final Gamma JSON and expected task count. The input
+validator then uses the APEX Gamma core in a temporary directory to generate a
+representative slab for every local input structure. It reports parent/final
+atom count, material thickness, oriented-cell repeats, effective plane count,
+minimum periodic pair distance, expected task count, and generated VASP
+KPOINTS when applicable.
+
+Explicit safety limits are enforced before submission. Missing
+`min_slab_height` or `max_atoms` produces a compatibility warning rather than
+changing legacy behavior. This representative check does not replace the full
+displacement overlap check performed by `apex preview`.
+
+⚠️ **Same constraint and fallback as gamma**: `slip_direction` must have zero
+dot product with `plane_miller`. Physically recommended FCC/BCC/HCP systems are
+listed in **README §4.10**. Other systems warn and use geometry-only checking.
 
 ⚠️ **Mandatory pre-submit check**: run `apex preview <param.json>` before submitting
 any `gamma_surface` job. Preview builds the displacement slabs and, if any atom
@@ -357,6 +435,13 @@ pair is closer than `0.2` Å, prints to stderr:
 If that warning appears, do not submit until geometry/parameters are fixed.
 Agents must check this stderr message only — **do not open or read the GIF**
 (the GIF is optional for humans).
+
+The default `--gif-view auto` writes slip-plane and parent-`bc` projections for
+both Gamma lines and Gamma surfaces. Humans can select a single projection with
+`--gif-view default`, `slip-plane`, or `parent-bc`, or request the pair
+explicitly with `--gif-view both`. Projected unit-cell boundaries are retained
+so the vacuum region is not cropped from side-facing projections. These views
+are diagnostic renderings and do not replace the fail-closed geometry checks.
 
 **Notes**:
 - The y-direction is automatically computed as `plane_miller × slip_direction`.
@@ -430,17 +515,17 @@ overrides — detect the lattice, pick from this table, and confirm with the use
 
 | Key | Required? | Type | Default | Description |
 |-----|-----------|------|---------|-------------|
-| `temperature` | **REQUIRED** | list[float] | `[200,400,600,800]` | Target temperatures (K) |
-| `equi_step` | optional | int | `80000` | Equilibration steps |
-| `ave_step` | optional | int | `40000` | Averaging steps |
+| `temperature` | optional | list[float] | `[200,400,600,800]` LAMMPS; `[300,500,700,900,1100,1300,1500]` VASP | Target temperatures (K) |
+| `equi_step` | optional | int | `80000` LAMMPS; `5000` VASP | Equilibration steps |
+| `ave_step` | optional | int | `40000` LAMMPS; `10000` VASP | Production/statistics steps |
 | `timestep` | optional | float | `0.001` | Timestep (ps) |
 | `tdamp` | optional | float | `0.1` | Thermostat damping |
 | `pdamp` | optional | float | `1.0` | Barostat damping |
 | `N_every` | optional | int | `100` | Sample frequency |
 | `N_repeat` | optional | int | `10` | Repeat count |
 | `N_freq` | optional | int | `2000` | Output frequency |
-| `timestep_fs` | DFT optional | float | `1.0` | VASP/ABACUS timestep (fs) |
-| `pressure_kbar` | DFT optional | float | `0.0` | VASP/ABACUS target pressure (kbar) |
+| `timestep_fs` | VASP optional | float | `1.0` | VASP timestep (fs) |
+| `pressure_kbar` | VASP optional | float | `0.0` | VASP target pressure (kbar) |
 
 **Complete working default**:
 ```json
@@ -453,9 +538,9 @@ overrides — detect the lattice, pick from this table, and confirm with the use
 }
 ```
 
-**Output**: Lattice parameter a (and c/a for non-cubic) vs temperature.
+**Output**: The legacy temperature-to-`[a,b,c,T]` mapping plus rich `_metadata` statistics (mean, standard deviation, block standard error, and sample count) for cell tensors, lengths, angles, and volume.
 
-VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style NpT. These integrations share the thermodynamic target but not thermostat/barostat parameters.
+Supported backends are LAMMPS and VASP; ABACUS is rejected. VASP uses Langevin–Parrinello–Rahman NpT (`MDALGO=3`, `ISIF=3`) and requires a VASP binary compiled with `-Dtbdyn`.
 
 **Notes**:
 - Each temperature is a separate NPT MD run.
@@ -558,6 +643,7 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 |-----------|-----------|------|---------|-------------|
 | `supercell_size` | optional | list[int] | `[3,3,3]` | MD supercell |
 | `supercell_length` | optional | float | `null` | Auto-size from target edge length |
+| `protocol` | optional | str | `"ramp_cool"` | Legacy heat/cool schedule, or VASP-only `"coexistence"` |
 
 **cal_setting keys (temperature cycle)**:
 
@@ -570,12 +656,13 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 | `cool_rate` | optional | float | = ramp_rate | Cooling rate (K/ps) |
 | `equi_step` | optional | int | `20000` | Initial equilibration steps |
 | `hold_step` | optional | int | `20000` | Hold at target_temp steps |
+| `production_step` | optional | int | `10000` | Fixed-T production steps for `protocol="coexistence"` |
 | `timestep` | optional | float | `0.001` | Timestep (ps) |
 | `thermostat` | optional | str | `"nose_hoover"` | Thermostat type |
 | `ensemble` | optional | str | `"npt"` | Ensemble type |
 | `velocity_seed` | optional | int | `123457` | Random seed |
-| `timestep_fs` | DFT optional | float | `1.0` | VASP/ABACUS timestep (fs) |
-| `pressure_kbar` | DFT optional | float | `0.0` | VASP/ABACUS target pressure (kbar) |
+| `timestep_fs` | VASP optional | float | `1.0` | VASP timestep (fs) |
+| `pressure_kbar` | VASP optional | float | `0.0` | VASP target pressure (kbar) |
 
 **cal_setting keys (analysis)**:
 
@@ -600,14 +687,99 @@ VASP uses Langevin–Parrinello–Rahman NpT; ABACUS uses Nose–Hoover-style Np
 }
 ```
 
-**Output**: RDF at each stage, MSD, volume-temperature curves, final quenched structure.
+**Output**: RDF and MSD by stage, plus volume, pressure, temperature, potential energy, and total energy series. Ramp/cool also produces a final quenched structure.
 
-VASP and ABACUS run the same temperature schedule with their native NpT integrators and post-process compact trajectories into the same result schema.
+Supported backends are LAMMPS and VASP; ABACUS is rejected. `protocol="ramp_cool"` retains the existing heating/cooling semantics. VASP-only `protocol="coexistence"` holds `target_temp` for an equilibration stage and then a production stage, both at fixed target temperature. VASP uses `MDALGO=3` and requires `-Dtbdyn`.
 
 **Notes**:
 - [3,3,3] supercell recommended for statistical sampling (108+ atoms).
 - `target_temp=300` is safe; for studying phase transitions, increase to above melting.
 - `temp_ramp_rate=1000` K/ps is relatively fast — use 100 K/ps for more physical quenching.
+
+---
+
+## 15. Two-Phase Coexistence Melting Point (LAMMPS only)
+
+**type**: `"melting_point"` **[LAMMPS only]**
+
+This property constructs a solid/liquid interface, premelts the upper region
+with the lower crystal pinned, conditions the liquid at each target
+temperature, and releases the complete cell under NPT dynamics. The bracket
+uses the sign and 95% interval of the q6-derived interface velocity.
+
+```json
+{
+  "type": "melting_point",
+  "method": "two_phase",
+  "supercell_size": [1, 1, 2],
+  "cal_setting": {
+    "temperature": [1600, 1650, 1700],
+    "premelt_temperature": 4500,
+    "premelt_steps": 5000,
+    "conditioning_steps": 5000,
+    "production_steps": 100000,
+    "timestep": 0.001,
+    "tdamp": 0.1,
+    "pdamp": 1.0,
+    "pressure": 0.0,
+    "barostat": "iso",
+    "interface_axis": "z",
+    "liquid_fraction": 0.5,
+    "dump_step": 100,
+    "thermo_step": 100,
+    "restart_interval": 10000,
+    "q6_cutoff": 3.5,
+    "q6_neighbors": 12,
+    "replicas": 3,
+    "velocity_seeds": {
+      "premelt": 324159,
+      "condition": 271828,
+      "release": 161803
+    }
+  }
+}
+```
+
+Optional continuation inputs are temperature-indexed:
+
+```json
+"cal_setting": {
+  "temperature": [1600, 1650, 1700],
+  "restart_files": [
+    "restart.1600",
+    "restart.1650",
+    "restart.1700"
+  ]
+}
+```
+
+`restart_files` must contain exactly one existing file per temperature. The
+matching file is copied into every replica task for that temperature and
+forwarded as `restart.coexistence.start`. This is a transport contract only:
+the generated LAMMPS input is not automatically rewritten to `read_restart`.
+`finite_t_latt` does not accept `restart_files` and never forwards
+`restart.coexistence.start`.
+
+The generator exposes `--melting-temperatures`, `--melting-replicas`, and
+`--melting-restart-files`; restart inputs are staged into the generated job
+directory before `param.json` is written.
+
+Each temperature/replica pair is one GPU/CPU LAMMPS task. Provide independent
+alloy chemical realizations as separate `structures`; the property never
+silently randomizes atom types. Before paid submission, report the relaxed
+base-cell atom count, `supercell_size`, final atom count, temperatures,
+replicas, total task count, runtime, and accelerator resources.
+
+Aggregation is fail-closed against the configured matrix. Every requested
+temperature must have exactly the configured number of distinct replicas; a
+missing or duplicate replica makes that temperature's consensus
+`inconclusive`, so it cannot establish a melting bracket.
+
+**Outputs**: `result.json`, `result.out`, `melting_point_tidy.csv`, solid
+fraction versus time, interface velocity versus temperature, q6 interface
+snapshots, and the raw `dump.melting`/`log.lammps` evidence in every task.
+Each task also retrieves alternating `restart.melting.1/2` checkpoints and the
+normal-completion `restart.melting.final`; `restart_interval` is in timesteps.
 
 ---
 
@@ -641,6 +813,7 @@ See `reference/rss_workflow.md` for full details.
 | `finite_t_elastic` | cal_setting.temperature | [300] | LAMMPS-only |
 | `gruneisen` | volume_strains, temperatures | [-0.02..0.02], [100..500] | ⚠️ Missing temperatures → KeyError |
 | `annealing` | (none critical) | target_temp=300 | DFT MD is expensive |
+| `melting_point` | temperature, supercell_size | three-point bracket, 100 ps release | LAMMPS-only; do not classify from energy alone |
 
 ---
 
@@ -658,7 +831,8 @@ Before submitting any APEX property calculation, verify:
    - Finite-T properties: ≥ [3,3,3]
 4. ✅ **LAMMPS-only properties** not sent to DFT backend:
    - `finite_t_elastic`
+   - `melting_point`
 5. ✅ **Physical reasonableness**:
-   - Temperatures below melting point
+   - Thermal-expansion temperatures below melting; melting-point temperatures bracket both sides
    - Volume strains ≤ ±5% (avoid unphysical compression)
    - Slab thickness large enough for bulk-like interior
