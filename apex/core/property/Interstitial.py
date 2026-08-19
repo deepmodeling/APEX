@@ -35,7 +35,12 @@ class Interstitial(Property):
                 default_supercell = [1, 1, 1]
                 parameter["supercell"] = parameter.get("supercell", default_supercell)
                 self.supercell = parameter["supercell"]
-                self.insert_ele = parameter.get("insert_ele", None)
+                _insert_ele = parameter.get("insert_ele", None)
+                # Normalize insert_ele to list (fix: iterating a bare string
+                # like "Cu" yields chars 'C','u' which are not valid elements)
+                if isinstance(_insert_ele, str):
+                    _insert_ele = [_insert_ele]
+                self.insert_ele = _insert_ele
                 parameter["lattice_type"] = parameter.get("lattice_type", None)
                 self.lattice_type = parameter["lattice_type"]
                 parameter["voronoi_param"] = parameter.get("voronoi_param", {})

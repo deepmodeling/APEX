@@ -49,11 +49,16 @@ from urllib.error import URLError, HTTPError
 TICKET_API_URL = "https://openapi.dp.tech/openapi/v1/ticket/get"
 TICKET_EXPIRE_HOURS = 168  # 7 days; API 'expiration' parameter unit is HOURS
 DFLOW_HOST = "https://workflows.deepmodeling.com"
+SANDBOX_DFLOW_HOST = "https://lbg-workflow-dflow.dp.tech"
+SANDBOX_DISPATCHER_IMAGE = (
+    "registry.dp.tech/dptech/polycalibur:dpdispatcher-storehost-plan-a-20260811"
+)
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
 LAMMPS_IMAGE = (
     "registry.dp.tech/dptech/dp/native/prod-397637/"
     "deepmd-kit-phonolammps:3.1.3"
 )
+ABACUS_IMAGE = "registry.dp.tech/dptech/abacus:3.8.2"
 # Recommended Bohrium VASP run command pieces (Intel oneAPI + absolute vasp_std).
 # Do NOT auto-set vasp_image_name — VASP is commercial; only set an image after
 # the user confirms they have a license and provides/approves the image.
@@ -166,11 +171,19 @@ LAMMPS_ONLY = {"finite_t_elastic"}
 # GPU potential types — benefit from GPU scass_type
 GPU_POTENTIALS = {"deepmd", "mace", "nep"}
 
-# scass_type defaults for inner dflow containers
+# scass_type defaults for inner dflow containers (legacy Bohrium)
 SCASS_TYPES = {
     "lammps_gpu": "c8_m31_1 * NVIDIA T4",
     "lammps_cpu": "c16_m32_cpu",
     "abacus": "c16_m32_cpu",
+    "vasp": "c32_m128_cpu",
+}
+
+# machine_type defaults for OpenAPI Sandbox
+SANDBOX_MACHINE_TYPES = {
+    "lammps_gpu": "c8_m32_1 * NVIDIA 4090",
+    "lammps_cpu": "c8_m32_cpu",
+    "abacus": "c8_m32_cpu",
     "vasp": "c32_m128_cpu",
 }
 
@@ -565,8 +578,128 @@ def build_global_json(backend: str, potential: str = None,
     return config
 
 
+def build_global_json_sandbox(backend: str, potential: str = None,
+                              access_key: str = None, project_id: int = None,
+                              machine_type: str = None,
+                              run_command: str = None,
+                              vasp_image: str = None) -> dict:
+    """
+    Build global.json for APEX dflow submission via OpenAPI Sandbox.
+
+    Uses access_key directly (no ticket conversion needed).
+    Routes jobs through the Sandbox dflow host with the storeHost-patched
+    dispatcher sidecar image.
+    """
+    pid = resolve_project_id(project_id)
+
+    # Resolve access key
+    key = access_key or os.environ.get("BOHRIUM_ACCESS_KEY")
+    if not key:
+        raise RuntimeError(
+            "BOHRIUM_ACCESS_KEY environment variable not set and --access-key "
+            "not provided. Required for OpenAPI Sandbox mode."
+        )
+
+    # Determine machine_type for inner containers
+    if machine_type:
+        inner_machine = machine_type
+    elif backend == "lammps" and potential in GPU_POTENTIALS:
+        inner_machine = SANDBOX_MACHINE_TYPES["lammps_gpu"]
+    elif backend == "lammps":
+        inner_machine = SANDBOX_MACHINE_TYPES["lammps_cpu"]
+    elif backend == "abacus":
+        inner_machine = SANDBOX_MACHINE_TYPES["abacus"]
+    elif backend == "vasp":
+        inner_machine = SANDBOX_MACHINE_TYPES["vasp"]
+    else:
+        inner_machine = SANDBOX_MACHINE_TYPES["lammps_cpu"]
+
+    # Determine run command for calculator
+    if run_command:
+        calc_run_command = run_command
+    elif backend == "lammps":
+        calc_run_command = "lmp -in in.lammps"
+    elif backend == "abacus":
+        calc_run_command = "mpirun -n 8 abacus"
+    elif backend == "vasp":
+        calc_run_command = default_vasp_run_command(
+            _nprocs_from_scass(inner_machine, default=32)
+        )
+    else:
+        calc_run_command = "lmp -in in.lammps"
+
+    # Determine calculator image
+    lammps_image = LAMMPS_IMAGE
+
+    config = {
+        "dflow_host": SANDBOX_DFLOW_HOST,
+        "k8s_api_server": SANDBOX_DFLOW_HOST,
+        "dflow_config": {
+            "host": SANDBOX_DFLOW_HOST,
+            "k8s_api_server": SANDBOX_DFLOW_HOST,
+            "namespace": "dflow",
+            "token": "",
+        },
+        "batch_type": "OpenAPI",
+        "context_type": "OpenAPI",
+        "access_key": key,
+        "project_id": pid,
+        "app_key": os.environ.get("BOHRIUM_APP_KEY", "agent"),
+        "platform": "ali",
+        "machine_type": inner_machine,
+        "image_address": lammps_image if backend == "lammps" else ABACUS_IMAGE if backend == "abacus" else APEX_IMAGE,
+        "output_log": False,
+        "dispatcher_image": SANDBOX_DISPATCHER_IMAGE,
+        "bohrium_config": {
+            "access_key": key,
+            "project_id": pid,
+            "app_key": os.environ.get("BOHRIUM_APP_KEY", "agent"),
+        },
+        "apex_image_name": APEX_IMAGE,
+        "lammps_image_name": lammps_image,
+        "lammps_run_command": calc_run_command,
+        "group_size": 1,
+        "pool_size": 1,
+    }
+
+    # Add backend-specific image fields
+    if backend == "abacus":
+        config["abacus_image_name"] = APEX_IMAGE
+        config["abacus_run_command"] = calc_run_command
+    elif backend == "vasp":
+        config["vasp_run_command"] = calc_run_command
+        if vasp_image:
+            config["vasp_image_name"] = vasp_image.strip()
+
+    return config
+
+
 def validate_project_id_types(config: dict) -> int:
     """Hard-check every supported Bohrium project ID before submission."""
+    # OpenAPI Sandbox mode uses project_id directly (no program_id)
+    context_type = config.get("context_type", "")
+    if context_type.lower() == "openapi":
+        project_id = config.get("project_id")
+        if type(project_id) is not int or project_id <= 0:
+            raise ValueError(
+                "global.json project_id must be a positive, unquoted JSON integer "
+                "(OpenAPI Sandbox mode)"
+            )
+        bohrium_config = config.get("bohrium_config")
+        if isinstance(bohrium_config, dict):
+            bc_pid = bohrium_config.get("project_id")
+            if type(bc_pid) is not int or bc_pid <= 0:
+                raise ValueError(
+                    "global.json bohrium_config.project_id must be a positive, "
+                    "unquoted JSON integer"
+                )
+            if bc_pid != project_id:
+                raise ValueError(
+                    "global.json project_id and bohrium_config.project_id must match"
+                )
+        return project_id
+
+    # Legacy Bohrium mode uses program_id
     program_id = config.get("program_id")
     if type(program_id) is not int or program_id <= 0:
         raise ValueError(
@@ -709,6 +842,153 @@ def resolve_source_potcar_file(prefix: Path, entry: str) -> Path:
         f"POTCAR not found for entry '{entry}' under '{prefix}' "
         f"(tried '{direct}' and '{nested}')"
     )
+
+
+
+# =============================================================================
+# ABACUS pseudopotential and orbital file download/staging
+# =============================================================================
+
+# SG15 ONCV pseudopotential + DZP orbital download URLs (Gitee mirror)
+ABACUS_PP_ORB_BASE = "https://gitee.com/deepmodeling/abacus-develop/raw/develop/tests/PP_ORB"
+
+# Known pp/orb filenames per element (SG15 ONCV PBE + numerical orbital)
+# Only commonly used elements listed; extend as needed.
+ABACUS_PP_MAP = {
+    "H": "H_ONCV_PBE-1.0.upf",
+    "Li": "Li_ONCV_PBE-1.0.upf",
+    "Be": "Be_ONCV_PBE-1.0.upf",
+    "B": "B_ONCV_PBE-1.0.upf",
+    "C": "C_ONCV_PBE-1.0.upf",
+    "N": "N_ONCV_PBE-1.0.upf",
+    "O": "O_ONCV_PBE-1.0.upf",
+    "F": "F_ONCV_PBE-1.0.upf",
+    "Na": "Na_ONCV_PBE-1.0.upf",
+    "Mg": "Mg_ONCV_PBE-1.0.upf",
+    "Al": "Al_ONCV_PBE-1.0.upf",
+    "Si": "Si_ONCV_PBE-1.0.upf",
+    "P": "P_ONCV_PBE-1.0.upf",
+    "S": "S_ONCV_PBE-1.0.upf",
+    "Cl": "Cl_ONCV_PBE-1.0.upf",
+    "K": "K_ONCV_PBE-1.0.upf",
+    "Ca": "Ca_ONCV_PBE-1.0.upf",
+    "Ti": "Ti_ONCV_PBE-1.0.upf",
+    "V": "V_ONCV_PBE-1.0.upf",
+    "Cr": "Cr_ONCV_PBE-1.0.upf",
+    "Mn": "Mn_ONCV_PBE-1.0.upf",
+    "Fe": "Fe_ONCV_PBE-1.0.upf",
+    "Co": "Co_ONCV_PBE-1.0.upf",
+    "Ni": "Ni_ONCV_PBE-1.0.upf",
+    "Cu": "Cu_ONCV_PBE-1.0.upf",
+    "Zn": "Zn_ONCV_PBE-1.0.upf",
+    "Ga": "Ga_ONCV_PBE-1.0.upf",
+    "Ge": "Ge_ONCV_PBE-1.0.upf",
+    "As": "As_ONCV_PBE-1.0.upf",
+    "Se": "Se_ONCV_PBE-1.0.upf",
+    "Br": "Br_ONCV_PBE-1.0.upf",
+    "Sr": "Sr_ONCV_PBE-1.0.upf",
+    "Y": "Y_ONCV_PBE-1.0.upf",
+    "Zr": "Zr_ONCV_PBE-1.0.upf",
+    "Nb": "Nb_ONCV_PBE-1.0.upf",
+    "Mo": "Mo_ONCV_PBE-1.0.upf",
+    "Ag": "Ag_ONCV_PBE-1.0.upf",
+    "Sn": "Sn_ONCV_PBE-1.0.upf",
+    "Ba": "Ba_ONCV_PBE-1.0.upf",
+    "W": "W_ONCV_PBE-1.0.upf",
+    "Pt": "Pt_ONCV_PBE-1.0.upf",
+    "Au": "Au_ONCV_PBE-1.0.upf",
+    "Pb": "Pb_ONCV_PBE-1.0.upf",
+}
+
+ABACUS_ORB_MAP = {
+    "H": "H_gga_6au_100Ry_2s1p.orb",
+    "Li": "Li_gga_7au_100Ry_4s1p.orb",
+    "C": "C_gga_7au_100Ry_2s2p1d.orb",
+    "N": "N_gga_7au_100Ry_2s2p1d.orb",
+    "O": "O_gga_7au_100Ry_2s2p1d.orb",
+    "Al": "Al_gga_7au_100Ry_4s4p1d.orb",
+    "Si": "Si_gga_7au_100Ry_2s2p1d.orb",
+    "Ti": "Ti_gga_8au_100Ry_4s2p2d1f.orb",
+    "V": "V_gga_8au_100Ry_4s2p2d1f.orb",
+    "Cr": "Cr_gga_8au_100Ry_4s2p2d1f.orb",
+    "Mn": "Mn_gga_8au_100Ry_4s2p2d1f.orb",
+    "Fe": "Fe_gga_8au_100Ry_4s2p2d1f.orb",
+    "Co": "Co_gga_8au_100Ry_4s2p2d1f.orb",
+    "Ni": "Ni_gga_8au_100Ry_4s2p2d1f.orb",
+    "Cu": "Cu_gga_9au_100Ry_4s2p2d1f.orb",
+    "Zn": "Zn_gga_8au_100Ry_4s2p2d1f.orb",
+    "Ga": "Ga_gga_8au_100Ry_4s2p2d1f.orb",
+    "Ge": "Ge_gga_8au_100Ry_2s2p2d1f.orb",
+    "Mo": "Mo_gga_9au_100Ry_4s2p2d1f.orb",
+    "Ag": "Ag_gga_9au_100Ry_4s2p2d1f.orb",
+    "W": "W_gga_8au_100Ry_4s2p2d1f.orb",
+    "Au": "Au_gga_9au_100Ry_4s2p2d1f.orb",
+}
+
+
+def download_abacus_pp_orb(elements: list, output_dir: Path) -> tuple:
+    """Download ABACUS pseudopotential and orbital files for given elements.
+
+    Downloads from Gitee mirror of ABACUS test PP_ORB directory.
+    Returns (potcars_dict, orb_files_dict) with filenames relative to pp_orb/.
+    """
+    pp_orb_dir = output_dir / "pp_orb"
+    pp_orb_dir.mkdir(parents=True, exist_ok=True)
+
+    potcars = {}
+    orb_files = {}
+    missing_pp = []
+    missing_orb = []
+
+    for elem in elements:
+        # Download pseudopotential
+        pp_name = ABACUS_PP_MAP.get(elem)
+        if not pp_name:
+            missing_pp.append(elem)
+            continue
+        pp_path = pp_orb_dir / pp_name
+        if not pp_path.exists():
+            url = f"{ABACUS_PP_ORB_BASE}/{pp_name}"
+            print(f"  Downloading PP for {elem}: {pp_name} ...", end=" ")
+            try:
+                req = Request(url, headers={"User-Agent": "APEX-generate-config"})
+                with urlopen(req, timeout=30) as resp:
+                    pp_path.write_bytes(resp.read())
+                print("OK")
+            except (URLError, HTTPError, OSError) as exc:
+                print(f"FAILED ({exc})")
+                missing_pp.append(elem)
+                continue
+        potcars[elem] = pp_name
+
+        # Download orbital file
+        orb_name = ABACUS_ORB_MAP.get(elem)
+        if not orb_name:
+            missing_orb.append(elem)
+            continue
+        orb_path = pp_orb_dir / orb_name
+        if not orb_path.exists():
+            url = f"{ABACUS_PP_ORB_BASE}/{orb_name}"
+            print(f"  Downloading ORB for {elem}: {orb_name} ...", end=" ")
+            try:
+                req = Request(url, headers={"User-Agent": "APEX-generate-config"})
+                with urlopen(req, timeout=30) as resp:
+                    orb_path.write_bytes(resp.read())
+                print("OK")
+            except (URLError, HTTPError, OSError) as exc:
+                print(f"FAILED ({exc})")
+                missing_orb.append(elem)
+                continue
+        orb_files[elem] = orb_name
+
+    if missing_pp:
+        print(f"  WARNING: No PP mapping for elements: {missing_pp}")
+        print("  Provide --potcars manually for these elements.")
+    if missing_orb:
+        print(f"  WARNING: No ORB mapping for elements: {missing_orb}")
+        print("  Provide --orb-files manually or use PW basis.")
+
+    return potcars, orb_files
 
 
 def stage_vasp_potcars(
@@ -1008,8 +1288,12 @@ def main():
         "--project-id", type=int,
         help="Bohrium project ID (or set BOHRIUM_PROJECT_ID)",
     )
+    create.add_argument("--sandbox", action="store_true",
+                        help="Use OpenAPI Sandbox mode (access_key auth, no ticket)")
+    create.add_argument("--machine-type",
+                        help="Override machine_type for sandbox (e.g. 'c8_m32_1 * NVIDIA 4090')")
     create.add_argument("--scass-type",
-                        help="Override scass_type for inner dflow containers")
+                        help="Override scass_type for inner dflow containers (legacy Bohrium)")
     create.add_argument("--run-command",
                         help="Override calculator run command")
     create.add_argument(
@@ -1122,7 +1406,7 @@ def main():
         print(f"Auto-generated workflow name: '{workflow_name}'")
 
     # -------------------------------------------------------------------------
-    # Build global.json (includes ticket conversion)
+    # Build global.json (includes ticket conversion or sandbox direct auth)
     # -------------------------------------------------------------------------
     if args.backend == "vasp" and not (args.vasp_image or "").strip():
         print(
@@ -1134,18 +1418,33 @@ def main():
         )
         sys.exit(1)
 
-    print("Converting access_key to dflow ticket...")
-    global_config = build_global_json(
-        backend=args.backend,
-        potential=args.potential,
-        access_key=args.access_key,
-        project_id=args.project_id,
-        scass_type=args.scass_type,
-        run_command=args.run_command,
-        vasp_image=args.vasp_image,
-    )
-    validate_project_id_types(global_config)
-    print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
+    use_sandbox = getattr(args, "sandbox", False) or os.environ.get("BOHRIUM_USE_SANDBOX") == "1"
+
+    if use_sandbox:
+        print("Building OpenAPI Sandbox config (no ticket needed)...")
+        global_config = build_global_json_sandbox(
+            backend=args.backend,
+            potential=args.potential,
+            access_key=args.access_key,
+            project_id=args.project_id,
+            machine_type=getattr(args, "machine_type", None),
+            run_command=args.run_command,
+            vasp_image=args.vasp_image,
+        )
+        print(f"Sandbox config built: machine_type={global_config['machine_type']}")
+    else:
+        print("Converting access_key to dflow ticket...")
+        global_config = build_global_json(
+            backend=args.backend,
+            potential=args.potential,
+            access_key=args.access_key,
+            project_id=args.project_id,
+            scass_type=args.scass_type,
+            run_command=args.run_command,
+            vasp_image=args.vasp_image,
+        )
+        validate_project_id_types(global_config)
+        print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
 
     # -------------------------------------------------------------------------
     # Create output directory and copy files
@@ -1197,6 +1496,56 @@ def main():
                 "before submit",
                 file=sys.stderr,
             )
+
+    # -------------------------------------------------------------------------
+    # ABACUS: auto-download pp/orb if not provided
+    # -------------------------------------------------------------------------
+    if args.backend == "abacus" and not staged_potcars:
+        # Detect elements from structure files
+        from pymatgen.core import Structure
+        elements_set = set()
+        for item in structure_layout:
+            try:
+                struct = Structure.from_file(str(item["source"]))
+                for site in struct.sites:
+                    elements_set.add(str(site.specie))
+            except Exception:
+                pass
+        if elements_set:
+            print(f"ABACUS: auto-downloading PP/ORB for elements: {sorted(elements_set)}")
+            staged_potcars, orb_files = download_abacus_pp_orb(
+                sorted(elements_set), output_dir
+            )
+            staged_prefix = "pp_orb"
+        else:
+            print("WARNING: Could not detect elements; provide --potcars manually")
+
+    # -------------------------------------------------------------------------
+    # ABACUS: auto-generate INPUT template if not provided
+    # -------------------------------------------------------------------------
+    if args.backend == "abacus" and not staged_incar:
+        input_path = output_dir / "INPUT"
+        if not input_path.exists():
+            input_content = """INPUT_PARAMETERS
+suffix              ABACUS
+ntype               {ntype}
+ecutwfc             100
+scf_thr             1e-7
+scf_nmax            100
+basis_type          lcao
+calculation         scf
+cal_stress          1
+cal_force           1
+kspacing            0.12
+smearing_method     gaussian
+smearing_sigma      0.01
+mixing_type         broyden
+mixing_beta         0.7
+""".format(ntype=len(staged_potcars) if staged_potcars else 1)
+            input_path.write_text(input_content)
+            staged_incar = "INPUT"
+            print(f"Generated ABACUS INPUT template: {input_path}")
+            print("  NOTE: suffix=ABACUS (required by fpop); ecutwfc=100Ry; kspacing=0.12")
 
     # -------------------------------------------------------------------------
     # Build interaction + param.json (after staging so paths are job-relative)
@@ -1305,12 +1654,19 @@ def main():
     print(f"Properties:     {', '.join(args.properties)}")
     print(f"Flow type:      {args.flow_type}")
     print(f"Workflow name:  {workflow_name}")
-    print(f"scass_type:     {global_config['scass_type']}")
+    if use_sandbox:
+        print(f"machine_type:   {global_config.get('machine_type', 'N/A')}")
+        print(f"context_type:   OpenAPI (Sandbox)")
+    else:
+        print(f"scass_type:     {global_config.get('scass_type', 'N/A')}")
     print(f"Output dir:     {output_dir}")
     print(f"\nBohrium submit command (for outer job):")
     print(f"  cmd: {cmd}")
     print(f"\nOuter job image: {APEX_IMAGE}")
-    print(f"Outer job machine: c1_m2_cpu (recommended lightweight client)")
+    if use_sandbox:
+        print(f"Outer job machine: c2_m4_cpu (sandbox lightweight client)")
+    else:
+        print(f"Outer job machine: c1_m2_cpu (recommended lightweight client)")
 
 
 if __name__ == "__main__":

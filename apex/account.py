@@ -8,6 +8,11 @@ from typing import Dict, Optional
 
 
 BOHRIUM_WORKFLOWS_HOST = "https://workflows.deepmodeling.com"
+SANDBOX_DFLOW_HOST = "https://lbg-workflow-dflow.dp.tech"
+SANDBOX_DISPATCHER_IMAGE = (
+    "registry.dp.tech/dptech/polycalibur:dpdispatcher-storehost-plan-a-20260811"
+)
+
 DEFAULT_BOHRIUM_CONFIG = {
     "dflow_host": BOHRIUM_WORKFLOWS_HOST,
     "k8s_api_server": BOHRIUM_WORKFLOWS_HOST,
@@ -15,7 +20,20 @@ DEFAULT_BOHRIUM_CONFIG = {
     "context_type": "Bohrium",
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
 }
-SENSITIVE_KEYS = {"password"}
+
+DEFAULT_OPENAPI_CONFIG = {
+    "dflow_host": SANDBOX_DFLOW_HOST,
+    "k8s_api_server": SANDBOX_DFLOW_HOST,
+    "batch_type": "OpenAPI",
+    "context_type": "OpenAPI",
+    "platform": "ali",
+    "machine_type": "c8_m32_1 * NVIDIA 4090",
+    "output_log": False,
+    "dispatcher_image": SANDBOX_DISPATCHER_IMAGE,
+    "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
+}
+
+SENSITIVE_KEYS = {"password", "access_key"}
 ACCOUNT_FILE_ENV = "APEX_ACCOUNT_FILE"
 
 
@@ -84,7 +102,27 @@ def mask_sensitive_config(config: dict) -> dict:
     return masked
 
 
+def _is_openapi_context(config_dict: dict) -> bool:
+    """Check if config explicitly requests OpenAPI Sandbox mode."""
+    for key in ("context_type", "batch_type"):
+        value = config_dict.get(key)
+        if isinstance(value, str) and value.lower() == "openapi":
+            return True
+    machine = config_dict.get("machine", {})
+    if isinstance(machine, dict):
+        for key in ("context_type", "batch_type"):
+            value = machine.get(key)
+            if isinstance(value, str) and value.lower() == "openapi":
+                return True
+    return any(
+        key in config_dict for key in ("access_key", "machine_type")
+    )
+
+
 def _is_bohrium_context(config_dict: dict) -> bool:
+    # OpenAPI is a separate context, not legacy Bohrium
+    if _is_openapi_context(config_dict):
+        return False
     for key in ("context_type", "batch_type"):
         value = config_dict.get(key)
         if isinstance(value, str) and "bohrium" in value.lower():
@@ -109,6 +147,7 @@ def _is_bohrium_context(config_dict: dict) -> bool:
 
 
 def _is_explicit_non_bohrium_context(config_dict: dict) -> bool:
+    """Check if context is explicitly non-Bohrium AND non-OpenAPI (e.g. SSH, Local)."""
     context_values = []
     for key in ("context_type", "batch_type"):
         value = config_dict.get(key)
@@ -122,7 +161,10 @@ def _is_explicit_non_bohrium_context(config_dict: dict) -> bool:
                 context_values.append(value.lower())
     if not context_values:
         return False
-    return all("bohrium" not in value for value in context_values)
+    return all(
+        "bohrium" not in value and "openapi" not in value
+        for value in context_values
+    )
 
 
 def should_apply_bohrium_defaults(
@@ -146,6 +188,25 @@ def merge_bohrium_defaults(
 ) -> dict:
     user_config = copy.deepcopy(config_dict or {})
     account_config = load_account_config()
+
+    # Check if this is an OpenAPI Sandbox config
+    if _is_openapi_context(user_config):
+        merged = copy.deepcopy(DEFAULT_OPENAPI_CONFIG)
+        _deep_update(merged, account_config)
+        _deep_update(merged, user_config)
+        missing_required = [
+            key for key in ("access_key", "project_id")
+            if merged.get(key) in (None, "")
+        ]
+        if missing_required:
+            logging.warning(
+                "Missing OpenAPI Sandbox fields: %s. "
+                "Set BOHRIUM_ACCESS_KEY / BOHRIUM_PROJECT_ID or provide them in %s.",
+                ", ".join(missing_required),
+                config_file or "the config file"
+            )
+        return merged
+
     if not should_apply_bohrium_defaults(user_config, config_file, account_config):
         return user_config
 
