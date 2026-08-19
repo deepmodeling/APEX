@@ -8,6 +8,11 @@ from dflow.plugins.dispatcher import DispatcherExecutor
 
 from apex.utils import update_dict
 
+# Default dispatcher sidecar image with storeHost fix for OpenAPI Sandbox
+SANDBOX_DISPATCHER_IMAGE = (
+    "registry.dp.tech/dptech/polycalibur:dpdispatcher-storehost-plan-a-20260811"
+)
+
 
 @dataclass
 class Config:
@@ -33,6 +38,14 @@ class Config:
     program_id: int = None
     job_type: str = "container"
     platform: str = "ali"
+
+    # OpenAPI Sandbox config
+    project_id: int = None
+    machine_type: str = None
+    image_address: str = None
+    output_log: bool = False
+    ignore_exit_code: bool = False
+    sandbox_job_name: str = None
 
     # DispachterExecutor config
     dispatcher_config: dict = None
@@ -99,11 +112,15 @@ class Config:
     dynamodb_table_name: str = "apex_results"
 
     def __post_init__(self):
-        # judge if running dflow on the Bohrium
+        # judge if running dflow on the Bohrium (or OpenAPI Sandbox dflow)
+        _bohrium_dflow_hosts = {
+            "https://workflows.deepmodeling.com",
+            "https://lbg-workflow-dflow.dp.tech",
+        }
         try:
-            assert self.dflow_config["host"] == "https://workflows.deepmodeling.com"
+            assert self.dflow_config["host"] in _bohrium_dflow_hosts
         except (AssertionError, TypeError):
-            if self.dflow_host == "https://workflows.deepmodeling.com":
+            if self.dflow_host in _bohrium_dflow_hosts:
                 self.is_bohrium_dflow = True
         else:
             self.is_bohrium_dflow = True
@@ -127,6 +144,31 @@ class Config:
                     },
                 },
             }
+            if self.machine:
+                update_dict(self.machine_dict, self.machine)
+        elif self.context_type in ["OpenAPI", "openapi"]:
+            # OpenAPI Sandbox mode — uses access_key auth and machine_type
+            _ak = self.access_key
+            _pid = self.project_id or self.program_id
+            self.machine_dict = {
+                "batch_type": "OpenAPI",
+                "context_type": "OpenAPI",
+                "local_root": self.local_root or "./work",
+                "remote_profile": {
+                    "access_key": _ak,
+                    "project_id": int(_pid) if _pid else None,
+                    "app_key": self.app_key or "agent",
+                    "image_address": self.image_address or self.run_image_name,
+                    "platform": self.platform or "ali",
+                    "machine_type": self.machine_type,
+                    "job_name": self.sandbox_job_name or "apex-sandbox-job",
+                    "output_log": self.output_log,
+                    "ignore_exit_code": self.ignore_exit_code,
+                },
+            }
+            # For OpenAPI mode, ensure dispatcher image is set
+            if not self.dispatcher_image:
+                self.dispatcher_image = SANDBOX_DISPATCHER_IMAGE
             if self.machine:
                 update_dict(self.machine_dict, self.machine)
         elif self.context_type in ["SSHContext", "sshcontext",
@@ -197,7 +239,18 @@ class Config:
     @property
     def dflow_s3_config_dict(self):
         dflow_s3_config = {}
-        if self.is_bohrium_dflow:
+        if self.context_type in ["OpenAPI", "openapi"]:
+            # OpenAPI Sandbox: use access_key-based TiefblueClient
+            _pid = self.project_id or self.program_id
+            dflow_s3_config = {
+                "repo_key": "oss-bohrium",
+                "storage_client": TiefblueClient(
+                    access_key=self.access_key,
+                    project_id=int(_pid) if _pid else None,
+                    app_key=self.app_key or "agent",
+                )
+            }
+        elif self.is_bohrium_dflow:
             dflow_s3_config = {
                 "repo_key": "oss-bohrium",
                 "storage_client": TiefblueClient()
@@ -208,17 +261,27 @@ class Config:
 
     @property
     def bohrium_config_dict(self):
-        bohrium_config = {
-            "username": self.email,
-            "phone": self.phone,
-            "password": self.password,
-            "project_id": self.program_id,
-            "access_key": self.access_key,
-            # dflow sends this header when exchanging an AccessKey for a ticket.
-            "app_key": self.app_key if self.app_key is not None else (
-                "" if self.access_key else None
-            ),
-        }
+        if self.context_type in ["OpenAPI", "openapi"]:
+            # OpenAPI Sandbox mode uses access_key authentication
+            _pid = self.project_id or self.program_id
+            bohrium_config = {
+                "access_key": self.access_key,
+                "project_id": int(_pid) if _pid else None,
+                "app_key": self.app_key or "agent",
+            }
+        else:
+            # Legacy Bohrium supports either email/password or AccessKey.
+            bohrium_config = {
+                "username": self.email,
+                "phone": self.phone,
+                "password": self.password,
+                "project_id": self.program_id,
+                "access_key": self.access_key,
+                # dflow sends this header when exchanging an AccessKey for a ticket.
+                "app_key": self.app_key if self.app_key is not None else (
+                    "" if self.access_key else None
+                ),
+            }
         if self.bohrium_config:
             update_dict(bohrium_config, self.bohrium_config)
         return bohrium_config
@@ -234,6 +297,9 @@ class Config:
             "command": self.dispatcher_command,
             "remote_command": self.dispatcher_remote_command
         }
+        # OpenAPI Sandbox requires BOHRIUM_USE_SANDBOX=1 in dispatcher sidecar
+        if self.context_type in ["OpenAPI", "openapi"]:
+            dispatcher_config["envs"] = {"BOHRIUM_USE_SANDBOX": "1"}
         if self.dispatcher_config:
             update_dict(dispatcher_config, self.dispatcher_config)
         return dispatcher_config
