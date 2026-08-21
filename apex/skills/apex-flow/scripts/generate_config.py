@@ -56,10 +56,14 @@ SANDBOX_DISPATCHER_IMAGE = (
     "registry.dp.tech/dptech/polycalibur:dpdispatcher-storehost-plan-a-20260811"
 )
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
-LAMMPS_IMAGE = (
+LAMMPS_GPU_IMAGE = (
     "registry.dp.tech/dptech/dp/native/prod-16664/"
     "dpa4-phonolammps:0.0.2"
 )
+LAMMPS_CPU_IMAGE = APEX_IMAGE
+# Backward-compatible alias used by external callers and older tests. New code
+# must select LAMMPS_GPU_IMAGE or LAMMPS_CPU_IMAGE from the potential type.
+LAMMPS_IMAGE = LAMMPS_GPU_IMAGE
 ABACUS_IMAGE = "registry.dp.tech/dptech/abacus:3.8.2"
 # Recommended Bohrium VASP run command pieces (Intel oneAPI + absolute vasp_std).
 # Do NOT auto-set vasp_image_name — VASP is commercial; only set an image after
@@ -202,6 +206,14 @@ LAMMPS_ONLY = {"finite_t_elastic", "melting_point"}
 
 # GPU potential types — benefit from GPU scass_type
 GPU_POTENTIALS = {"deepmd", "mace", "nep"}
+
+
+def select_lammps_image(potential: str = None) -> str:
+    """Return the validated LAMMPS image for a potential's resource class."""
+    if potential in GPU_POTENTIALS:
+        return LAMMPS_GPU_IMAGE
+    return LAMMPS_CPU_IMAGE
+
 
 # scass_type defaults for inner dflow containers (legacy Bohrium)
 SCASS_TYPES = {
@@ -571,9 +583,9 @@ def build_global_json(backend: str, potential: str = None,
 
     # Determine calculator image
     if backend == "lammps":
-        lammps_image = LAMMPS_IMAGE
+        lammps_image = select_lammps_image(potential)
     else:
-        lammps_image = LAMMPS_IMAGE  # Still needed as fallback in global.json
+        lammps_image = LAMMPS_CPU_IMAGE  # Fallback field in global.json
 
     _validate_image_scass(lammps_image, inner_scass)
 
@@ -661,7 +673,12 @@ def build_global_json_sandbox(backend: str, potential: str = None,
         calc_run_command = "lmp -in in.lammps"
 
     # Determine calculator image
-    lammps_image = LAMMPS_IMAGE
+    lammps_image = (
+        select_lammps_image(potential)
+        if backend == "lammps"
+        else LAMMPS_CPU_IMAGE
+    )
+    _validate_image_scass(lammps_image, inner_machine)
 
     config = {
         "dflow_host": SANDBOX_DFLOW_HOST,

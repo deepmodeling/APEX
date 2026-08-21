@@ -938,7 +938,11 @@ corners. Set it to `false` only when intentionally defining custom
 
 APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) and wraps [Phonopy](https://github.com/phonopy/phonopy) / [phonoLAMMPS](https://github.com/abelcarreras/phonolammps). [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) automatically generates high-symmetry k-paths.
 
-> **Important:** LAMMPS phonon and Grüneisen workflows always use `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`. During `apex submit`, APEX overrides any other configured LAMMPS image for these properties.
+> **Important:** LAMMPS phonon and Grüneisen workflows using GPU potentials
+> (`deepmd`, `mace`, `nep`) use
+> `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`.
+> CPU potentials keep the CPU-safe `apex-flow:1.3.0.post` image; 0.0.2 must
+> not be paired with a `*_cpu` machine.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

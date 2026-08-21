@@ -27,7 +27,8 @@ APEX uses a **two-layer submission architecture**:
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Inner containers (managed by dflow on Bohrium)                 │
-│  - LAMMPS image: dpa4-phonolammps:0.0.2                       │
+│  - GPU LAMMPS: dpa4-phonolammps:0.0.2                        │
+│  - CPU LAMMPS: apex-flow:1.3.0.post                          │
 │  - ABACUS image: registry.dp.tech/dptech/abacus:3.2.3          │
 │  - VASP image: (user-provided)                                  │
 │  - Machine type per task: scass_type in global.json             │
@@ -118,13 +119,19 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | Role | Image | Notes |
 |------|-------|-------|
 | **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Lightweight; just runs `apex submit` |
-| **LAMMPS calculator** | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Default; includes phonoLAMMPS |
+| **LAMMPS calculator (GPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | RTX 4090; includes phonoLAMMPS |
+| **LAMMPS calculator (CPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | EAM/MEAM/SNAP/GAP/RANN CPU backend |
 | **ABACUS calculator** | (same APEX image has ABACUS) | Or user-specified |
 | **VASP calculator** | User must provide after confirming license | Commercial; **never invent a default image** |
 
 > ⚠️ **Do NOT combine `deepmd-kit:3.1.1` with any NVIDIA T4 machine**. It also has a known segfault bug when handling triclinic cells (non-orthogonal boxes), including on CPU. Use `3.1.3` or later.
 
-> LAMMPS phonon and Grüneisen tasks are forced to use `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`. It includes integrated USER-DEEPMD, phonoLAMMPS, CUDA 12.8, and sm89/sm120 LAMMPS dispatch. Do not add the legacy `plugin load libdeepmd_lmp.so` command.
+> LAMMPS phonon and Grüneisen tasks using GPU potentials are forced to use
+> `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`.
+> CPU potentials retain the CPU image. Do not use 0.0.2 with a `*_cpu`
+> machine: sequential CPU validation stalled before the container command
+> started. Do not add the legacy `plugin load libdeepmd_lmp.so` command to
+> 0.0.2.
 
 | Backend | scass_type (inner containers) | Notes |
 |---------|-------------------------------|-------|

@@ -157,6 +157,15 @@ class TestGenerateConfigHelpers(unittest.TestCase):
                     self.assertEqual(config["program_id"], 42)
                     self.assertEqual(config["scass_type"], expected_scass)
                     self.assertIn(command, config["lammps_run_command"])
+                    if backend == "lammps":
+                        expected_image = (
+                            self.gen.LAMMPS_GPU_IMAGE
+                            if potential in self.gen.GPU_POTENTIALS
+                            else self.gen.LAMMPS_CPU_IMAGE
+                        )
+                        self.assertEqual(
+                            config["lammps_image_name"], expected_image
+                        )
             self.assertEqual(validate.call_count, len(cases))
 
     def test_build_global_json_backend_fields_and_overrides(self):
@@ -190,6 +199,27 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         self.assertEqual(
             vasp_with_image["vasp_image_name"],
             "registry.example/private/vasp:licensed",
+        )
+
+    def test_build_global_json_sandbox_routes_lammps_images(self):
+        gpu = self.gen.build_global_json_sandbox(
+            "lammps", "deepmd", access_key="key", project_id=42
+        )
+        cpu = self.gen.build_global_json_sandbox(
+            "lammps", "eam_alloy", access_key="key", project_id=42
+        )
+
+        self.assertEqual(gpu["lammps_image_name"], self.gen.LAMMPS_GPU_IMAGE)
+        self.assertEqual(gpu["image_address"], self.gen.LAMMPS_GPU_IMAGE)
+        self.assertEqual(
+            gpu["machine_type"],
+            self.gen.SANDBOX_MACHINE_TYPES["lammps_gpu"],
+        )
+        self.assertEqual(cpu["lammps_image_name"], self.gen.LAMMPS_CPU_IMAGE)
+        self.assertEqual(cpu["image_address"], self.gen.LAMMPS_CPU_IMAGE)
+        self.assertEqual(
+            cpu["machine_type"],
+            self.gen.SANDBOX_MACHINE_TYPES["lammps_cpu"],
         )
 
     def test_build_global_json_requires_access_key_and_propagates_combo_error(self):

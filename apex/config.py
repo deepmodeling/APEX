@@ -76,8 +76,8 @@ class Config:
     upload_python_packages: list = field(default_factory=list)
     exclude_upload_files: list = field(default_factory=list)
     lammps_image_name: str = (
-        "registry.dp.tech/dptech/dp/native/prod-16664/"
-        "dpa4-phonolammps:0.0.2"
+        "registry.dp.tech/dptech/dp/native/prod-397637/"
+        "apex-flow:1.3.0.post"
     )
     lammps_run_command: str = None
     phonolammps_run_command: str = None

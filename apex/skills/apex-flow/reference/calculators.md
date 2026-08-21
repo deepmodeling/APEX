@@ -102,7 +102,12 @@ Each requires specific configuration in `param.json` under the `"interaction"` k
 
 ### ⚠️ LAMMPS Image Version
 
-Default image: `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`
+GPU image (`deepmd`, `mace`, `nep`):
+`registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`
+
+CPU image (`gap`, `snap`, `rann`, `eam_alloy`, `eam_fs`, `meam`,
+`meam_spline`):
+`registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`
 
 This image uses integrated USER-DEEPMD and CUDA 12.8. Do not add
 `plugin load libdeepmd_lmp.so`; the plugin command is unsupported. Its unified
@@ -112,7 +117,10 @@ on that path.
 
 > ⚠️ **Do NOT use `deepmd-kit:3.1.1` with GPU/T4** — known startup / triclinic issues. Prefer `3.1.3` or later.
 
-> **LAMMPS phonon and Grüneisen**: `apex submit` forces the validated default image above. It supports the tested NVIDIA T4 configuration and includes phonoLAMMPS.
+> **LAMMPS phonon and Grüneisen**: for GPU potentials, `apex submit` forces
+> the DPA4 image above. It is validated on RTX 4090 and includes phonoLAMMPS.
+> CPU potentials keep the CPU image. Do not use the DPA4 image on a CPU
+> machine; sequential CPU jobs stalled during container preparation.
 
 ### DPA-3.2-5M Multi-Head Model Preparation
 

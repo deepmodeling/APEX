@@ -36,6 +36,7 @@ LAMMPS_PHONON_IMAGE = (
     "registry.dp.tech/dptech/dp/native/prod-16664/"
     "dpa4-phonolammps:0.0.2"
 )
+GPU_LAMMPS_INTERACTIONS = {"deepmd", "mace", "nep"}
 
 
 def validate_submit_paths(parameter_dicts: List[dict]) -> None:
@@ -61,14 +62,31 @@ def validate_submit_paths(parameter_dicts: List[dict]) -> None:
         )
 
 
-def _select_run_image(calculator: str, props_param: dict, run_image: str) -> str:
-    if calculator == "lammps" and props_param and any(
+def _select_run_image(
+    calculator: str,
+    props_param: dict,
+    run_image: str,
+    machine_type: str = None,
+) -> str:
+    interaction = (props_param or {}).get("interaction", {})
+    interaction_type = (
+        interaction.get("type") if isinstance(interaction, dict) else None
+    )
+    is_cpu_machine = "_cpu" in str(machine_type or "").lower()
+    if (
+        calculator == "lammps"
+        and interaction_type in GPU_LAMMPS_INTERACTIONS
+        and not is_cpu_machine
+        and props_param
+        and any(
             prop.get("type") in {"phonon", "gruneisen"}
             for prop in props_param.get("properties", [])
+        )
     ):
         if run_image != LAMMPS_PHONON_IMAGE:
             logging.warning(
-                "LAMMPS phonon/Gruneisen requires the validated phonoLAMMPS image; "
+                "GPU LAMMPS phonon/Gruneisen requires the validated "
+                "phonoLAMMPS image; "
                 "overriding run image %r with %r.",
                 run_image,
                 LAMMPS_PHONON_IMAGE,
@@ -598,7 +616,16 @@ def submit_workflow(
     run_image = wf_config.basic_config_dict[f"{calculator}_image_name"]
     if not run_image:
         run_image = wf_config.basic_config_dict["run_image_name"]
-    run_image = _select_run_image(calculator, props_param, run_image)
+    machine_type = (
+        getattr(wf_config, "machine_type", None)
+        or getattr(wf_config, "scass_type", None)
+    )
+    run_image = _select_run_image(
+        calculator,
+        props_param,
+        run_image,
+        machine_type,
+    )
     run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config_dict["run_command"]
