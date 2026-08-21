@@ -532,7 +532,8 @@ def build_global_json(backend: str, potential: str = None,
                       access_key: str = None, project_id: int = None,
                       scass_type: str = None,
                       run_command: str = None,
-                      vasp_image: str = None) -> dict:
+                      vasp_image: str = None,
+                      lammps_image: str = None) -> dict:
     """
     Build global.json for APEX dflow submission.
 
@@ -583,11 +584,14 @@ def build_global_json(backend: str, potential: str = None,
 
     # Determine calculator image
     if backend == "lammps":
-        lammps_image = select_lammps_image(potential)
+        selected_lammps_image = (
+            (lammps_image or "").strip()
+            or select_lammps_image(potential)
+        )
     else:
-        lammps_image = LAMMPS_CPU_IMAGE  # Fallback field in global.json
+        selected_lammps_image = LAMMPS_CPU_IMAGE  # Fallback in global.json
 
-    _validate_image_scass(lammps_image, inner_scass)
+    _validate_image_scass(selected_lammps_image, inner_scass)
 
     config = {
         "dflow_host": DFLOW_HOST,
@@ -600,7 +604,7 @@ def build_global_json(backend: str, potential: str = None,
             "project_id": pid,
         },
         "apex_image_name": APEX_IMAGE,
-        "lammps_image_name": lammps_image,
+        "lammps_image_name": selected_lammps_image,
         "lammps_run_command": calc_run_command,
         "scass_type": inner_scass,
         "group_size": 1,
@@ -626,7 +630,8 @@ def build_global_json_sandbox(backend: str, potential: str = None,
                               access_key: str = None, project_id: int = None,
                               machine_type: str = None,
                               run_command: str = None,
-                              vasp_image: str = None) -> dict:
+                              vasp_image: str = None,
+                              lammps_image: str = None) -> dict:
     """
     Build global.json for APEX dflow submission via OpenAPI Sandbox.
 
@@ -673,12 +678,12 @@ def build_global_json_sandbox(backend: str, potential: str = None,
         calc_run_command = "lmp -in in.lammps"
 
     # Determine calculator image
-    lammps_image = (
-        select_lammps_image(potential)
+    selected_lammps_image = (
+        ((lammps_image or "").strip() or select_lammps_image(potential))
         if backend == "lammps"
         else LAMMPS_CPU_IMAGE
     )
-    _validate_image_scass(lammps_image, inner_machine)
+    _validate_image_scass(selected_lammps_image, inner_machine)
 
     config = {
         "dflow_host": SANDBOX_DFLOW_HOST,
@@ -696,7 +701,7 @@ def build_global_json_sandbox(backend: str, potential: str = None,
         "app_key": os.environ.get("BOHRIUM_APP_KEY", "agent"),
         "platform": "ali",
         "machine_type": inner_machine,
-        "image_address": lammps_image if backend == "lammps" else ABACUS_IMAGE if backend == "abacus" else APEX_IMAGE,
+        "image_address": selected_lammps_image if backend == "lammps" else ABACUS_IMAGE if backend == "abacus" else APEX_IMAGE,
         "output_log": False,
         "dispatcher_image": SANDBOX_DISPATCHER_IMAGE,
         "bohrium_config": {
@@ -705,7 +710,7 @@ def build_global_json_sandbox(backend: str, potential: str = None,
             "app_key": os.environ.get("BOHRIUM_APP_KEY", "agent"),
         },
         "apex_image_name": APEX_IMAGE,
-        "lammps_image_name": lammps_image,
+        "lammps_image_name": selected_lammps_image,
         "lammps_run_command": calc_run_command,
         "group_size": 1,
         "pool_size": 1,
@@ -1203,7 +1208,8 @@ def plan_structure_layout(sources: list) -> list:
 def build_param_json(structure_paths, interaction: dict,
                      properties: list, flow_type: str = "joint",
                      relaxation_settings: dict = None,
-                     gamma_overrides: dict = None) -> dict:
+                     gamma_overrides: dict = None,
+                     property_configs: list = None) -> dict:
     """Build param.json configuration.
 
     structure_paths: one path string or a list of path strings for `structures`.
@@ -1243,6 +1249,9 @@ def build_param_json(structure_paths, interaction: dict,
 
     # Properties
     if flow_type in ("joint", "props"):
+        if property_configs is not None:
+            param["properties"] = copy.deepcopy(property_configs)
+            return param
         prop_configs = []
         is_dft = interaction.get("type") in ("abacus", "vasp")
         for prop_name in properties:
@@ -1264,6 +1273,36 @@ def build_param_json(structure_paths, interaction: dict,
         param["properties"] = prop_configs
 
     return param
+
+
+def load_confirmed_property_configs(path: str, requested: list) -> list:
+    """Load an approved property list and select entries in requested order."""
+    source = Path(path).expanduser()
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    configs = payload.get("properties") if isinstance(payload, dict) else payload
+    if not isinstance(configs, list) or not all(
+        isinstance(item, dict) and isinstance(item.get("type"), str)
+        for item in configs
+    ):
+        raise ValueError(
+            "--property-config must be a JSON list of property objects or "
+            "an object containing a 'properties' list"
+        )
+    by_type = {}
+    for item in configs:
+        prop_type = item["type"]
+        if prop_type in by_type:
+            raise ValueError(
+                f"--property-config contains duplicate type: {prop_type}"
+            )
+        by_type[prop_type] = item
+    missing = [prop_type for prop_type in requested if prop_type not in by_type]
+    if missing:
+        raise ValueError(
+            "--property-config is missing requested properties: "
+            + ", ".join(missing)
+        )
+    return [copy.deepcopy(by_type[prop_type]) for prop_type in requested]
 
 
 def _normalized_numeric_sequence(values):
@@ -1514,6 +1553,13 @@ def main():
     create.add_argument("--properties", nargs="+", required=True,
                         help="Property types to calculate")
     create.add_argument(
+        "--property-config",
+        help=(
+            "Confirmed JSON property list (or object with a properties list). "
+            "Requested --properties are selected in command-line order."
+        ),
+    )
+    create.add_argument(
         "--gamma-plane-miller", nargs="+", type=float,
         help="Gamma slip-plane indices in the actual input-cell basis",
     )
@@ -1577,6 +1623,13 @@ def main():
                         help="Override scass_type for inner dflow containers (legacy Bohrium)")
     create.add_argument("--run-command",
                         help="Override calculator run command")
+    create.add_argument(
+        "--lammps-image",
+        help=(
+            "Explicit LAMMPS calculator image. The image × machine pair is "
+            "validated before config generation."
+        ),
+    )
     create.add_argument(
         "--vasp-image",
         help=(
@@ -1666,6 +1719,8 @@ def main():
     # -------------------------------------------------------------------------
     gamma_overrides = gamma_overrides_from_args(args)
     errors = validate_config(args.backend, args.potential, args.properties)
+    if args.lammps_image and args.backend != "lammps":
+        errors.append("--lammps-image is only valid with --backend lammps")
     errors.extend(
         validate_gamma_cli_options(args.properties, gamma_overrides)
     )
@@ -1673,6 +1728,16 @@ def main():
         for err in errors:
             print(f"ERROR: {err}", file=sys.stderr)
         sys.exit(1)
+
+    confirmed_property_configs = None
+    if args.property_config:
+        try:
+            confirmed_property_configs = load_confirmed_property_configs(
+                args.property_config, args.properties
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     # -------------------------------------------------------------------------
     # Sanitize workflow name (RFC 1123)
@@ -1715,6 +1780,7 @@ def main():
             machine_type=getattr(args, "machine_type", None),
             run_command=args.run_command,
             vasp_image=args.vasp_image,
+            lammps_image=args.lammps_image,
         )
         print(f"Sandbox config built: machine_type={global_config['machine_type']}")
     else:
@@ -1727,6 +1793,7 @@ def main():
             scass_type=args.scass_type,
             run_command=args.run_command,
             vasp_image=args.vasp_image,
+            lammps_image=args.lammps_image,
         )
         validate_project_id_types(global_config)
         print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
@@ -1852,6 +1919,7 @@ mixing_beta         0.7
         args.properties,
         args.flow_type,
         gamma_overrides=gamma_overrides,
+        property_configs=confirmed_property_configs,
     )
 
     # -------------------------------------------------------------------------

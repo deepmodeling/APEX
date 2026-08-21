@@ -222,6 +222,48 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             self.gen.SANDBOX_MACHINE_TYPES["lammps_cpu"],
         )
 
+    def test_explicit_lammps_image_supports_cpu_deepmd(self):
+        image = (
+            "registry.dp.tech/dptech/dp/native/prod-397637/"
+            "deepmd-kit-phonolammps:3.1.3"
+        )
+        config = self.gen.build_global_json_sandbox(
+            "lammps",
+            "deepmd",
+            access_key="key",
+            project_id=42,
+            machine_type="c8_m32_cpu",
+            lammps_image=image,
+        )
+        self.assertEqual(config["lammps_image_name"], image)
+        self.assertEqual(config["image_address"], image)
+
+    def test_load_confirmed_property_configs_filters_in_requested_order(self):
+        payload = {
+            "properties": [
+                {"type": "eos", "vol_step": 0.02},
+                {"type": "phonon", "supercell_size": [3, 3, 3]},
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "confirmed.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            configs = self.gen.load_confirmed_property_configs(
+                str(path), ["phonon", "eos"]
+            )
+        self.assertEqual([item["type"] for item in configs], ["phonon", "eos"])
+        self.assertEqual(configs[0]["supercell_size"], [3, 3, 3])
+
+    def test_build_param_json_uses_confirmed_property_configs_exactly(self):
+        confirmed = [{"type": "eos", "vol_step": 0.02}]
+        param = self.gen.build_param_json(
+            "confs/input",
+            {"type": "deepmd", "model": "model.pth"},
+            ["eos"],
+            property_configs=confirmed,
+        )
+        self.assertEqual(param["properties"], confirmed)
+
     def test_build_global_json_requires_access_key_and_propagates_combo_error(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(RuntimeError, "BOHRIUM_ACCESS_KEY"):
