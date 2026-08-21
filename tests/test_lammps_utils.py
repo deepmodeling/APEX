@@ -22,6 +22,7 @@ def assert_common_lammps_setup(script):
     assert "dimension" in script
     assert "boundary" in script
     assert "atom_style" in script
+    assert "atom_modify map yes" in script
     assert "box         tilt large" in script
     assert "read_data   conf.lmp" in script
     assert "mass            1 26.982" in script
@@ -228,6 +229,7 @@ def test_make_lammps_finite_t_latt_default_cal_setting():
     )
 
     assert "include  variable_FiniteTlatt.in" in script
+    assert "atom_modify map yes" in script
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script
@@ -306,6 +308,7 @@ def test_make_lammps_finite_t_elastic_equi_role(tmp_path):
     script = make_finite_t_elastic_input(tmp_path, "equi")
 
     assert "clear\ninclude  variable_FiniteTelastic.in" in script
+    assert script.count("atom_modify map yes") == 1
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script
@@ -343,6 +346,7 @@ def test_make_lammps_finite_t_elastic_response_roles(tmp_path, role):
     script = make_finite_t_elastic_input(tmp_path, role)
 
     assert script.count("clear\ninclude  variable_FiniteTelastic.in") == 2
+    assert script.count("atom_modify map yes") == 2
     assert "read_data   conf.lmp" in script
     assert "read_restart ${restart_source}" in script
     assert "write_restart   ${equi_restart}" in script
@@ -393,6 +397,7 @@ def make_annealing_input(cal_setting):
 
 def assert_common_annealing_script(script):
     assert "include  variable_Annealing.in" in script
+    assert "atom_modify map yes" in script
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script

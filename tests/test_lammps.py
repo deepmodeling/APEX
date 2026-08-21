@@ -141,3 +141,29 @@ class TestLammps(unittest.TestCase):
         self.assertFalse(
             any("dump.relax" in str(item.message) for item in caught)
         )
+
+    def test_compute_reports_failed_runtime_status_before_parsing_dump(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dumpfn({"cal_type": "relaxation"}, os.path.join(tmpdir, "task.json"))
+            dumpfn(
+                {
+                    "state": "failed",
+                    "reason": "nonzero_lammps_error",
+                    "exit_code": 1,
+                    "message": "Command exited with non-zero code 1.",
+                },
+                os.path.join(tmpdir, "apex_task_status.json"),
+            )
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "LAMMPS task failed before post-processing.*exit_code=1",
+            ):
+                self.Lammps.compute(tmpdir)
+
+    def test_parse_dump_file_rejects_empty_dump(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dump_path = os.path.join(tmpdir, "dump.relax")
+            with open(dump_path, "w", encoding="utf-8"):
+                pass
+            with self.assertRaisesRegex(RuntimeError, "no TIMESTEP frames"):
+                self.Lammps._parse_dump_file(dump_path, [], [], [], [])
