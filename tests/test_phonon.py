@@ -286,7 +286,7 @@ class TestPhonon(unittest.TestCase):
         phonon = Phonon({"type": "phonon", "supercell_size": [2, 2, 2]})
         self.assertEqual(
             phonon._build_phonolammps_run_command(),
-            "phonolammps in.lammps -c POSCAR --dim 2 2 2 "
+            "phonolammps in.lammps -c POSCAR --dim 2 2 2 --logshow "
             "-pa 1 0 0 0 1 0 0 0 1",
         )
 
@@ -642,7 +642,7 @@ class TestPhonon(unittest.TestCase):
         with open(os.path.join(self.target_path, "task.000000/band.conf")) as fp:
             self.assertIn("PRIMITIVE_AXES = P", fp.read())
 
-    def test_post_process_injects_deepmd_plugin_for_phonon(self):
+    def test_post_process_uses_integrated_deepmd_for_phonon(self):
         deepmd_phonon = Phonon(
             {"type": "phonon", "supercell_size": [2, 2, 2]},
             inter_param={"type": "deepmd"},
@@ -651,14 +651,16 @@ class TestPhonon(unittest.TestCase):
         shutil.rmtree(task_dir.parent, ignore_errors=True)
         task_dir.mkdir(parents=True, exist_ok=True)
         (task_dir / "in.lammps").write_text(
-            "clear\npair_style deepmd frozen_model.pth\npair_coeff * * Cu O\nrun 0\n"
+            "clear\nplugin load libdeepmd_lmp.so\n"
+            "pair_style deepmd frozen_model.pth\npair_coeff * * Cu O\nrun 0\n"
         )
 
         try:
             deepmd_phonon.post_process([str(task_dir)])
             rewritten = (task_dir / "in.lammps").read_text()
-            self.assertIn("plugin load libdeepmd_lmp.so", rewritten)
+            self.assertNotIn("plugin load libdeepmd_lmp.so", rewritten)
             self.assertIn("pair_style deepmd frozen_model.pth", rewritten)
             self.assertNotIn("run 0", rewritten)
+            self.assertIn("--logshow", (task_dir / "run_command").read_text())
         finally:
             shutil.rmtree(task_dir.parent, ignore_errors=True)

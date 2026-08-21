@@ -4,9 +4,9 @@
     "batch_type": "Bohrium",
     "context_type": "Bohrium",
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
-    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
+    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
     "lammps_run_command": "lmp -in in.lammps",
-    "scass_type": "c8_m31_1 * NVIDIA T4",
+    "scass_type": "c8_m32_1 * NVIDIA 4090",
     "group_size": 1,
     "pool_size": 1
 }

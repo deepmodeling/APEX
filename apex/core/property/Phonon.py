@@ -291,15 +291,13 @@ class Phonon(Property):
         self.parameter = parameter
         self.inter_param = inter_param if inter_param is not None else {"type": "vasp"}
 
-    def _ensure_deepmd_plugin_loaded(self, input_text: str) -> str:
-        if self.inter_param.get("type") != "deepmd":
-            return input_text
-        if "plugin load" in input_text or "pair_style deepmd" not in input_text:
-            return input_text
-        return input_text.replace(
-            "pair_style deepmd",
-            "plugin load libdeepmd_lmp.so\npair_style deepmd",
-            1,
+    @staticmethod
+    def _strip_legacy_deepmd_plugin(input_text: str) -> str:
+        """Remove plugin commands unsupported by integrated USER-DEEPMD builds."""
+        return "".join(
+            line
+            for line in input_text.splitlines(keepends=True)
+            if line.strip() != "plugin load libdeepmd_lmp.so"
         )
 
     def _build_phonolammps_run_command(self) -> str:
@@ -310,7 +308,7 @@ class Phonon(Property):
         )
         if not command_template:
             return self._join_phonopy_arguments(
-                f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z}",
+                f"phonolammps in.lammps -c POSCAR --dim {dim_x} {dim_y} {dim_z} --logshow",
                 primitive_axes,
             )
         command = command_template.format(
@@ -632,7 +630,7 @@ class Phonon(Property):
                     del contents[pair_line_id + 1:]
 
                 with open("in.lammps", 'w') as f2:
-                    f2.write(self._ensure_deepmd_plugin_loaded("".join(contents)))
+                    f2.write(self._strip_legacy_deepmd_plugin("".join(contents)))
                 # dump phonolammps command
                 phonolammps_cmd = self._build_phonolammps_run_command()
                 with open("run_command", 'w') as f3:

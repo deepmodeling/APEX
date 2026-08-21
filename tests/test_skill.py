@@ -187,8 +187,8 @@ class TestValidateApexCombo(unittest.TestCase):
 
     def test_recommend_lammps_gpu(self):
         rec = self.combo.recommend("lammps", "gpu")
-        self.assertIn("3.1.3", rec["image"])
-        self.assertIn("T4", rec["scass_type"])
+        self.assertIn("dpa4-phonolammps:0.0.2", rec["image"])
+        self.assertIn("4090", rec["scass_type"])
 
     def test_cli_check_exit_codes(self):
         self.assertEqual(
@@ -258,8 +258,8 @@ class TestGenerateConfigProjectId(unittest.TestCase):
     def test_lammps_default_uses_validated_phonolammps_image(self):
         self.assertEqual(
             self.gen.LAMMPS_IMAGE,
-            "registry.dp.tech/dptech/dp/native/prod-397637/"
-            "deepmd-kit-phonolammps:3.1.3",
+            "registry.dp.tech/dptech/dp/native/prod-16664/"
+            "dpa4-phonolammps:0.0.2",
         )
 
     def test_combo_validator_has_no_property_cli(self):

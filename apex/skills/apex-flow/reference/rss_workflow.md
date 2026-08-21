@@ -5,7 +5,7 @@
 APEX's RSS workflow generates occupationally disordered structures for random
 solid solutions, solid solutions, high-entropy alloys (HEA), high-entropy
 oxides/ceramics (HEO), and other high-entropy materials. RSS generates
-structures locally; it is not one of the 14 APEX properties and does not require
+structures locally; it is not one of the 15 APEX properties and does not require
 choosing a calculator backend unless the user also asks to calculate properties.
 
 When the user's request contains any of the material classes above, explicitly

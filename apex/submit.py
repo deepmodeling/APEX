@@ -33,8 +33,8 @@ from apex.utils import (
 
 
 LAMMPS_PHONON_IMAGE = (
-    "registry.dp.tech/dptech/dp/native/prod-397637/"
-    "deepmd-kit-phonolammps:3.1.3"
+    "registry.dp.tech/dptech/dp/native/prod-16664/"
+    "dpa4-phonolammps:0.0.2"
 )
 
 

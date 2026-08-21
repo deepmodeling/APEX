@@ -26,11 +26,11 @@ VALID_PROPERTIES = {
     "eos", "cohesive", "elastic", "surface", "vacancy",
     "interstitial", "phonon", "gamma", "gamma_surface",
     "decohesive", "finite_t_latt", "finite_t_elastic",
-    "gruneisen", "annealing",
+    "gruneisen", "annealing", "melting_point",
 }
 
 # LAMMPS-only properties
-LAMMPS_ONLY_PROPERTIES = {"finite_t_elastic"}
+LAMMPS_ONLY_PROPERTIES = {"finite_t_elastic", "melting_point"}
 
 # Valid LAMMPS potential types
 VALID_LAMMPS_TYPES = {
@@ -624,6 +624,66 @@ def validate_global(global_config: dict) -> list:
     errors = []
     warnings = []
 
+    context_type = str(global_config.get("context_type", "")).lower()
+    batch_type = str(global_config.get("batch_type", "")).lower()
+    if "openapi" in {context_type, batch_type}:
+        for key in ("batch_type", "context_type", "machine_type", "image_address"):
+            if not global_config.get(key):
+                errors.append(f"OpenAPI: missing non-empty '{key}' in global.json")
+
+        project_id = global_config.get("project_id")
+        if type(project_id) is not int or project_id <= 0:
+            errors.append(
+                "OpenAPI: project_id must be a positive unquoted JSON integer"
+            )
+
+        access_key = global_config.get("access_key")
+        if not isinstance(access_key, str) or not access_key.strip():
+            errors.append("OpenAPI: missing non-empty access_key")
+
+        bohrium_config = global_config.get("bohrium_config")
+        if not isinstance(bohrium_config, dict):
+            errors.append("OpenAPI: missing bohrium_config object")
+        else:
+            nested_id = bohrium_config.get("project_id")
+            if type(nested_id) is not int or nested_id <= 0:
+                errors.append(
+                    "OpenAPI: bohrium_config.project_id must be a positive "
+                    "JSON integer"
+                )
+            elif nested_id != project_id:
+                errors.append("OpenAPI: project_id values must match")
+            nested_key = bohrium_config.get("access_key")
+            if not isinstance(nested_key, str) or not nested_key.strip():
+                errors.append("OpenAPI: missing bohrium_config.access_key")
+
+        dflow_config = global_config.get("dflow_config")
+        if not isinstance(dflow_config, dict):
+            errors.append("OpenAPI: missing dflow_config object")
+        else:
+            if dflow_config.get("namespace") != "dflow":
+                errors.append("OpenAPI: dflow_config.namespace must be 'dflow'")
+            if dflow_config.get("token") != "":
+                errors.append("OpenAPI: dflow_config.token must be an empty string")
+
+        lammps_image = global_config.get("lammps_image_name")
+        image_address = global_config.get("image_address")
+        if lammps_image and image_address != lammps_image:
+            errors.append("OpenAPI: image_address and lammps_image_name must match")
+        if not global_config.get("dispatcher_image"):
+            errors.append("OpenAPI: missing dispatcher_image")
+
+        run_commands = (
+            "lammps_run_command", "abacus_run_command", "vasp_run_command"
+        )
+        if not any(global_config.get(key) for key in run_commands):
+            errors.append("OpenAPI: missing calculator run command in global.json")
+
+        rc_errors, rc_warnings = validate_vasp_run_command(global_config)
+        errors.extend(rc_errors)
+        warnings.extend(rc_warnings)
+        return errors, warnings
+
     machine = global_config.get("machine")
     machine = machine if isinstance(machine, dict) else {}
     top_context_values = [
@@ -954,6 +1014,55 @@ def validate_properties(properties: list, interaction_type: str) -> list:
                 errors.append(
                     f"{prefix}: finite_t_elastic only supports method='paired_langevin'"
                 )
+
+        elif prop_type == "melting_point":
+            if prop.get("method", "two_phase") != "two_phase":
+                errors.append(
+                    f"{prefix}: melting_point only supports method='two_phase'"
+                )
+            supercell = prop.get("supercell_size")
+            if (
+                not isinstance(supercell, (list, tuple))
+                or len(supercell) != 3
+                or any(
+                    not isinstance(value, int)
+                    or isinstance(value, bool)
+                    or value <= 0
+                    for value in (supercell or [])
+                )
+            ):
+                errors.append(
+                    f"{prefix}: melting_point supercell_size requires "
+                    "3 positive integers"
+                )
+            cal = prop.get("cal_setting", {})
+            temperatures = cal.get("temperature")
+            if (
+                not isinstance(temperatures, list)
+                or not temperatures
+                or any(
+                    not isinstance(value, (int, float))
+                    or isinstance(value, bool)
+                    or not math.isfinite(float(value))
+                    or value <= 0
+                    for value in (temperatures or [])
+                )
+            ):
+                errors.append(
+                    f"{prefix}: melting_point temperature requires positive values"
+                )
+            for key in (
+                "premelt_steps", "conditioning_steps", "production_steps"
+            ):
+                value = cal.get(key)
+                if (
+                    not isinstance(value, int)
+                    or isinstance(value, bool)
+                    or value <= 0
+                ):
+                    errors.append(
+                        f"{prefix}: melting_point {key} must be positive"
+                    )
 
         if prop_type in {"gamma", "gamma_surface"}:
             gamma_errors, gamma_warnings = validate_gamma_settings(prop, prefix)
@@ -1398,6 +1507,22 @@ def main():
             print(
                 f"    bohrium_config.project_id={project_id!r} "
                 f"type={type(project_id).__name__}"
+            )
+        elif global_config and str(
+            global_config.get("context_type", "")
+        ).lower() == "openapi":
+            project_id = global_config.get("project_id")
+            nested_id = global_config.get(
+                "bohrium_config", {}
+            ).get("project_id")
+            print("  Hard OpenAPI project ID type check:")
+            print(
+                f"    project_id={project_id!r} "
+                f"type={type(project_id).__name__}"
+            )
+            print(
+                f"    bohrium_config.project_id={nested_id!r} "
+                f"type={type(nested_id).__name__}"
             )
 
 

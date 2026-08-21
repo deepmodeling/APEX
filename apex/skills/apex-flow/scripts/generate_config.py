@@ -57,8 +57,8 @@ SANDBOX_DISPATCHER_IMAGE = (
 )
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
 LAMMPS_IMAGE = (
-    "registry.dp.tech/dptech/dp/native/prod-397637/"
-    "deepmd-kit-phonolammps:3.1.3"
+    "registry.dp.tech/dptech/dp/native/prod-16664/"
+    "dpa4-phonolammps:0.0.2"
 )
 ABACUS_IMAGE = "registry.dp.tech/dptech/abacus:3.8.2"
 # Recommended Bohrium VASP run command pieces (Intel oneAPI + absolute vasp_std).
@@ -165,17 +165,47 @@ PROPERTY_DEFAULTS = {
             "temp_ramp_rate": 1000,
         },
     },
+    "melting_point": {
+        "type": "melting_point",
+        "method": "two_phase",
+        "supercell_size": [1, 1, 2],
+        "cal_setting": {
+            "temperature": [1500, 1600, 1700],
+            "premelt_temperature": 4500,
+            "premelt_steps": 5000,
+            "conditioning_steps": 5000,
+            "production_steps": 100000,
+            "timestep": 0.001,
+            "tdamp": 0.1,
+            "pdamp": 1.0,
+            "pressure": 0.0,
+            "barostat": "iso",
+            "interface_axis": "z",
+            "liquid_fraction": 0.5,
+            "dump_step": 100,
+            "thermo_step": 100,
+            "restart_interval": 10000,
+            "q6_cutoff": 3.5,
+            "q6_neighbors": 12,
+            "replicas": 1,
+            "velocity_seeds": {
+                "premelt": 324159,
+                "condition": 271828,
+                "release": 161803,
+            },
+        },
+    },
 }
 
 # LAMMPS-only properties
-LAMMPS_ONLY = {"finite_t_elastic"}
+LAMMPS_ONLY = {"finite_t_elastic", "melting_point"}
 
 # GPU potential types — benefit from GPU scass_type
 GPU_POTENTIALS = {"deepmd", "mace", "nep"}
 
 # scass_type defaults for inner dflow containers (legacy Bohrium)
 SCASS_TYPES = {
-    "lammps_gpu": "c8_m31_1 * NVIDIA T4",
+    "lammps_gpu": "c8_m32_1 * NVIDIA 4090",
     "lammps_cpu": "c16_m32_cpu",
     "abacus": "c16_m32_cpu",
     "vasp": "c32_m128_cpu",
@@ -830,6 +860,19 @@ def build_interaction(backend: str, potential: str = None,
         return interaction
     else:
         raise ValueError(f"Unknown backend: {backend}")
+
+
+def stage_lammps_model(model: str, output_dir: Path) -> str:
+    """Copy a LAMMPS model into the job root and return its relative name."""
+    if not model:
+        raise ValueError("--model required for LAMMPS backend")
+    source = Path(model).expanduser()
+    if not source.is_file():
+        raise FileNotFoundError(f"LAMMPS model not found: {source}")
+    destination = Path(output_dir) / source.name
+    shutil.copy2(source, destination)
+    print(f"Copied model to {destination}")
+    return destination.name
 
 
 def resolve_source_potcar_file(prefix: Path, entry: str) -> Path:
@@ -1684,11 +1727,13 @@ def main():
         shutil.copy2(item["source"], dest_file)
         print(f"Copied structure to {dest_file}")
 
-    # Copy model file if specified
-    if args.model and os.path.exists(args.model):
-        model_dest = output_dir / os.path.basename(args.model)
-        shutil.copy2(args.model, model_dest)
-        print(f"Copied model to {model_dest}")
+    staged_model = args.model
+    if args.backend == "lammps":
+        try:
+            staged_model = stage_lammps_model(args.model, output_dir)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     # Stage VASP POTCAR (+ INCAR) into the job. Absolute host libraries such as
     # /share/PAW_PBE are invisible inside Bohrium/dflow containers.
@@ -1778,7 +1823,7 @@ mixing_beta         0.7
     interaction = build_interaction(
         backend=args.backend,
         potential=args.potential,
-        model=args.model,
+        model=staged_model,
         incar=staged_incar,
         potcar_prefix=staged_prefix,
         potcars=staged_potcars,

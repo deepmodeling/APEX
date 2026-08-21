@@ -55,7 +55,7 @@ as successful. Verify:
 property_success + property_failed + property_unfinished = property_total
 ```
 
-For one structure requesting all properties, `property_total` is 14. For
+For one structure requesting all properties, `property_total` is 15. For
 multiple structures, these are property-task counts, normally
 `number of structures × number of requested properties`, less explicitly
 skipped tasks.
@@ -121,7 +121,7 @@ Example for the single-structure SrTiO3 all-properties run:
 作业名称：apex-srtio3-all-14props
 材料：SrTiO₃（立方钙钛矿，a=3.9316 Å，5 atoms；已核对提交的 POSCAR）
 当前阶段：relax 0, props 1（剩余弛豫 0；剩余性质任务 1）
-性质进度：成功 <以 propertycal-* 的 Succeeded 数为准>，失败 <以 Failed/Error 数为准>，未完成 1，总计 14
+性质进度：成功 <以 propertycal-* 的 Succeeded 数为准>，失败 <以 Failed/Error 数为准>，未完成 1，总计 15
 Argo workflow：https://workflows.deepmodeling.com/workflows/argo/<workflow-id>
 Workflow ID：<workflow-id>
 Workflow UID：<workflow-uid>

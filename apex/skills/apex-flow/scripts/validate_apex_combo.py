@@ -8,8 +8,8 @@ Use from the agent skill or as a pre-check in generate_config.py.
 Usage:
     python validate_apex_combo.py list-combos --backend lammps --prefer gpu
     python validate_apex_combo.py check \\
-        --image registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3 \\
-        --scass "c8_m31_1 * NVIDIA T4"
+        --image registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2 \\
+        --scass "c8_m32_1 * NVIDIA 4090"
     python validate_apex_combo.py recommend --backend lammps --prefer cpu
 """
 
@@ -46,12 +46,12 @@ BLOCKED_IMAGE_ACCELERATORS = {
 # Recommended allow-lists (short tags or full image refs)
 RECOMMENDED_LAMMPS_IMAGES = {
     "cpu": [
-        "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
+        "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
         "registry.dp.tech/dptech/deepmd-kit:3.1.1",
         "registry.dp.tech/dptech/deepmd-kit:2024Q1-d23cf3e",
     ],
     "gpu": [
-        "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
+        "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
         "registry.dp.tech/dptech/deepmd-kit:3.1.1",
         "registry.dp.tech/dptech/deepmd-kit:2024Q1-d23cf3e",
         "registry.dp.tech/dptech/deepmd-kit:3.1.0-cuda12.1",
@@ -68,6 +68,7 @@ RECOMMENDED_SCASS = {
         "c8_m32_cpu",
     ],
     "lammps_gpu": [
+        "c8_m32_1 * NVIDIA 4090",
         "c8_m31_1 * NVIDIA T4",
         "c4_m15_1 * NVIDIA T4",
         "c16_m62_1 * NVIDIA T4",
@@ -184,7 +185,8 @@ def list_combos(backend: str = "lammps", prefer: str = "cpu") -> dict:
         "notes": [
             "Always validate image×scass before writing global.json / submitting.",
             "Outer Bohrium job should use c1_m2_cpu, never GPU.",
-            "For triclinic cells, avoid deepmd-kit:3.1.1; prefer 3.1.3.",
+            "DPA4 image 0.0.2 is validated on RTX 4090 for LAMMPS, phonon, and Grüneisen.",
+            "For triclinic cells, avoid deepmd-kit:3.1.1; prefer the DPA4 0.0.2 image.",
         ],
     }
 

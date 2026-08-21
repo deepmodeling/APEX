@@ -241,6 +241,19 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown backend"):
             self.gen.build_interaction("unknown")
 
+    def test_stage_lammps_model_copies_and_returns_basename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            output_dir = root / "job"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            source = source_dir / "model.pt2"
+            source.write_bytes(b"dpa4")
+            staged = self.gen.stage_lammps_model(str(source), output_dir)
+            self.assertEqual(staged, "model.pt2")
+            self.assertEqual((output_dir / staged).read_bytes(), b"dpa4")
+
     def test_build_param_json_flow_types_and_dft_overrides(self):
         lammps = {"type": "deepmd"}
         joint = self.gen.build_param_json(
@@ -538,6 +551,7 @@ class TestValidateInputs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.validator = _load_script("validate_inputs.py")
+        cls.gen = _load_script("generate_config.py")
 
     def test_validate_global(self):
         errors, warnings = self.validator.validate_global({})
@@ -628,6 +642,45 @@ class TestValidateInputs(unittest.TestCase):
         ]
         errors, _ = self.validator.validate_global(local_cluster)
         self.assertTrue(any("placeholders" in error for error in errors))
+
+    def test_validate_global_openapi_sandbox(self):
+        config = {
+            "dflow_host": "https://lbg-workflow-dflow.dp.tech",
+            "k8s_api_server": "https://lbg-workflow-dflow.dp.tech",
+            "dflow_config": {
+                "host": "https://lbg-workflow-dflow.dp.tech",
+                "k8s_api_server": "https://lbg-workflow-dflow.dp.tech",
+                "namespace": "dflow",
+                "token": "",
+            },
+            "batch_type": "OpenAPI",
+            "context_type": "OpenAPI",
+            "access_key": "test-key",
+            "project_id": 42,
+            "machine_type": "c8_m32_1 * NVIDIA 4090",
+            "image_address": self.gen.LAMMPS_IMAGE,
+            "dispatcher_image": "dispatcher:image",
+            "bohrium_config": {
+                "access_key": "test-key",
+                "project_id": 42,
+                "app_key": "agent",
+            },
+            "lammps_image_name": self.gen.LAMMPS_IMAGE,
+            "lammps_run_command": "lmp -in in.lammps",
+        }
+        self.assertEqual(self.validator.validate_global(config), ([], []))
+        config["bohrium_config"]["project_id"] = "42"
+        errors, _ = self.validator.validate_global(config)
+        self.assertTrue(any("bohrium_config.project_id" in e for e in errors))
+
+    def test_validate_melting_point_property(self):
+        prop = self.gen.PROPERTY_DEFAULTS["melting_point"]
+        self.assertEqual(
+            self.validator.validate_properties([prop], "deepmd"),
+            ([], []),
+        )
+        errors, _ = self.validator.validate_properties([prop], "vasp")
+        self.assertTrue(any("LAMMPS-only" in e for e in errors))
 
     def test_validate_current_global_requires_integer_matching_project_ids(self):
         config = {
