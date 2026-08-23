@@ -12,6 +12,7 @@ from dflow.python import (
 )
 from apex.task_failure import (
     HEADER_ONLY_RETRY_REASON,
+    TRANSIENT_LAMMPS_RETRY_REASON,
     classify_lammps_exit_code,
     is_header_only_lammps_failure,
     is_lammps_header_only_log,
@@ -269,8 +270,18 @@ class RunLAMMPS(OP):
 
     @classmethod
     def _prepare_retry(cls, task_dir: Path, attempt: int):
-        for name in ["log.lammps", "outlog", "errlog", "run.log", "dump.relax", "stress_timeseries.txt"]:
+        for name in [
+            "log.lammps",
+            "outlog",
+            "errlog",
+            "run.log",
+            "dump.relax",
+            "dump.melting",
+            "stress_timeseries.txt",
+        ]:
             cls._archive_retry_file(task_dir / name, attempt)
+        for path in task_dir.glob("restart.melting.*"):
+            cls._archive_retry_file(path, attempt)
 
     @classmethod
     def _resource_snapshot(cls) -> str:
@@ -391,6 +402,35 @@ class RunLAMMPS(OP):
                 self._prepare_retry(task_dir, attempts)
                 time.sleep(retry_delay)
                 attempts += 1
+                exit_code = self._run_command(cmd, task_dir)
+            transient_retries = max(
+                0,
+                self._runtime_int_option(
+                    cmd,
+                    "APEX_LAMMPS_TRANSIENT_RETRY",
+                    1,
+                ),
+            )
+            transient_attempts = 0
+            while (
+                exit_code != 0
+                and transient_attempts < transient_retries
+                and classify_lammps_exit_code(exit_code).get("reason")
+                in {"killed_or_oom", "terminated", "timeout"}
+            ):
+                classification = classify_lammps_exit_code(exit_code)["reason"]
+                retry_reason = TRANSIENT_LAMMPS_RETRY_REASON
+                self._append_debug(
+                    debug_file,
+                    f"\n## Retry {attempts + 1}\n"
+                    f"Retrying transient LAMMPS failure because "
+                    f"exit_code={exit_code} and "
+                    f"classification={classification}.",
+                )
+                self._prepare_retry(task_dir, attempts)
+                time.sleep(retry_delay)
+                attempts += 1
+                transient_attempts += 1
                 exit_code = self._run_command(cmd, task_dir)
             elapsed = time.time() - start
             finished_at = self._utc_now()

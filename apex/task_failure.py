@@ -8,6 +8,7 @@ from monty.serialization import loadfn
 
 HEADER_ONLY_RETRY_REASON = "header_only_lammps_log_after_nonzero_exit"
 REMOTE_LAMMPS_STARTUP_FAILURE = "remote_lammps_startup_failure"
+TRANSIENT_LAMMPS_RETRY_REASON = "transient_signal_or_timeout_retry"
 
 
 def is_lammps_header_only_text(text: str) -> bool:
