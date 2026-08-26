@@ -3,8 +3,8 @@
     "dispatcher_image_sandbox": "registry.dp.tech/dptech/polycalibur:dpdispatcher-storehost-plan-a-20260811",
     "backends": {
         "lammps_gpu": {
-            "image": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
-            "machine": "c8_m31_1 * NVIDIA T4",
+            "image": "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
+            "machine": "c8_m32_1 * NVIDIA 4090",
             "machine_sandbox": "c8_m32_1 * NVIDIA 4090",
             "potentials": ["deepmd", "mace", "nep"]
         },
@@ -46,6 +46,7 @@
         "finite_t_latt": {"lammps": true, "abacus": false, "vasp": true},
         "finite_t_elastic": {"lammps": true, "abacus": false, "vasp": false},
         "gruneisen": {"lammps": true, "abacus": true, "vasp": true},
-        "annealing": {"lammps": true, "abacus": false, "vasp": true}
+        "annealing": {"lammps": true, "abacus": false, "vasp": true},
+        "melting_point": {"lammps": true, "abacus": false, "vasp": false}
     }
 }

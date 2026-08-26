@@ -32,6 +32,7 @@ from apex.core.lib.vasp_runtime import build_kpoint_aware_vasp_command
 from apex.core.lib import dispatcher as dispatcher_module
 from apex.task_failure import (
     REMOTE_LAMMPS_STARTUP_FAILURE,
+    TRANSIENT_LAMMPS_RETRY_REASON,
     classify_apex_task_status,
     classify_lammps_exit_code,
     is_header_only_lammps_failure,
@@ -1216,6 +1217,40 @@ class TestRunLAMMPSDebug(unittest.TestCase):
             self.assertEqual(status["state"], "failed")
             self.assertEqual(status["reason"], REMOTE_LAMMPS_STARTUP_FAILURE)
             self.assertEqual(status["attempts"], 2)
+
+    def test_run_lammps_retries_transient_sigkill_failure(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            task_dir = Path(tmpdir)
+            script = task_dir / "sigkill_once.py"
+            script.write_text(
+                "from pathlib import Path\n"
+                "count_file = Path('count.txt')\n"
+                "count = int(count_file.read_text()) if count_file.exists() else 0\n"
+                "count_file.write_text(str(count + 1))\n"
+                "Path('log.lammps').write_text(f'attempt {count + 1}\\n')\n"
+                "Path('dump.melting').write_text(f'attempt {count + 1}\\n')\n"
+                "raise SystemExit(137 if count == 0 else 0)\n"
+            )
+            op = RunLAMMPS()
+            with patch.dict(os.environ, {"APEX_LAMMPS_HEADER_RETRY_DELAY": "0"}):
+                op.execute(OPIO({
+                    "input_lammps": task_dir,
+                    "run_command": (
+                        "APEX_LAMMPS_TRANSIENT_RETRY=1 "
+                        f"{sys.executable} {script.name}"
+                    ),
+                }))
+
+            self.assertEqual((task_dir / "count.txt").read_text(), "2")
+            self.assertTrue((task_dir / "log.lammps.attempt1").is_file())
+            self.assertTrue((task_dir / "dump.melting.attempt1").is_file())
+            status = loadfn(task_dir / "apex_task_status.json")
+            self.assertEqual(status["state"], "succeeded")
+            self.assertEqual(status["attempts"], 2)
+            self.assertEqual(
+                status["retry_reason"],
+                TRANSIENT_LAMMPS_RETRY_REASON,
+            )
 
 
 class TestMakeRelaxOPs(unittest.TestCase):

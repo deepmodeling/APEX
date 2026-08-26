@@ -262,7 +262,7 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -338,7 +338,7 @@ def make_lammps_equi(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -402,7 +402,7 @@ def make_lammps_elastic(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -461,6 +461,9 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] in {"deepmd", "mace"}:
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     ret += "replicate   ${nx} ${ny} ${nz}\n"
@@ -538,7 +541,7 @@ def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir=".")
         text += "dimension	3\n"
         text += "boundary	p p p\n"
         text += "atom_style	atomic\n"
-        if param["type"] == "mace":
+        if param["type"] in {"deepmd", "mace"}:
             text += "atom_modify map yes\n"
             text += "newton on\n"
         text += "box         tilt large\n"
@@ -554,7 +557,7 @@ def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir=".")
         text += "dimension	3\n"
         text += "boundary	p p p\n"
         text += "atom_style	atomic\n"
-        if param["type"] == "mace":
+        if param["type"] in {"deepmd", "mace"}:
             text += "atom_modify map yes\n"
             text += "newton on\n"
         text += "box         tilt large\n"
@@ -650,7 +653,7 @@ def make_lammps_press_relax(
     ret += "dimension   3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -777,6 +780,9 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     ret += "dimension\t3\n"
     ret += "boundary\tp p p\n"
     ret += "atom_style\tatomic\n"
+    if param["type"] in {"deepmd", "mace"}:
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     ret += "replicate   ${nx} ${ny} ${nz}\n"

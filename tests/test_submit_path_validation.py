@@ -20,7 +20,10 @@ class TestSubmitPathValidation(unittest.TestCase):
     def test_lammps_phonon_forces_validated_image(self):
         selected = _select_run_image(
             "lammps",
-            {"properties": [{"type": "phonon"}]},
+            {
+                "interaction": {"type": "deepmd"},
+                "properties": [{"type": "phonon"}],
+            },
             "registry.dp.tech/dptech/deepmd-kit:3.1.3",
         )
         self.assertEqual(selected, LAMMPS_PHONON_IMAGE)
@@ -28,10 +31,44 @@ class TestSubmitPathValidation(unittest.TestCase):
     def test_lammps_gruneisen_forces_validated_image(self):
         selected = _select_run_image(
             "lammps",
-            {"properties": [{"type": "gruneisen"}]},
+            {
+                "interaction": {"type": "deepmd"},
+                "properties": [{"type": "gruneisen"}],
+            },
             "registry.dp.tech/dptech/deepmd-kit:3.1.3",
         )
         self.assertEqual(selected, LAMMPS_PHONON_IMAGE)
+
+    def test_cpu_lammps_phonon_keeps_configured_image(self):
+        configured = (
+            "registry.dp.tech/dptech/dp/native/prod-397637/"
+            "apex-flow:1.3.0.post"
+        )
+        selected = _select_run_image(
+            "lammps",
+            {
+                "interaction": {"type": "eam_alloy"},
+                "properties": [{"type": "phonon"}],
+            },
+            configured,
+        )
+        self.assertEqual(selected, configured)
+
+    def test_deepmd_cpu_phonon_does_not_force_gpu_image(self):
+        configured = (
+            "registry.dp.tech/dptech/dp/native/prod-397637/"
+            "deepmd-kit-phonolammps:3.1.3"
+        )
+        selected = _select_run_image(
+            "lammps",
+            {
+                "interaction": {"type": "deepmd"},
+                "properties": [{"type": "phonon"}],
+            },
+            configured,
+            "c8_m32_cpu",
+        )
+        self.assertEqual(selected, configured)
 
     def test_non_phonon_keeps_configured_lammps_image(self):
         configured = "registry.example/custom-lammps:latest"

@@ -56,10 +56,14 @@ SANDBOX_DISPATCHER_IMAGE = (
     "registry.dp.tech/dptech/polycalibur:dpdispatcher-storehost-plan-a-20260811"
 )
 APEX_IMAGE = "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post"
-LAMMPS_IMAGE = (
-    "registry.dp.tech/dptech/dp/native/prod-397637/"
-    "deepmd-kit-phonolammps:3.1.3"
+LAMMPS_GPU_IMAGE = (
+    "registry.dp.tech/dptech/dp/native/prod-16664/"
+    "dpa4-phonolammps:0.0.2"
 )
+LAMMPS_CPU_IMAGE = APEX_IMAGE
+# Backward-compatible alias used by external callers and older tests. New code
+# must select LAMMPS_GPU_IMAGE or LAMMPS_CPU_IMAGE from the potential type.
+LAMMPS_IMAGE = LAMMPS_GPU_IMAGE
 ABACUS_IMAGE = "registry.dp.tech/dptech/abacus:3.8.2"
 # Recommended Bohrium VASP run command pieces (Intel oneAPI + absolute vasp_std).
 # Do NOT auto-set vasp_image_name — VASP is commercial; only set an image after
@@ -165,17 +169,55 @@ PROPERTY_DEFAULTS = {
             "temp_ramp_rate": 1000,
         },
     },
+    "melting_point": {
+        "type": "melting_point",
+        "method": "two_phase",
+        "supercell_size": [1, 1, 2],
+        "cal_setting": {
+            "temperature": [1500, 1600, 1700],
+            "premelt_temperature": 4500,
+            "premelt_steps": 5000,
+            "conditioning_steps": 5000,
+            "production_steps": 100000,
+            "timestep": 0.001,
+            "tdamp": 0.1,
+            "pdamp": 1.0,
+            "pressure": 0.0,
+            "barostat": "iso",
+            "interface_axis": "z",
+            "liquid_fraction": 0.5,
+            "dump_step": 100,
+            "thermo_step": 100,
+            "restart_interval": 10000,
+            "q6_cutoff": 3.5,
+            "q6_neighbors": 12,
+            "replicas": 1,
+            "velocity_seeds": {
+                "premelt": 324159,
+                "condition": 271828,
+                "release": 161803,
+            },
+        },
+    },
 }
 
 # LAMMPS-only properties
-LAMMPS_ONLY = {"finite_t_elastic"}
+LAMMPS_ONLY = {"finite_t_elastic", "melting_point"}
 
 # GPU potential types — benefit from GPU scass_type
 GPU_POTENTIALS = {"deepmd", "mace", "nep"}
 
+
+def select_lammps_image(potential: str = None) -> str:
+    """Return the validated LAMMPS image for a potential's resource class."""
+    if potential in GPU_POTENTIALS:
+        return LAMMPS_GPU_IMAGE
+    return LAMMPS_CPU_IMAGE
+
+
 # scass_type defaults for inner dflow containers (legacy Bohrium)
 SCASS_TYPES = {
-    "lammps_gpu": "c8_m31_1 * NVIDIA T4",
+    "lammps_gpu": "c8_m32_1 * NVIDIA 4090",
     "lammps_cpu": "c16_m32_cpu",
     "abacus": "c16_m32_cpu",
     "vasp": "c32_m128_cpu",
@@ -490,7 +532,8 @@ def build_global_json(backend: str, potential: str = None,
                       access_key: str = None, project_id: int = None,
                       scass_type: str = None,
                       run_command: str = None,
-                      vasp_image: str = None) -> dict:
+                      vasp_image: str = None,
+                      lammps_image: str = None) -> dict:
     """
     Build global.json for APEX dflow submission.
 
@@ -541,11 +584,14 @@ def build_global_json(backend: str, potential: str = None,
 
     # Determine calculator image
     if backend == "lammps":
-        lammps_image = LAMMPS_IMAGE
+        selected_lammps_image = (
+            (lammps_image or "").strip()
+            or select_lammps_image(potential)
+        )
     else:
-        lammps_image = LAMMPS_IMAGE  # Still needed as fallback in global.json
+        selected_lammps_image = LAMMPS_CPU_IMAGE  # Fallback in global.json
 
-    _validate_image_scass(lammps_image, inner_scass)
+    _validate_image_scass(selected_lammps_image, inner_scass)
 
     config = {
         "dflow_host": DFLOW_HOST,
@@ -558,7 +604,7 @@ def build_global_json(backend: str, potential: str = None,
             "project_id": pid,
         },
         "apex_image_name": APEX_IMAGE,
-        "lammps_image_name": lammps_image,
+        "lammps_image_name": selected_lammps_image,
         "lammps_run_command": calc_run_command,
         "scass_type": inner_scass,
         "group_size": 1,
@@ -584,7 +630,8 @@ def build_global_json_sandbox(backend: str, potential: str = None,
                               access_key: str = None, project_id: int = None,
                               machine_type: str = None,
                               run_command: str = None,
-                              vasp_image: str = None) -> dict:
+                              vasp_image: str = None,
+                              lammps_image: str = None) -> dict:
     """
     Build global.json for APEX dflow submission via OpenAPI Sandbox.
 
@@ -631,7 +678,12 @@ def build_global_json_sandbox(backend: str, potential: str = None,
         calc_run_command = "lmp -in in.lammps"
 
     # Determine calculator image
-    lammps_image = LAMMPS_IMAGE
+    selected_lammps_image = (
+        ((lammps_image or "").strip() or select_lammps_image(potential))
+        if backend == "lammps"
+        else LAMMPS_CPU_IMAGE
+    )
+    _validate_image_scass(selected_lammps_image, inner_machine)
 
     config = {
         "dflow_host": SANDBOX_DFLOW_HOST,
@@ -649,7 +701,7 @@ def build_global_json_sandbox(backend: str, potential: str = None,
         "app_key": os.environ.get("BOHRIUM_APP_KEY", "agent"),
         "platform": "ali",
         "machine_type": inner_machine,
-        "image_address": lammps_image if backend == "lammps" else ABACUS_IMAGE if backend == "abacus" else APEX_IMAGE,
+        "image_address": selected_lammps_image if backend == "lammps" else ABACUS_IMAGE if backend == "abacus" else APEX_IMAGE,
         "output_log": False,
         "dispatcher_image": SANDBOX_DISPATCHER_IMAGE,
         "bohrium_config": {
@@ -658,7 +710,7 @@ def build_global_json_sandbox(backend: str, potential: str = None,
             "app_key": os.environ.get("BOHRIUM_APP_KEY", "agent"),
         },
         "apex_image_name": APEX_IMAGE,
-        "lammps_image_name": lammps_image,
+        "lammps_image_name": selected_lammps_image,
         "lammps_run_command": calc_run_command,
         "group_size": 1,
         "pool_size": 1,
@@ -830,6 +882,19 @@ def build_interaction(backend: str, potential: str = None,
         return interaction
     else:
         raise ValueError(f"Unknown backend: {backend}")
+
+
+def stage_lammps_model(model: str, output_dir: Path) -> str:
+    """Copy a LAMMPS model into the job root and return its relative name."""
+    if not model:
+        raise ValueError("--model required for LAMMPS backend")
+    source = Path(model).expanduser()
+    if not source.is_file():
+        raise FileNotFoundError(f"LAMMPS model not found: {source}")
+    destination = Path(output_dir) / source.name
+    shutil.copy2(source, destination)
+    print(f"Copied model to {destination}")
+    return destination.name
 
 
 def resolve_source_potcar_file(prefix: Path, entry: str) -> Path:
@@ -1143,7 +1208,8 @@ def plan_structure_layout(sources: list) -> list:
 def build_param_json(structure_paths, interaction: dict,
                      properties: list, flow_type: str = "joint",
                      relaxation_settings: dict = None,
-                     gamma_overrides: dict = None) -> dict:
+                     gamma_overrides: dict = None,
+                     property_configs: list = None) -> dict:
     """Build param.json configuration.
 
     structure_paths: one path string or a list of path strings for `structures`.
@@ -1183,6 +1249,9 @@ def build_param_json(structure_paths, interaction: dict,
 
     # Properties
     if flow_type in ("joint", "props"):
+        if property_configs is not None:
+            param["properties"] = copy.deepcopy(property_configs)
+            return param
         prop_configs = []
         is_dft = interaction.get("type") in ("abacus", "vasp")
         for prop_name in properties:
@@ -1204,6 +1273,36 @@ def build_param_json(structure_paths, interaction: dict,
         param["properties"] = prop_configs
 
     return param
+
+
+def load_confirmed_property_configs(path: str, requested: list) -> list:
+    """Load an approved property list and select entries in requested order."""
+    source = Path(path).expanduser()
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    configs = payload.get("properties") if isinstance(payload, dict) else payload
+    if not isinstance(configs, list) or not all(
+        isinstance(item, dict) and isinstance(item.get("type"), str)
+        for item in configs
+    ):
+        raise ValueError(
+            "--property-config must be a JSON list of property objects or "
+            "an object containing a 'properties' list"
+        )
+    by_type = {}
+    for item in configs:
+        prop_type = item["type"]
+        if prop_type in by_type:
+            raise ValueError(
+                f"--property-config contains duplicate type: {prop_type}"
+            )
+        by_type[prop_type] = item
+    missing = [prop_type for prop_type in requested if prop_type not in by_type]
+    if missing:
+        raise ValueError(
+            "--property-config is missing requested properties: "
+            + ", ".join(missing)
+        )
+    return [copy.deepcopy(by_type[prop_type]) for prop_type in requested]
 
 
 def _normalized_numeric_sequence(values):
@@ -1454,6 +1553,13 @@ def main():
     create.add_argument("--properties", nargs="+", required=True,
                         help="Property types to calculate")
     create.add_argument(
+        "--property-config",
+        help=(
+            "Confirmed JSON property list (or object with a properties list). "
+            "Requested --properties are selected in command-line order."
+        ),
+    )
+    create.add_argument(
         "--gamma-plane-miller", nargs="+", type=float,
         help="Gamma slip-plane indices in the actual input-cell basis",
     )
@@ -1517,6 +1623,13 @@ def main():
                         help="Override scass_type for inner dflow containers (legacy Bohrium)")
     create.add_argument("--run-command",
                         help="Override calculator run command")
+    create.add_argument(
+        "--lammps-image",
+        help=(
+            "Explicit LAMMPS calculator image. The image × machine pair is "
+            "validated before config generation."
+        ),
+    )
     create.add_argument(
         "--vasp-image",
         help=(
@@ -1606,6 +1719,8 @@ def main():
     # -------------------------------------------------------------------------
     gamma_overrides = gamma_overrides_from_args(args)
     errors = validate_config(args.backend, args.potential, args.properties)
+    if args.lammps_image and args.backend != "lammps":
+        errors.append("--lammps-image is only valid with --backend lammps")
     errors.extend(
         validate_gamma_cli_options(args.properties, gamma_overrides)
     )
@@ -1613,6 +1728,16 @@ def main():
         for err in errors:
             print(f"ERROR: {err}", file=sys.stderr)
         sys.exit(1)
+
+    confirmed_property_configs = None
+    if args.property_config:
+        try:
+            confirmed_property_configs = load_confirmed_property_configs(
+                args.property_config, args.properties
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     # -------------------------------------------------------------------------
     # Sanitize workflow name (RFC 1123)
@@ -1655,6 +1780,7 @@ def main():
             machine_type=getattr(args, "machine_type", None),
             run_command=args.run_command,
             vasp_image=args.vasp_image,
+            lammps_image=args.lammps_image,
         )
         print(f"Sandbox config built: machine_type={global_config['machine_type']}")
     else:
@@ -1667,6 +1793,7 @@ def main():
             scass_type=args.scass_type,
             run_command=args.run_command,
             vasp_image=args.vasp_image,
+            lammps_image=args.lammps_image,
         )
         validate_project_id_types(global_config)
         print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
@@ -1684,11 +1811,13 @@ def main():
         shutil.copy2(item["source"], dest_file)
         print(f"Copied structure to {dest_file}")
 
-    # Copy model file if specified
-    if args.model and os.path.exists(args.model):
-        model_dest = output_dir / os.path.basename(args.model)
-        shutil.copy2(args.model, model_dest)
-        print(f"Copied model to {model_dest}")
+    staged_model = args.model
+    if args.backend == "lammps":
+        try:
+            staged_model = stage_lammps_model(args.model, output_dir)
+        except (OSError, ValueError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
 
     # Stage VASP POTCAR (+ INCAR) into the job. Absolute host libraries such as
     # /share/PAW_PBE are invisible inside Bohrium/dflow containers.
@@ -1778,7 +1907,7 @@ mixing_beta         0.7
     interaction = build_interaction(
         backend=args.backend,
         potential=args.potential,
-        model=args.model,
+        model=staged_model,
         incar=staged_incar,
         potcar_prefix=staged_prefix,
         potcars=staged_potcars,
@@ -1790,6 +1919,7 @@ mixing_beta         0.7
         args.properties,
         args.flow_type,
         gamma_overrides=gamma_overrides,
+        property_configs=confirmed_property_configs,
     )
 
     # -------------------------------------------------------------------------

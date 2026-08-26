@@ -77,7 +77,7 @@ class Config:
     exclude_upload_files: list = field(default_factory=list)
     lammps_image_name: str = (
         "registry.dp.tech/dptech/dp/native/prod-397637/"
-        "deepmd-kit-phonolammps:3.1.3"
+        "apex-flow:1.3.0.post"
     )
     lammps_run_command: str = None
     phonolammps_run_command: str = None

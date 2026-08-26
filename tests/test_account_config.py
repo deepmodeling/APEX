@@ -17,11 +17,11 @@ from apex.utils import load_config_file
 
 
 class TestAccountConfig(unittest.TestCase):
-    def test_config_default_lammps_image_is_old_phonolammps_runtime(self):
+    def test_config_default_lammps_image_is_cpu_safe_runtime(self):
         self.assertEqual(
             Config().lammps_image_name,
             "registry.dp.tech/dptech/dp/native/prod-397637/"
-            "deepmd-kit-phonolammps:3.1.3",
+            "apex-flow:1.3.0.post",
         )
 
     def test_merge_bohrium_defaults_for_bohrium_config_file(self):

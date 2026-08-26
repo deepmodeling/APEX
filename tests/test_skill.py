@@ -187,8 +187,22 @@ class TestValidateApexCombo(unittest.TestCase):
 
     def test_recommend_lammps_gpu(self):
         rec = self.combo.recommend("lammps", "gpu")
-        self.assertIn("3.1.3", rec["image"])
-        self.assertIn("T4", rec["scass_type"])
+        self.assertIn("dpa4-phonolammps:0.0.2", rec["image"])
+        self.assertIn("4090", rec["scass_type"])
+
+    def test_recommend_lammps_cpu_uses_apex_flow(self):
+        rec = self.combo.recommend("lammps", "cpu")
+        self.assertIn("apex-flow:1.3.0.post", rec["image"])
+        self.assertIn("_cpu", rec["scass_type"])
+
+    def test_dpa4_image_is_blocked_on_cpu(self):
+        ok, errors = self.combo.check_combo(
+            "registry.dp.tech/dptech/dp/native/prod-16664/"
+            "dpa4-phonolammps:0.0.2",
+            "c8_m32_cpu",
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("DPA4 image" in error for error in errors))
 
     def test_cli_check_exit_codes(self):
         self.assertEqual(
@@ -255,11 +269,18 @@ class TestGenerateConfigProjectId(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn('add_argument("--type-map"', source)
 
-    def test_lammps_default_uses_validated_phonolammps_image(self):
+    def test_lammps_gpu_default_uses_validated_phonolammps_image(self):
         self.assertEqual(
-            self.gen.LAMMPS_IMAGE,
+            self.gen.LAMMPS_GPU_IMAGE,
+            "registry.dp.tech/dptech/dp/native/prod-16664/"
+            "dpa4-phonolammps:0.0.2",
+        )
+
+    def test_lammps_cpu_default_uses_apex_flow_image(self):
+        self.assertEqual(
+            self.gen.LAMMPS_CPU_IMAGE,
             "registry.dp.tech/dptech/dp/native/prod-397637/"
-            "deepmd-kit-phonolammps:3.1.3",
+            "apex-flow:1.3.0.post",
         )
 
     def test_combo_validator_has_no_property_cli(self):

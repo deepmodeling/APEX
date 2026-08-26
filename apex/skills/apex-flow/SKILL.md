@@ -1,6 +1,6 @@
 ---
 name: apex-flow
-description: Batch multi-property materials calculations (EOS, 0K elastic constant, surface energy, phonon, finite temperature elastic constant, gamma surface, gamma line, cohesive energy) and random-solid-solution structure generation via APEX calculator backends VASP/ABACUS/LAMMPS. The bundled DPA-3.2-5M OMat24 model is a DeePMD potential for LAMMPS. Use when the user mentions APEX, apex, alloy property, generate/give random solid solution, generate/give solid solution, generate/give high-entropy alloy, generate/give high-entropy oxide, generate/give high-entropy material, or multi-property DFT/MLIP screening.
+description: Batch multi-property materials calculations (EOS, elastic, surface, defects, phonon, Grüneisen thermal expansion, finite-temperature properties, gamma, cohesive, and melting point) and random-solid-solution generation via APEX calculator backends VASP/ABACUS/LAMMPS. Supports DPA/DeePMD with the validated DPA4 phonoLAMMPS runtime. Use when the user mentions APEX, apex, alloy properties, DPA property workflows, random/high-entropy solid solutions, or multi-property DFT/MLIP screening.
 ---
 
 # APEX Flow — Alloy Properties EXplorer
@@ -139,10 +139,10 @@ Options to offer via AskQuestion:
   ```bash
    python scripts/validate_apex_combo.py list-combos --backend lammps --prefer gpu
    python scripts/validate_apex_combo.py check \
-     --image registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3 \
-     --scass "c8_m31_1 * NVIDIA T4"
+     --image registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2 \
+     --scass "c8_m32_1 * NVIDIA 4090"
   ```
-   Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, the combination `deepmd-kit:3.1.1` × `NVIDIA T4`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`. The default LAMMPS image is `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`; `apex submit` enforces it for LAMMPS phonon and Grüneisen workflows.
+   Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, the combination `deepmd-kit:3.1.1` × `NVIDIA T4`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`. GPU LAMMPS potentials (`deepmd`, `mace`, `nep`) use `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` with RTX 4090. CPU LAMMPS potentials use `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`; never pair 0.0.2 with a `*_cpu` machine because sequential CPU validation stalled before the container command started. `apex submit` only enforces 0.0.2 for GPU-potential phonon and Grüneisen workflows. Do not emit `plugin load libdeepmd_lmp.so` for 0.0.2.
 10. **MUST use the bundled frozen DPA model under** `models/` **for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill ships
    `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`, a ready-to-run frozen
    DPA-3.2-5M OMat24 model. Copy it into the job directory before generating
@@ -262,7 +262,7 @@ Options to offer via AskQuestion:
 
 
 
-## Supported Properties (14 types)
+## Supported Properties (15 types)
 
 
 | Type             | JSON `type` value  | Backend     | Description                               |
@@ -281,6 +281,7 @@ Options to offer via AskQuestion:
 | Finite-T elastic | `finite_t_elastic` | LAMMPS only | Elastic constants at finite temperature   |
 | Grüneisen        | `gruneisen`        | All         | Grüneisen parameters & thermal expansion  |
 | Annealing        | `annealing`        | LAMMPS/VASP | Heat-hold-quench MD cycle                 |
+| Melting point    | `melting_point`     | LAMMPS only | Two-phase coexistence melting bracket     |
 
 
 > See `reference/properties.md` for full parameter details of each property.
@@ -336,10 +337,10 @@ See `reference/submission.md` for the full validated template.
 
 ## Key Additional Rules
 
-1. **Finite-temperature backend limits**: `finite_t_elastic` is LAMMPS-only. `finite_t_latt` and `annealing` support LAMMPS and VASP, but not ABACUS. VASP uses `MDALGO=3` and requires a binary compiled with `-Dtbdyn`; annealing `protocol="coexistence"` is a fixed-temperature equilibration plus production run.
+1. **Finite-temperature backend limits**: `finite_t_elastic` and `melting_point` are LAMMPS-only. `finite_t_latt` and `annealing` support LAMMPS and VASP, but not ABACUS. VASP uses `MDALGO=3` and requires a binary compiled with `-Dtbdyn`; annealing `protocol="coexistence"` is a fixed-temperature equilibration plus production run.
 2. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
 3. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
-4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m31_1 * NVIDIA T4"`).
+4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m32_1 * NVIDIA 4090"`).
 5. **Supercell sizing depends on the input atom count, not only the default JSON.**
    Treat defaults as targets for **unit-cell inputs**. First inspect the user's
    structure; if it is already large enough, prefer `[1,1,1]` after confirmation.
@@ -405,7 +406,7 @@ Successfully validated workflow (ID: `cu-fcc-elastic-v3-joint-sdfml`):
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `reference/submission.md`        | Authentication (ticket API + refresh), run.sh template, Bohrium config (images/machines), global.json template, RFC 1123 naming, submission lifecycle |
 | `reference/workflow-control.md`  | Running-task status/count format, live Argo link, stopping/killing procedure, and structure validation                                                |
-| `reference/properties.md`        | Complete parameter reference for all 14 property types                                                                                                |
+| `reference/properties.md`        | Complete parameter reference for all 15 property types                                                                                                |
 | `reference/calculators.md`       | Detailed backend configuration (VASP, ABACUS, LAMMPS)                                                                                                 |
 | `reference/lammps_potentials.md` | LAMMPS potential type details and examples                                                                                                            |
 | `reference/rss_workflow.md`      | RSS structure generation workflow                                                                                                                     |

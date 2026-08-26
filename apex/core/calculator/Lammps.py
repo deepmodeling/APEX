@@ -474,6 +474,23 @@ class Lammps(Task):
         if task_type in ["annealing", "Annealing", "melting_point"]:
             return None
 
+        status_path = os.path.join(output_dir, "apex_task_status.json")
+        if os.path.isfile(status_path):
+            try:
+                task_status = loadfn(status_path)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"cannot parse LAMMPS task status {status_path}: {exc}"
+                ) from exc
+            if task_status.get("state") != "succeeded":
+                raise RuntimeError(
+                    "LAMMPS task failed before post-processing: "
+                    f"state={task_status.get('state')!r}, "
+                    f"reason={task_status.get('reason')!r}, "
+                    f"exit_code={task_status.get('exit_code')!r}, "
+                    f"message={task_status.get('message')!r}"
+                )
+
         log_lammps = os.path.join(output_dir, "log.lammps")
         dump_lammps = os.path.join(output_dir, "dump.relax")
         if not os.path.isfile(log_lammps) or not os.path.isfile(dump_lammps):
@@ -503,6 +520,7 @@ class Lammps(Task):
         with open(dump_lammps, "r") as fin:
             dump = fin.read().split("\n")
         dumptime = []
+        type_list = []
         for idx, ii in enumerate(dump):
             if ii == "ITEM: TIMESTEP":
                 box.append([])
@@ -554,6 +572,10 @@ class Lammps(Task):
                     fz = float(dump[idx + 9 + jj].split()[7])
                     force[-1].append([fx, fy, fz])
         
+        if not dumptime:
+            raise RuntimeError(
+                f"LAMMPS dump contains no TIMESTEP frames: {dump_lammps}"
+            )
         return dumptime, type_list
     
     def _check_lammps_finished(self, log_lammps):

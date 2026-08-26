@@ -102,11 +102,25 @@ Each requires specific configuration in `param.json` under the `"interaction"` k
 
 ### ⚠️ LAMMPS Image Version
 
-Default image: `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`
+GPU image (`deepmd`, `mace`, `nep`):
+`registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`
+
+CPU image (`gap`, `snap`, `rann`, `eam_alloy`, `eam_fs`, `meam`,
+`meam_spline`):
+`registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`
+
+This image uses integrated USER-DEEPMD and CUDA 12.8. Do not add
+`plugin load libdeepmd_lmp.so`; the plugin command is unsupported. Its unified
+`lmp` entry dispatches RTX 4090/L20-class GPUs to the sm89 build and RTX 5090
+to sm120. The 4090 path is validated; test sm120 on a real 5090 before relying
+on that path.
 
 > ⚠️ **Do NOT use `deepmd-kit:3.1.1` with GPU/T4** — known startup / triclinic issues. Prefer `3.1.3` or later.
 
-> **LAMMPS phonon and Grüneisen**: `apex submit` forces the validated default image above. It supports the tested NVIDIA T4 configuration and includes phonoLAMMPS.
+> **LAMMPS phonon and Grüneisen**: for GPU potentials, `apex submit` forces
+> the DPA4 image above. It is validated on RTX 4090 and includes phonoLAMMPS.
+> CPU potentials keep the CPU image. Do not use the DPA4 image on a CPU
+> machine; sequential CPU jobs stalled during container preparation.
 
 ### DPA-3.2-5M Multi-Head Model Preparation
 
@@ -636,9 +650,9 @@ Before submit:
 
 | Workload | Bohrium Machine | Rationale |
 |----------|----------------|-----------|
-| LAMMPS + GPU potential (DeePMD/MACE/NEP) | `c8_m31_1 * NVIDIA T4` | GPU acceleration |
+| LAMMPS + GPU potential (DeePMD/MACE/NEP) | `c8_m32_1 * NVIDIA 4090` | GPU acceleration |
 | LAMMPS + CPU potential (EAM/MEAM/SNAP) | `c16_m32_cpu` | CPU sufficient |
 | ABACUS DFT (small cell <50 atoms) | `c16_m32_cpu` | 8 MPI ranks |
 | ABACUS DFT (large cell 50-200 atoms) | `c32_m128_cpu` | 16-32 MPI ranks |
 | VASP DFT | User choice | Depends on system size |
-| Finite-T MD (long runs) | `c8_m31_1 * NVIDIA T4` | Long MD = GPU beneficial |
+| Finite-T MD (long runs) | `c8_m32_1 * NVIDIA 4090` | Long MD = GPU beneficial |

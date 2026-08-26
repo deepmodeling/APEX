@@ -157,6 +157,15 @@ class TestGenerateConfigHelpers(unittest.TestCase):
                     self.assertEqual(config["program_id"], 42)
                     self.assertEqual(config["scass_type"], expected_scass)
                     self.assertIn(command, config["lammps_run_command"])
+                    if backend == "lammps":
+                        expected_image = (
+                            self.gen.LAMMPS_GPU_IMAGE
+                            if potential in self.gen.GPU_POTENTIALS
+                            else self.gen.LAMMPS_CPU_IMAGE
+                        )
+                        self.assertEqual(
+                            config["lammps_image_name"], expected_image
+                        )
             self.assertEqual(validate.call_count, len(cases))
 
     def test_build_global_json_backend_fields_and_overrides(self):
@@ -191,6 +200,69 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             vasp_with_image["vasp_image_name"],
             "registry.example/private/vasp:licensed",
         )
+
+    def test_build_global_json_sandbox_routes_lammps_images(self):
+        gpu = self.gen.build_global_json_sandbox(
+            "lammps", "deepmd", access_key="key", project_id=42
+        )
+        cpu = self.gen.build_global_json_sandbox(
+            "lammps", "eam_alloy", access_key="key", project_id=42
+        )
+
+        self.assertEqual(gpu["lammps_image_name"], self.gen.LAMMPS_GPU_IMAGE)
+        self.assertEqual(gpu["image_address"], self.gen.LAMMPS_GPU_IMAGE)
+        self.assertEqual(
+            gpu["machine_type"],
+            self.gen.SANDBOX_MACHINE_TYPES["lammps_gpu"],
+        )
+        self.assertEqual(cpu["lammps_image_name"], self.gen.LAMMPS_CPU_IMAGE)
+        self.assertEqual(cpu["image_address"], self.gen.LAMMPS_CPU_IMAGE)
+        self.assertEqual(
+            cpu["machine_type"],
+            self.gen.SANDBOX_MACHINE_TYPES["lammps_cpu"],
+        )
+
+    def test_explicit_lammps_image_supports_cpu_deepmd(self):
+        image = (
+            "registry.dp.tech/dptech/dp/native/prod-397637/"
+            "deepmd-kit-phonolammps:3.1.3"
+        )
+        config = self.gen.build_global_json_sandbox(
+            "lammps",
+            "deepmd",
+            access_key="key",
+            project_id=42,
+            machine_type="c8_m32_cpu",
+            lammps_image=image,
+        )
+        self.assertEqual(config["lammps_image_name"], image)
+        self.assertEqual(config["image_address"], image)
+
+    def test_load_confirmed_property_configs_filters_in_requested_order(self):
+        payload = {
+            "properties": [
+                {"type": "eos", "vol_step": 0.02},
+                {"type": "phonon", "supercell_size": [3, 3, 3]},
+            ]
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "confirmed.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            configs = self.gen.load_confirmed_property_configs(
+                str(path), ["phonon", "eos"]
+            )
+        self.assertEqual([item["type"] for item in configs], ["phonon", "eos"])
+        self.assertEqual(configs[0]["supercell_size"], [3, 3, 3])
+
+    def test_build_param_json_uses_confirmed_property_configs_exactly(self):
+        confirmed = [{"type": "eos", "vol_step": 0.02}]
+        param = self.gen.build_param_json(
+            "confs/input",
+            {"type": "deepmd", "model": "model.pth"},
+            ["eos"],
+            property_configs=confirmed,
+        )
+        self.assertEqual(param["properties"], confirmed)
 
     def test_build_global_json_requires_access_key_and_propagates_combo_error(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -240,6 +312,19 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         self.assertEqual(vasp["potcar_prefix"], ".")
         with self.assertRaisesRegex(ValueError, "Unknown backend"):
             self.gen.build_interaction("unknown")
+
+    def test_stage_lammps_model_copies_and_returns_basename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source_dir = root / "source"
+            output_dir = root / "job"
+            source_dir.mkdir()
+            output_dir.mkdir()
+            source = source_dir / "model.pt2"
+            source.write_bytes(b"dpa4")
+            staged = self.gen.stage_lammps_model(str(source), output_dir)
+            self.assertEqual(staged, "model.pt2")
+            self.assertEqual((output_dir / staged).read_bytes(), b"dpa4")
 
     def test_build_param_json_flow_types_and_dft_overrides(self):
         lammps = {"type": "deepmd"}
@@ -538,6 +623,7 @@ class TestValidateInputs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.validator = _load_script("validate_inputs.py")
+        cls.gen = _load_script("generate_config.py")
 
     def test_validate_global(self):
         errors, warnings = self.validator.validate_global({})
@@ -628,6 +714,45 @@ class TestValidateInputs(unittest.TestCase):
         ]
         errors, _ = self.validator.validate_global(local_cluster)
         self.assertTrue(any("placeholders" in error for error in errors))
+
+    def test_validate_global_openapi_sandbox(self):
+        config = {
+            "dflow_host": "https://lbg-workflow-dflow.dp.tech",
+            "k8s_api_server": "https://lbg-workflow-dflow.dp.tech",
+            "dflow_config": {
+                "host": "https://lbg-workflow-dflow.dp.tech",
+                "k8s_api_server": "https://lbg-workflow-dflow.dp.tech",
+                "namespace": "dflow",
+                "token": "",
+            },
+            "batch_type": "OpenAPI",
+            "context_type": "OpenAPI",
+            "access_key": "test-key",
+            "project_id": 42,
+            "machine_type": "c8_m32_1 * NVIDIA 4090",
+            "image_address": self.gen.LAMMPS_IMAGE,
+            "dispatcher_image": "dispatcher:image",
+            "bohrium_config": {
+                "access_key": "test-key",
+                "project_id": 42,
+                "app_key": "agent",
+            },
+            "lammps_image_name": self.gen.LAMMPS_IMAGE,
+            "lammps_run_command": "lmp -in in.lammps",
+        }
+        self.assertEqual(self.validator.validate_global(config), ([], []))
+        config["bohrium_config"]["project_id"] = "42"
+        errors, _ = self.validator.validate_global(config)
+        self.assertTrue(any("bohrium_config.project_id" in e for e in errors))
+
+    def test_validate_melting_point_property(self):
+        prop = self.gen.PROPERTY_DEFAULTS["melting_point"]
+        self.assertEqual(
+            self.validator.validate_properties([prop], "deepmd"),
+            ([], []),
+        )
+        errors, _ = self.validator.validate_properties([prop], "vasp")
+        self.assertTrue(any("LAMMPS-only" in e for e in errors))
 
     def test_validate_current_global_requires_integer_matching_project_ids(self):
         config = {
