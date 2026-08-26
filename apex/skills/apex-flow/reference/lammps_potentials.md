@@ -218,9 +218,9 @@ manual map.
 
 | Potential Type | Recommended Image | GPU? |
 |---------------|-------------------|------|
-| deepmd | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (RTX 4090) |
-| mace | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (RTX 4090) |
-| nep | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (RTX 4090) |
+| deepmd | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (NVIDIA L20 default; RTX 4090 compatible) |
+| mace | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (NVIDIA L20 default; RTX 4090 compatible) |
+| nep | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (NVIDIA L20 default; RTX 4090 compatible) |
 | gap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No (CPU) |
 | snap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
 | rann | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |

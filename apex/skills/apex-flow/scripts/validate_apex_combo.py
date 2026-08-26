@@ -9,7 +9,7 @@ Usage:
     python validate_apex_combo.py list-combos --backend lammps --prefer gpu
     python validate_apex_combo.py check \\
         --image registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2 \\
-        --scass "c8_m32_1 * NVIDIA 4090"
+        --scass "c16_m120_1 * NVIDIA L20"
     python validate_apex_combo.py recommend --backend lammps --prefer cpu
 """
 
@@ -77,6 +77,7 @@ RECOMMENDED_SCASS = {
         "c8_m32_cpu",
     ],
     "lammps_gpu": [
+        "c16_m120_1 * NVIDIA L20",
         "c8_m32_1 * NVIDIA 4090",
         "c8_m31_1 * NVIDIA T4",
         "c4_m15_1 * NVIDIA T4",
@@ -200,7 +201,7 @@ def list_combos(backend: str = "lammps", prefer: str = "cpu") -> dict:
         "notes": [
             "Always validate image×scass before writing global.json / submitting.",
             "Outer Bohrium job should use c1_m2_cpu, never GPU.",
-            "DPA4 image 0.0.2 is validated on RTX 4090 for LAMMPS, phonon, and Grüneisen.",
+            "DPA4 image 0.0.2 is validated on NVIDIA L20 and RTX 4090; L20 is the default GPU resource.",
             "DPA4 image 0.0.2 is blocked on CPU machines after sequential deployment timeouts.",
             "For triclinic cells, avoid deepmd-kit:3.1.1; prefer the DPA4 0.0.2 image.",
         ],

@@ -4,8 +4,8 @@
     "backends": {
         "lammps_gpu": {
             "image": "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
-            "machine": "c8_m32_1 * NVIDIA 4090",
-            "machine_sandbox": "c8_m32_1 * NVIDIA 4090",
+            "machine": "c16_m120_1 * NVIDIA L20",
+            "machine_sandbox": "c16_m120_1 * NVIDIA L20",
             "potentials": ["deepmd", "mace", "nep"]
         },
         "lammps_cpu": {
@@ -30,7 +30,7 @@
     },
     "sandbox_machines": {
         "cpu": ["c2_m4_cpu", "c2_m8_cpu", "c8_m32_cpu", "c32_m128_cpu", "c64_m256_cpu"],
-        "gpu": ["c8_m32_1 * NVIDIA 4090", "c16_m64_1 * NVIDIA 4090", "c16_m64_1 * NVIDIA 5090"]
+        "gpu": ["c16_m120_1 * NVIDIA L20", "c8_m32_1 * NVIDIA 4090", "c16_m64_1 * NVIDIA 4090", "c16_m64_1 * NVIDIA 5090"]
     },
     "properties": {
         "eos": {"lammps": true, "abacus": true, "vasp": true},

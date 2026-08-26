@@ -8,6 +8,7 @@ from unittest.mock import patch
 from apex.account import (
     BOHRIUM_WORKFLOWS_HOST,
     DEFAULT_BOHRIUM_CONFIG,
+    DEFAULT_OPENAPI_CONFIG,
     account_from_args,
     merge_bohrium_defaults,
     prompt_for_account_fields,
@@ -22,6 +23,12 @@ class TestAccountConfig(unittest.TestCase):
             Config().lammps_image_name,
             "registry.dp.tech/dptech/dp/native/prod-397637/"
             "apex-flow:1.3.0.post",
+        )
+
+    def test_openapi_default_gpu_machine_is_l20(self):
+        self.assertEqual(
+            DEFAULT_OPENAPI_CONFIG["machine_type"],
+            "c16_m120_1 * NVIDIA L20",
         )
 
     def test_merge_bohrium_defaults_for_bohrium_config_file(self):

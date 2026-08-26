@@ -217,7 +217,7 @@ def select_lammps_image(potential: str = None) -> str:
 
 # scass_type defaults for inner dflow containers (legacy Bohrium)
 SCASS_TYPES = {
-    "lammps_gpu": "c8_m32_1 * NVIDIA 4090",
+    "lammps_gpu": "c16_m120_1 * NVIDIA L20",
     "lammps_cpu": "c16_m32_cpu",
     "abacus": "c16_m32_cpu",
     "vasp": "c32_m128_cpu",
@@ -225,7 +225,7 @@ SCASS_TYPES = {
 
 # machine_type defaults for OpenAPI Sandbox
 SANDBOX_MACHINE_TYPES = {
-    "lammps_gpu": "c8_m32_1 * NVIDIA 4090",
+    "lammps_gpu": "c16_m120_1 * NVIDIA L20",
     "lammps_cpu": "c8_m32_cpu",
     "abacus": "c8_m32_cpu",
     "vasp": "c32_m128_cpu",
@@ -1618,7 +1618,7 @@ def main():
     create.add_argument("--sandbox", action="store_true",
                         help="Use OpenAPI Sandbox mode (access_key auth, no ticket)")
     create.add_argument("--machine-type",
-                        help="Override machine_type for sandbox (e.g. 'c8_m32_1 * NVIDIA 4090')")
+                        help="Override machine_type for sandbox (e.g. 'c16_m120_1 * NVIDIA L20')")
     create.add_argument("--scass-type",
                         help="Override scass_type for inner dflow containers (legacy Bohrium)")
     create.add_argument("--run-command",

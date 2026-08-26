@@ -140,9 +140,9 @@ Options to offer via AskQuestion:
    python scripts/validate_apex_combo.py list-combos --backend lammps --prefer gpu
    python scripts/validate_apex_combo.py check \
      --image registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2 \
-     --scass "c8_m32_1 * NVIDIA 4090"
+     --scass "c16_m120_1 * NVIDIA L20"
   ```
-   Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, the combination `deepmd-kit:3.1.1` × `NVIDIA T4`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`. GPU LAMMPS potentials (`deepmd`, `mace`, `nep`) use `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` with RTX 4090. CPU LAMMPS potentials use `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`; never pair 0.0.2 with a `*_cpu` machine because sequential CPU validation stalled before the container command started. `apex submit` only enforces 0.0.2 for GPU-potential phonon and Grüneisen workflows. Do not emit `plugin load libdeepmd_lmp.so` for 0.0.2.
+   Do **not** hardcode an unverified `scass_type`. Prefer `recommend` / `list-combos` output. Known failures include `deepmd-kit:3.1.0`, `3.1.1-cuda12.1`, `3.1.2`, the combination `deepmd-kit:3.1.1` × `NVIDIA T4`, `c4_m16_cpu`, and `c12_m46_1 * NVIDIA T4`. GPU LAMMPS potentials (`deepmd`, `mace`, `nep`) use `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` with NVIDIA L20 by default; RTX 4090 remains a validated compatible option. CPU LAMMPS potentials use `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`; never pair 0.0.2 with a `*_cpu` machine because sequential CPU validation stalled before the container command started. `apex submit` only enforces 0.0.2 for GPU-potential phonon and Grüneisen workflows. Do not emit `plugin load libdeepmd_lmp.so` for 0.0.2.
 10. **MUST use the bundled frozen DPA model under** `models/` **for LAMMPS + DeePMD unless the user explicitly requests another compatible model.** The skill ships
    `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`, a ready-to-run frozen
    DPA-3.2-5M OMat24 model. Copy it into the job directory before generating
@@ -340,7 +340,7 @@ See `reference/submission.md` for the full validated template.
 1. **Finite-temperature backend limits**: `finite_t_elastic` and `melting_point` are LAMMPS-only. `finite_t_latt` and `annealing` support LAMMPS and VASP, but not ABACUS. VASP uses `MDALGO=3` and requires a binary compiled with `-Dtbdyn`; annealing `protocol="coexistence"` is a fixed-temperature equilibration plus production run.
 2. **Model files must be in job directory.** For MLIP workflows, the model file (`.pb`, `.pth`, `.model`, etc.) must be present in the submitted directory. Use relative paths in `param.json`. For DeePMD/DPA, copy `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`. Default to `"type_map": "auto"` for every LAMMPS interaction; specify a dictionary only when the user explicitly needs a fixed custom ordering.
 3. **Joint workflow recommended.** Use `joint` flow (relaxation + properties) for most use cases to ensure proper relaxation before property calculations.
-4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c8_m32_1 * NVIDIA 4090"`).
+4. **GPU for ML potentials.** DeePMD, MACE, and NEP benefit from GPU acceleration. Set `scass_type` to a validated GPU SKU from `validate_apex_combo.py recommend --prefer gpu` (default: `"c16_m120_1 * NVIDIA L20"`; RTX 4090 remains compatible).
 5. **Supercell sizing depends on the input atom count, not only the default JSON.**
    Treat defaults as targets for **unit-cell inputs**. First inspect the user's
    structure; if it is already large enough, prefer `[1,1,1]` after confirmation.
