@@ -119,7 +119,7 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | Role | Image | Notes |
 |------|-------|-------|
 | **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Lightweight; just runs `apex submit` |
-| **LAMMPS calculator (GPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | RTX 4090; includes phonoLAMMPS |
+| **LAMMPS calculator (GPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | NVIDIA L20 default; RTX 4090 compatible; includes phonoLAMMPS |
 | **LAMMPS calculator (CPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | EAM/MEAM/SNAP/GAP/RANN CPU backend |
 | **ABACUS calculator** | (same APEX image has ABACUS) | Or user-specified |
 | **VASP calculator** | User must provide after confirming license | Commercial; **never invent a default image** |
@@ -135,7 +135,7 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 
 | Backend | scass_type (inner containers) | Notes |
 |---------|-------------------------------|-------|
-| LAMMPS (DeePMD/MACE/NEP) | `c8_m32_1 * NVIDIA 4090` | GPU beneficial |
+| LAMMPS (DeePMD/MACE/NEP) | `c16_m120_1 * NVIDIA L20` | Validated sm89 default; RTX 4090 remains compatible |
 | LAMMPS (EAM/MEAM/SNAP) | `c16_m32_cpu` | CPU sufficient |
 | ABACUS | `c16_m32_cpu` | CPU |
 | VASP | `c32_m128_cpu` (default) | Align `mpirun -n <N>` with CPU count |
@@ -216,7 +216,7 @@ Do not upload or submit unless validation reports `Validation PASSED` and both
 project ID lines report `type=int`. Submit the newly validated directory as a
 new outer Bohrium job; retrying an old outer job reuses its old input snapshot.
 
-> For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c8_m32_1 * NVIDIA 4090"`.
+> For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c16_m120_1 * NVIDIA L20"` by default; RTX 4090 remains compatible.
 > Before submitting, run `scripts/validate_apex_combo.py check` on the chosen image × scass_type.
 
 ## Agent-Managed Submission Workflow (Complete Lifecycle)

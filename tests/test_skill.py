@@ -188,7 +188,7 @@ class TestValidateApexCombo(unittest.TestCase):
     def test_recommend_lammps_gpu(self):
         rec = self.combo.recommend("lammps", "gpu")
         self.assertIn("dpa4-phonolammps:0.0.2", rec["image"])
-        self.assertIn("4090", rec["scass_type"])
+        self.assertIn("L20", rec["scass_type"])
 
     def test_recommend_lammps_cpu_uses_apex_flow(self):
         rec = self.combo.recommend("lammps", "cpu")

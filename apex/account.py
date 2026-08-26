@@ -27,7 +27,7 @@ DEFAULT_OPENAPI_CONFIG = {
     "batch_type": "OpenAPI",
     "context_type": "OpenAPI",
     "platform": "ali",
-    "machine_type": "c8_m32_1 * NVIDIA 4090",
+    "machine_type": "c16_m120_1 * NVIDIA L20",
     "output_log": False,
     "dispatcher_image": SANDBOX_DISPATCHER_IMAGE,
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
