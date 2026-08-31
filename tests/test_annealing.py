@@ -8,6 +8,7 @@ import pytest
 from monty.serialization import dumpfn, loadfn
 
 from apex.archive import ResultStorage
+from apex.core.calculator.VASP import VASP
 from apex.core.calculator.lib import lammps_utils
 from apex.core.property.Annealing import Annealing
 from apex.reporter.DashReportApp import DashReportApp, return_prop_class, return_prop_type
@@ -19,6 +20,17 @@ TEST_CONTCAR = os.path.join(
 )
 TYPE_MAP = {"Ti": 0}
 PARAM = {"type": "deepmd"}
+TEST_POSCAR = """Si
+1.0
+5.0 0.0 0.0
+0.0 5.0 0.0
+0.0 0.0 5.0
+Si
+2
+Direct
+0.0 0.0 0.0
+0.5 0.5 0.5
+"""
 
 
 def dummy_interaction(param):
@@ -51,7 +63,7 @@ def test_annealing_default_parameter_parsing():
     assert prop.supercell_size == [2, 2, 2]
 
     task_param = prop.task_param()
-    assert task_param["cal_type"] == "annealing"
+    assert task_param["cal_type"] == "static"
     assert task_param["cal_setting"]["rdf_bins"] == 100
     assert task_param["cal_setting"]["rdf_cutoff"] == 6.0
     assert task_param["cal_setting"]["req_compute_rdf"] is True
@@ -342,6 +354,245 @@ def test_annealing_compute_lower_extracts_rdf_msd_and_volume_temperature(tmp_pat
     }
 
 
+def test_annealing_compute_lower_extracts_vasp_trajectory(tmp_path):
+    task_dir = tmp_path / "task.000000"
+    task_dir.mkdir()
+    dumpfn(
+        {
+            "start_temp": 300,
+            "target_temp": 600,
+            "end_temp": 300,
+            "timestep_fs": 1.0,
+            "rdf_bins": 4,
+            "rdf_cutoff": 4.0,
+        },
+        task_dir / "Annealing.json",
+    )
+
+    def xdat_frame(step, x):
+        return (
+            "Si\n1.0\n5 0 0\n0 5 0\n0 0 5\nSi\n2\n"
+            f"Direct configuration= {step}\n"
+            "0.0 0.0 0.0\n"
+            f"{x} 0.0 0.0\n"
+        )
+
+    (task_dir / "XDATCAR").write_text(
+        "APEX_STAGE ramp\n"
+        + xdat_frame(1, 0.4)
+        + xdat_frame(2, 0.42)
+        + "APEX_STAGE decline\n"
+        + xdat_frame(1, 0.42)
+        + xdat_frame(2, 0.4),
+        encoding="utf-8",
+    )
+    (task_dir / "OUTCAR").write_text(
+        "APEX_STAGE ramp\n"
+        " direct lattice vectors                 reciprocal lattice vectors\n"
+        "  4 0 0  0.25 0 0\n  0 4 0  0 0.25 0\n  0 0 4  0 0 0.25\n"
+        " volume of cell : 64\n"
+        " temperature = 400\n external pressure = 1 kB\n"
+        " direct lattice vectors                 reciprocal lattice vectors\n"
+        "  6 0 0  0.1667 0 0\n  0 6 0  0 0.1667 0\n  0 0 6  0 0 0.1667\n"
+        " volume of cell : 216\n"
+        " temperature = 600\n external pressure = 2 kB\n"
+        "APEX_STAGE decline\n"
+        " temperature = 500\n external pressure = 2 kB\n"
+        " temperature = 300\n external pressure = 1 kB\n",
+        encoding="utf-8",
+    )
+    frames = Annealing._parse_vasp_xdatcar(task_dir / "XDATCAR")
+    Annealing._attach_vasp_thermo(frames, task_dir / "OUTCAR")
+    assert [frames["ramp"][0]["cell"][i][i] for i in range(3)] == [4.0] * 3
+    assert [frames["ramp"][1]["cell"][i][i] for i in range(3)] == [6.0] * 3
+
+    result, _ = Annealing({"type": "annealing"})._compute_lower(
+        str(tmp_path / "result.json"), [str(task_dir)], {}
+    )
+    task = result["tasks"]["task.000000"]
+    assert task["volume_temperature"]["heating"]["temperature"] == [400.0, 600.0]
+    assert task["volume_temperature"]["heating"]["total_volume"] == [64.0, 216.0]
+    assert task["volume_temperature"]["cooling"]["pressure"] == [2.0, 1.0]
+    assert task["msd"]["T_ramp_300K_600K"]["msd_total"][-1] > 0
+
+
+def test_annealing_dft_respects_disabled_rdf_and_msd(tmp_path):
+    task_dir = tmp_path / "task.000000"
+    task_dir.mkdir()
+    dumpfn(
+        {
+            "start_temp": 300,
+            "target_temp": 600,
+            "end_temp": 300,
+            "timestep_fs": 1.0,
+            "req_compute_rdf": False,
+            "req_compute_msd": False,
+        },
+        task_dir / "Annealing.json",
+    )
+    (task_dir / "XDATCAR").write_text(
+        "APEX_STAGE ramp\n"
+        "Si\n1.0\n5 0 0\n0 5 0\n0 0 5\nSi\n1\n"
+        "Direct configuration= 1\n0 0 0\n",
+        encoding="utf-8",
+    )
+
+    result, _ = Annealing({"type": "annealing"})._compute_lower(
+        str(tmp_path / "result.json"), [str(task_dir)], {}
+    )
+    task = result["tasks"]["task.000000"]
+    assert task["rdf"] == {}
+    assert task["msd"] == {}
+    assert "heating" in task["volume_temperature"]
+
+
+def test_annealing_vasp_inputs_and_abacus_rejection(tmp_path):
+    dft_defaults = Annealing(
+        {"type": "annealing"}, {"type": "vasp"}
+    ).task_param()["cal_setting"]
+    assert dft_defaults["equi_step"] == 100
+    assert dft_defaults["ramp_step"] == 200
+    assert dft_defaults["cool_step"] == 200
+    assert dft_defaults["hold_step"] == 100
+
+    metadata = {
+        "start_temp": 300,
+        "target_temp": 900,
+        "end_temp": 400,
+        "equi_step": 10,
+        "ramp_step": 20,
+        "cool_step": 40,
+        "final_equi_step": 30,
+        "timestep_fs": 1.0,
+    }
+    task_param = {
+        "type": "annealing",
+        "cal_type": "static",
+        "cal_setting": {
+            "pressure_kbar": 0.0,
+            "langevin_gamma": 10.0,
+            "K_POINTS": [1, 1, 1, 0, 0, 0],
+        },
+    }
+
+    vasp_dir = tmp_path / "vasp"
+    vasp_dir.mkdir()
+    (vasp_dir / "POSCAR").write_text(TEST_POSCAR)
+    (vasp_dir / "INCAR.base").write_text("ENCUT=300\nKSPACING=0.5\nSMASS=0\n")
+    dumpfn(metadata, vasp_dir / "Annealing.json")
+    vasp = VASP(
+        {
+            "type": "vasp",
+            "incar": str(vasp_dir / "INCAR.base"),
+            "potcars": {"Si": "Si"},
+        },
+        str(vasp_dir / "POSCAR"),
+    )
+    vasp.make_input_file(str(vasp_dir), "annealing", task_param)
+    vasp_ramp = (vasp_dir / "INCAR.ramp").read_text()
+    assert "MDALGO = 3" in vasp_ramp
+    assert "TEBEG = 300.0" in vasp_ramp
+    assert "TEEND = 900.0" in vasp_ramp
+    assert "NSW = 20" in vasp_ramp
+    assert "SMASS" not in vasp_ramp
+    assert vasp.backward_files("annealing") == [
+        "OUTCAR",
+        "outlog",
+        "OSZICAR",
+        "XDATCAR",
+        "CONTCAR",
+    ]
+    stage_plan = loadfn(vasp_dir / "apex_vasp_stage_plan.json")
+    assert stage_plan["task_type"] == "annealing"
+    assert [stage["expected_ionic_steps"] for stage in stage_plan["stages"]] == [
+        10,
+        20,
+        40,
+        30,
+    ]
+
+    with pytest.raises(NotImplementedError, match="does not support.*ABACUS"):
+        Annealing({"type": "annealing"}, {"type": "abacus"})
+
+
+def test_annealing_vasp_coexistence_protocol(tmp_path):
+    with pytest.raises(ValueError, match="only VASP"):
+        Annealing({"type": "annealing", "protocol": "coexistence"})
+
+    equi_dir = make_equi_dir(tmp_path)
+    prop = Annealing(
+        {
+            "type": "annealing",
+            "protocol": "coexistence",
+            "cal_setting": {"target_temp": 900, "nblock": 5},
+        },
+        {"type": "vasp"},
+    )
+    task = Path(prop.make_confs(str(tmp_path / "coexistence"), str(equi_dir))[0])
+    metadata = loadfn(task / "Annealing.json")
+    assert metadata["protocol"] == "coexistence"
+    assert metadata["equi_step"] == 5000
+    assert metadata["production_step"] == 10000
+
+    incar = tmp_path / "INCAR.base"
+    incar.write_text("ENCUT=400\nKSPACING=0.5\n")
+    calculator = VASP(
+        {"type": "vasp", "incar": str(incar), "potcars": {"Ti": "Ti"}},
+        str(task / "POSCAR"),
+    )
+    calculator.make_input_file(
+        str(task), "annealing", prop.task_param()
+    )
+    assert "TEBEG = 900.0" in (task / "INCAR.equi").read_text()
+    assert (task / "INCAR").read_text() == (task / "INCAR.equi").read_text()
+    assert "NSW = 10000" in (task / "INCAR.production").read_text()
+    assert "NBLOCK = 5" in (task / "INCAR.production").read_text()
+    command = (task / "run_command").read_text()
+    assert "APEX_STAGE equi" in command
+    assert "APEX_STAGE production" in command
+
+
+def test_annealing_coexistence_collects_production_thermo(tmp_path):
+    task = tmp_path / "task.000000"
+    task.mkdir()
+    dumpfn(
+        {
+            "protocol": "coexistence",
+            "target_temp": 900,
+            "timestep_fs": 1.0,
+            "req_compute_rdf": False,
+            "req_compute_msd": False,
+        },
+        task / "Annealing.json",
+    )
+    frame = (
+        "Si\n1.0\n5 0 0\n0 5 0\n0 0 5\nSi\n2\n"
+        "Direct configuration= {step}\n"
+        "0.0 0.0 0.0\n0.5 0.5 0.5\n"
+    )
+    (task / "XDATCAR").write_text(
+        "APEX_STAGE production\n"
+        + frame.format(step=1)
+        + frame.format(step=2)
+    )
+    (task / "OUTCAR").write_text(
+        "APEX_STAGE production\n"
+        " temperature = 890\n external pressure = 2 kB\n"
+        " free energy TOTEN = -10 eV\n total energy ETOTAL = -9 eV\n"
+        " temperature = 910\n external pressure = 3 kB\n"
+        " free energy TOTEN = -11 eV\n total energy ETOTAL = -10 eV\n"
+    )
+    result, _ = Annealing({"type": "annealing"})._compute_lower(
+        str(tmp_path / "result.json"), [str(task)], {}
+    )
+    production = result["tasks"]["task.000000"]["volume_temperature"]["production"]
+    assert production["temperature"] == [890.0, 910.0]
+    assert production["pressure"] == [2.0, 3.0]
+    assert production["potential_energy"] == [-10.0, -11.0]
+    assert production["total_energy"] == [-9.0, -10.0]
+    assert production["total_volume"] == pytest.approx([125.0, 125.0])
+
+
 def test_annealing_report_registered_and_builds_graph_table(tmp_path):
     task_dir = tmp_path / "task.000000"
     write_annealing_analysis_files(task_dir)
@@ -510,6 +761,18 @@ class TestAnnealingCoverage(unittest.TestCase):
     def test_annealing_compute_lower_extracts_rdf_msd_and_volume_temperature(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_annealing_compute_lower_extracts_rdf_msd_and_volume_temperature(Path(tmp))
+
+    def test_annealing_compute_lower_extracts_vasp_trajectory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_compute_lower_extracts_vasp_trajectory(Path(tmp))
+
+    def test_annealing_dft_respects_disabled_rdf_and_msd(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_dft_respects_disabled_rdf_and_msd(Path(tmp))
+
+    def test_annealing_vasp_inputs_and_abacus_rejection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_annealing_vasp_inputs_and_abacus_rejection(Path(tmp))
 
     def test_annealing_report_registered_and_builds_graph_table(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,6 +10,11 @@ from apex.core.calculator.lib import lammps_utils
 
 TYPE_MAP = {"Al": 0}
 PARAM = {"type": "deepmd"}
+DPA4_PT2_PARAM = {
+    "type": "deepmd",
+    "deepmd_runtime": "dpa4_pt2",
+    "deepmd_version": "3.2.0b0",
+}
 
 
 def dummy_interaction(param):
@@ -22,6 +27,7 @@ def assert_common_lammps_setup(script):
     assert "dimension" in script
     assert "boundary" in script
     assert "atom_style" in script
+    assert "atom_modify map yes" in script
     assert "box         tilt large" in script
     assert "read_data   conf.lmp" in script
     assert "mass            1 26.982" in script
@@ -35,6 +41,105 @@ def assert_common_lammps_setup(script):
     assert "variable        Epa equal ${E}/${N}" in script
     assert 'print "All done"' in script
     assert 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"' in script
+
+
+def assert_atom_map_before_every_box_load(script):
+    lines = script.splitlines()
+    box_load_lines = [
+        index
+        for index, line in enumerate(lines)
+        if line.split()[:1] in (["read_data"], ["read_restart"])
+    ]
+    assert box_load_lines
+    for index in box_load_lines:
+        assert lines[index - 1].strip() == "atom_modify map yes"
+
+
+def dpa4_pt2_builders():
+    return [
+        lambda: lammps_utils.make_lammps_eval(
+            "conf.lmp", TYPE_MAP, dummy_interaction, DPA4_PT2_PARAM
+        ),
+        lambda: lammps_utils.make_lammps_equi(
+            "conf.lmp",
+            TYPE_MAP,
+            dummy_interaction,
+            DPA4_PT2_PARAM,
+            prop_type="relaxation",
+        ),
+        lambda: lammps_utils.make_lammps_elastic(
+            "conf.lmp", TYPE_MAP, dummy_interaction, DPA4_PT2_PARAM
+        ),
+        lambda: lammps_utils.make_lammps_press_relax(
+            "conf.lmp", TYPE_MAP, 0.95, dummy_interaction, DPA4_PT2_PARAM
+        ),
+        lambda: lammps_utils.make_lammps_FiniteTlatt(
+            "conf.lmp", TYPE_MAP, dummy_interaction, DPA4_PT2_PARAM
+        ),
+        lambda: lammps_utils.make_lammps_annealing(
+            "conf.lmp", TYPE_MAP, dummy_interaction, DPA4_PT2_PARAM, {}
+        ),
+    ]
+
+
+@pytest.mark.parametrize("builder", dpa4_pt2_builders())
+def test_dpa4_pt2_builders_enable_atom_map_before_read_data(builder):
+    script = builder()
+
+    assert_atom_map_before_every_box_load(script)
+
+
+def test_dpa4_pt2_finite_t_elastic_enables_atom_map(tmp_path):
+    with open(tmp_path / "FiniteTelastic.json", "w") as fp:
+        json.dump({"role": "reference"}, fp)
+
+    script = lammps_utils.make_lammps_FiniteTelastic(
+        "conf.lmp",
+        TYPE_MAP,
+        dummy_interaction,
+        DPA4_PT2_PARAM,
+        tmp_path,
+    )
+
+    assert_atom_map_before_every_box_load(script)
+
+
+def test_atom_map_rewriter_is_per_clear_block_and_legacy_is_unchanged():
+    source = "clear\nread_data first.lmp\nclear\nread_restart second.restart\n"
+
+    rewritten = lammps_utils.ensure_atom_map_before_read_data(
+        source, DPA4_PT2_PARAM
+    )
+
+    assert rewritten.count("atom_modify map yes") == 2
+    assert_atom_map_before_every_box_load(rewritten)
+    assert lammps_utils.ensure_atom_map_before_read_data(source, PARAM) == source
+
+
+@pytest.mark.parametrize("map_style", ["yes", "array", "hash"])
+def test_atom_map_rewriter_accepts_existing_map_styles_idempotently(map_style):
+    source = (
+        "clear\n"
+        f"atom_modify map {map_style} # already enables an atom map\n"
+        "read_data conf.lmp\n"
+    )
+
+    assert (
+        lammps_utils.ensure_atom_map_before_read_data(source, DPA4_PT2_PARAM)
+        == source
+    )
+
+
+def test_dpa4_pt2_rejects_explicit_legacy_plugin_load():
+    source = (
+        "clear\n"
+        "atom_modify map yes\n"
+        "read_data conf.lmp\n"
+        "plugin load /legacy/libdeepmd_lmp.so\n"
+    )
+
+    with pytest.raises(ValueError, match="LAMMPS_PLUGIN_PATH auto-loading"):
+        lammps_utils.ensure_atom_map_before_read_data(source, DPA4_PT2_PARAM)
 
 
 def test_element_list_orders_by_lammps_type_id():
@@ -228,6 +333,7 @@ def test_make_lammps_finite_t_latt_default_cal_setting():
     )
 
     assert "include  variable_FiniteTlatt.in" in script
+    assert "atom_modify map yes" in script
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script
@@ -306,6 +412,7 @@ def test_make_lammps_finite_t_elastic_equi_role(tmp_path):
     script = make_finite_t_elastic_input(tmp_path, "equi")
 
     assert "clear\ninclude  variable_FiniteTelastic.in" in script
+    assert script.count("atom_modify map yes") == 1
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script
@@ -343,6 +450,7 @@ def test_make_lammps_finite_t_elastic_response_roles(tmp_path, role):
     script = make_finite_t_elastic_input(tmp_path, role)
 
     assert script.count("clear\ninclude  variable_FiniteTelastic.in") == 2
+    assert script.count("atom_modify map yes") == 2
     assert "read_data   conf.lmp" in script
     assert "read_restart ${restart_source}" in script
     assert "write_restart   ${equi_restart}" in script
@@ -393,6 +501,7 @@ def make_annealing_input(cal_setting):
 
 def assert_common_annealing_script(script):
     assert "include  variable_Annealing.in" in script
+    assert "atom_modify map yes" in script
     assert "read_data   conf.lmp" in script
     assert "replicate   ${nx} ${ny} ${nz}" in script
     assert "pair_style dummy" in script
@@ -480,6 +589,28 @@ def test_make_lammps_annealing_langevin_nve():
 
 
 class TestLammpsUtils(unittest.TestCase):
+    def test_dpa4_pt2_builders_enable_atom_map_before_read_data(self):
+        for builder in dpa4_pt2_builders():
+            with self.subTest(builder=builder):
+                test_dpa4_pt2_builders_enable_atom_map_before_read_data(builder)
+
+    def test_dpa4_pt2_finite_t_elastic_enables_atom_map(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_dpa4_pt2_finite_t_elastic_enables_atom_map(Path(tmp))
+
+    def test_atom_map_rewriter_is_per_clear_block_and_legacy_is_unchanged(self):
+        test_atom_map_rewriter_is_per_clear_block_and_legacy_is_unchanged()
+
+    def test_atom_map_rewriter_accepts_existing_map_styles_idempotently(self):
+        for map_style in ["yes", "array", "hash"]:
+            with self.subTest(map_style=map_style):
+                test_atom_map_rewriter_accepts_existing_map_styles_idempotently(
+                    map_style
+                )
+
+    def test_dpa4_pt2_rejects_explicit_legacy_plugin_load(self):
+        test_dpa4_pt2_rejects_explicit_legacy_plugin_load()
+
     def test_element_list_orders_by_lammps_type_id(self):
         test_element_list_orders_by_lammps_type_id()
 

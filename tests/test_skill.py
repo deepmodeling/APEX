@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import io
 import os
 import sys
@@ -29,19 +30,51 @@ class TestApexSkill(unittest.TestCase):
         self.assertIn(f"name: {SKILL_NAME}", text)
         self.assertIn("BOHRIUM_PROJECT_ID", text)
         self.assertIn("validate_apex_combo.py", text)
-        self.assertIn("models/DPA-3.2-5M", text)
-        self.assertIn("DPA-3.2-5M-OMat24.pth", text)
+        self.assertIn("models/DPA4-alloytongqi/model.pt", text)
+        self.assertIn("dpa4-phonolammps:0.0.2", text)
+        self.assertIn("Unknown model type: dpa4", text)
+        self.assertNotIn("DPA-3.2", text)
+        self.assertIn("15-property", text)
+        self.assertIn("displacement_points", text)
+        self.assertIn("restart.coexistence.start", text)
+        self.assertIn("finite_t_latt` never receives this file", text)
+        self.assertIn("--gif-view", text)
         root = get_skill_root()
         self.assertTrue((root / "models" / "README.md").is_file())
-        self.assertTrue(
-            (
-                root
-                / "models"
-                / "DPA-3.2-5M"
-                / "DPA-3.2-5M-OMat24.pth"
-            ).is_file()
+        profile = root / "data" / "dpa4_alloytongqi_t4_profile.json"
+        self.assertTrue(profile.is_file())
+        profile_text = profile.read_text(encoding="utf-8")
+        self.assertIn("__DPA4_IMAGE_REF__", profile_text)
+        self.assertIn("pre_snapshot_only", profile_text)
+        self.assertIn("c4_m15_1 * NVIDIA T4", profile_text)
+        self.assertNotIn("4c-nano", profile_text)
+        benchmark = root / "benchmarks" / "dpa4-alloytongqi"
+        for name in (
+            "README.md",
+            "generate_cases.py",
+            "build_manifest.py",
+            "verify_manifest.py",
+            "manifest.schema.json",
+        ):
+            self.assertTrue((benchmark / name).is_file())
+        model = root / "models" / "DPA4-alloytongqi" / "model.pt"
+        self.assertTrue(model.is_file())
+        self.assertEqual(model.stat().st_size, 30_403_297)
+        self.assertEqual(
+            hashlib.sha256(model.read_bytes()).hexdigest(),
+            "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad",
         )
-        self.assertTrue((root / "scripts" / "fetch_models.py").is_file())
+        self.assertFalse((root / "models" / "DPA-3.2-5M").exists())
+        self.assertFalse((root / "scripts" / "fetch_models.py").exists())
+        local = root / "variants" / "local"
+        self.assertTrue((local / "SKILL.md").is_file())
+        self.assertTrue((local / "reference" / "submission.md").is_file())
+        for profile in (
+            "bohrium-direct.md",
+            "local-debug.md",
+            "local-cluster.md",
+        ):
+            self.assertTrue((local / "profiles" / profile).is_file())
 
     def test_no_hardcoded_project_id_in_skill_docs(self):
         root = get_skill_root()
@@ -67,7 +100,7 @@ class TestApexSkill(unittest.TestCase):
         self.assertIn("never refresh it in `run.sh`", skill)
         self.assertIn("Do not read BOHRIUM_ACCESS_KEY", submission)
         self.assertNotIn("Recommended run.sh Ticket Refresh Template", submission)
-        self.assertIn("use the model bundled with this skill", skill)
+        self.assertIn("as source-checkpoint\n    provenance", skill)
         self.assertIn('"type_map": "auto"', skill)
         self.assertIn("already a supercell", structure)
         self.assertIn("`supercell` / `supercell_size` to `[1,1,1]`", structure)
@@ -91,10 +124,51 @@ class TestApexSkill(unittest.TestCase):
             self.assertTrue(
                 any(n.startswith(f"{SKILL_NAME}/scripts/") for n in names)
             )
-            self.assertTrue(
-                any(n.endswith("DPA-3.2-5M-OMat24.pth") for n in names)
+            self.assertEqual(
+                [n for n in names if n.endswith(".pt")],
+                [f"{SKILL_NAME}/models/DPA4-alloytongqi/model.pt"],
             )
-            self.assertFalse(any(n.endswith(".pt") for n in names))
+            self.assertFalse(any(n.endswith(".pth") for n in names))
+            self.assertFalse(any("DPA-3.2" in n for n in names))
+            self.assertFalse(any("/variants/" in n for n in names))
+            self.assertFalse(any("global_local_" in n for n in names))
+            self.assertFalse(any("global_bohrium_direct.json" in n for n in names))
+            self.assertIn(
+                f"{SKILL_NAME}/data/dpa4_alloytongqi_t4_profile.json", names
+            )
+            self.assertIn(
+                f"{SKILL_NAME}/scripts/dpa4_profile.py", names
+            )
+            self.assertIn(
+                f"{SKILL_NAME}/benchmarks/dpa4-alloytongqi/"
+                "manifest.schema.json",
+                names,
+            )
+            self.assertIn(
+                f"{SKILL_NAME}/benchmarks/dpa4-alloytongqi/"
+                "verify_manifest.py",
+                names,
+            )
+            with zipfile.ZipFile(out) as zf:
+                cloud_skill = zf.read(
+                    f"{SKILL_NAME}/SKILL.md"
+                ).decode("utf-8")
+                text_payload = b"\n".join(
+                    zf.read(name)
+                    for name in names
+                    if not name.endswith(".pt")
+                )
+            self.assertIn("outer Bohrium job", cloud_skill)
+            self.assertIn("bohrium_config.ticket", cloud_skill)
+            self.assertIn(
+                b"registry.dp.tech/dptech/dp/native/prod-397637/"
+                b"deepmd-kit-phonolammps:3.1.3",
+                text_payload,
+            )
+            self.assertNotIn(
+                b"registry.dp.tech/dptech/dpa-calculator:dpa-mLip-452b0667",
+                text_payload,
+            )
 
     def test_skill_agent_prompt(self):
         buf = io.StringIO()
@@ -105,6 +179,15 @@ class TestApexSkill(unittest.TestCase):
         self.assertIn(SKILL_NAME, out)
         self.assertIn("apex skill --zip", out)
         self.assertIn("MatMaster", out)
+        self.assertIn("Bohrium cloud", out)
+        self.assertIn("local", out)
+        self.assertIn("local cluster", out)
+        self.assertIn("bohrium-direct.md", out)
+        self.assertIn("local-debug.md", out)
+        self.assertIn("local-cluster.md", out)
+        self.assertIn("variants/local", out)
+        self.assertIn("get_skill_root", out)
+        self.assertNotIn(str(get_skill_root()), out)
 
 
 class TestValidateApexCombo(unittest.TestCase):
@@ -160,8 +243,22 @@ class TestValidateApexCombo(unittest.TestCase):
 
     def test_recommend_lammps_gpu(self):
         rec = self.combo.recommend("lammps", "gpu")
-        self.assertIn("3.1.3", rec["image"])
-        self.assertIn("T4", rec["scass_type"])
+        self.assertIn("dpa4-phonolammps:0.0.2", rec["image"])
+        self.assertIn("L20", rec["scass_type"])
+
+    def test_recommend_lammps_cpu_uses_apex_flow(self):
+        rec = self.combo.recommend("lammps", "cpu")
+        self.assertIn("apex-flow:1.3.0.post", rec["image"])
+        self.assertIn("_cpu", rec["scass_type"])
+
+    def test_dpa4_image_is_blocked_on_cpu(self):
+        ok, errors = self.combo.check_combo(
+            "registry.dp.tech/dptech/dp/native/prod-16664/"
+            "dpa4-phonolammps:0.0.2",
+            "c8_m32_cpu",
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("DPA4 image" in error for error in errors))
 
     def test_cli_check_exit_codes(self):
         self.assertEqual(
@@ -218,7 +315,7 @@ class TestGenerateConfigProjectId(unittest.TestCase):
         interaction = self.gen.build_interaction(
             backend="lammps",
             potential="deepmd",
-            model="DPA-3.2-5M-OMat24.pth",
+            model="model.pt",
         )
         self.assertEqual(interaction["type_map"], "auto")
 
@@ -228,11 +325,18 @@ class TestGenerateConfigProjectId(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn('add_argument("--type-map"', source)
 
-    def test_lammps_default_uses_validated_phonolammps_image(self):
+    def test_lammps_gpu_default_uses_validated_phonolammps_image(self):
         self.assertEqual(
-            self.gen.LAMMPS_IMAGE,
+            self.gen.LAMMPS_GPU_IMAGE,
+            "registry.dp.tech/dptech/dp/native/prod-16664/"
+            "dpa4-phonolammps:0.0.2",
+        )
+
+    def test_lammps_cpu_default_uses_apex_flow_image(self):
+        self.assertEqual(
+            self.gen.LAMMPS_CPU_IMAGE,
             "registry.dp.tech/dptech/dp/native/prod-397637/"
-            "deepmd-kit-phonolammps:3.1.3",
+            "apex-flow:1.3.0.post",
         )
 
     def test_combo_validator_has_no_property_cli(self):
@@ -249,10 +353,16 @@ class TestGammaSurfaceSkillConfig(unittest.TestCase):
         cls.gen = _load_script("generate_config.py")
         cls.validator = _load_script("validate_inputs.py")
 
-    def test_generated_gamma_surface_preserves_legacy_default(self):
+    def test_generated_gamma_surface_uses_periodic_recommended_default(self):
         self.assertIs(
             self.gen.PROPERTY_DEFAULTS["gamma_surface"]["closed_loop"],
-            False,
+            True,
+        )
+        self.assertEqual(
+            self.gen.PROPERTY_DEFAULTS["gamma"]["vacuum_size"], 20
+        )
+        self.assertEqual(
+            self.gen.PROPERTY_DEFAULTS["gamma_surface"]["vacuum_size"], 20
         )
 
     def test_closed_loop_requires_boolean_and_no_custom_lengths(self):

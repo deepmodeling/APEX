@@ -130,15 +130,62 @@ class SlabSlipSystem(object):
         }
     }
 
+    # Keep the complete legacy registry above for backwards compatibility, but
+    # use only the physically important slip systems below for automatic
+    # crystallographic defaults. Other systems fall back to the geometric
+    # in-plane check in Gamma and GammaSurface.
+    __recommended_system_keys = {
+        'fcc': (
+            '111x11-2',
+            '111x-1-12',
+            '111x-110',
+            '111x1-10',
+        ),
+        'bcc': (
+            '110x-111',
+            '110x1-1-1',
+            '112x11-1',
+            '112x-1-11',
+            '123x11-1',
+            '123x-1-11',
+        ),
+        'hcp': (
+            '0001x2-1-10',
+            '0001x1-100',
+            '0001x10-10',
+            '01-10x-2110',
+            '01-10x0001',
+            '01-10x-2113',
+            '-12-10x-1010',
+            '-12-10x0001',
+            '01-11x-2110',
+            '01-11x-12-1-3',
+            '01-11x0-112',
+            '-12-12x10-10',
+            '-12-12x1-213',
+            '-12-12x-12-1-3',
+        ),
+    }
+
     @classmethod
     def atomic_system_dict(cls):
         return cls.__dict_atomic_system
 
     @classmethod
+    def recommended_system_dict(cls):
+        return {
+            structure_type: {
+                key: cls.__dict_atomic_system[structure_type][key]
+                for key in keys
+            }
+            for structure_type, keys in cls.__recommended_system_keys.items()
+        }
+
+    @classmethod
     def hint_string(cls):
         print_str = 'structure  \tplane_index    \tslip_direction\n'
-        for struct in cls.__dict_atomic_system.keys():
-            for orient in cls.__dict_atomic_system[struct].keys():
+        for struct, systems in cls.recommended_system_dict().items():
+            for orient in systems:
                 plane, slip = orient.split('x')
                 print_str += f'{struct}       \t{plane}         \t{slip}\n'
         return print_str

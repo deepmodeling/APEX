@@ -1,0 +1,73 @@
+{
+  "$schema": "./manifest.schema.json",
+  "schema_version": "2.0.0",
+  "benchmark_id": "dpa4-alloytongqi-small-cell-gpu-compat-v2",
+  "created_at": null,
+  "status": "untested",
+  "reason_codes": [
+    "NO_RUNTIME_EXECUTION_EVIDENCE"
+  ],
+  "provenance": {
+    "apex_git_commit": null,
+    "apex_git_dirty": null
+  },
+  "identity": {
+    "checkpoint_pt": {
+      "path": "../../models/DPA4-alloytongqi/model.pt",
+      "sha256": "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad",
+      "bytes": 30403297
+    },
+    "runtime_models_pt2": [],
+    "image": {
+      "reference": null,
+      "digest": null
+    }
+  },
+  "environment": {
+    "observations": []
+  },
+  "thresholds": {
+    "energy_per_atom_abs_eV": 0.0001,
+    "force_rms_eV_per_A": 0.001,
+    "force_max_abs_eV_per_A": 0.005,
+    "stress_max_abs_GPa": 0.01
+  },
+  "cases": [
+    {
+      "name": "Ti_hcp",
+      "formula": "Ti2",
+      "elements": ["Ti"],
+      "atoms": 2,
+      "crystal": "hcp primitive",
+      "status": "untested",
+      "artifacts": []
+    },
+    {
+      "name": "V_bcc",
+      "formula": "V2",
+      "elements": ["V"],
+      "atoms": 2,
+      "crystal": "bcc conventional",
+      "status": "untested",
+      "artifacts": []
+    },
+    {
+      "name": "TiV_B2",
+      "formula": "TiV",
+      "elements": ["Ti", "V"],
+      "atoms": 2,
+      "crystal": "B2 (CsCl prototype)",
+      "status": "untested",
+      "artifacts": []
+    }
+  ],
+  "runs": [],
+  "parity": [],
+  "phonolammps": [],
+  "artifact_hashes": [],
+  "notes": [
+    "This example intentionally contains no image, GPU, package, exit-code, stderr, or numerical result claims.",
+    "The checkpoint .pt is identity/probe input only; LAMMPS requires device-specific .pt2 runtime artifacts.",
+    "An empty runtime_models_pt2 list means no CPU/T4 runtime execution artifact has been recorded."
+  ]
+}

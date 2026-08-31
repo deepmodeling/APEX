@@ -59,6 +59,14 @@ def _render_phonon_input(conf, type_map, interaction, model_param, task_param=No
     )
 
 
+def _render_melting_point_input(conf, type_map, interaction, model_param, task_param=None):
+    from apex.core.property.MeltingPoint import render_melting_point_lammps_input
+
+    return render_melting_point_lammps_input(
+        conf, type_map, interaction, model_param, task_param
+    )
+
+
 def _finitetlatt_file_manifest(model_files, default_manifest):
     from apex.core.property.FiniteTlatt.lammps import get_lammps_file_manifest
 
@@ -89,6 +97,7 @@ PROPERTY_LAMMPS_INPUT_RENDERERS = {
     "gamma": _render_gamma_input,
     "gamma_surface": _render_gamma_input,
     "phonon": _render_phonon_input,
+    "melting_point": _render_melting_point_input,
 }
 
 PROPERTY_LAMMPS_FILE_MANIFESTS = {
@@ -140,6 +149,24 @@ class Lammps(Task):
         self.inter_type = inter_parameter["type"]
         self.type_map = inter_parameter["type_map"]
         self.in_lammps = inter_parameter.get("in_lammps", "auto")
+        self.model_in_image = inter_parameter.get("model_in_image", False)
+        if not isinstance(self.model_in_image, bool):
+            raise ValueError("interaction.model_in_image must be a boolean")
+        if self.model_in_image:
+            model = inter_parameter.get("model")
+            if not lammps_utils.is_deepmd_pt2(inter_parameter):
+                raise ValueError(
+                    "interaction.model_in_image is only supported with "
+                    "type=deepmd and deepmd_runtime=dpa4_pt2"
+                )
+            if (
+                not isinstance(model, str)
+                or not os.path.isabs(model)
+                or not model.lower().endswith(".pt2")
+            ):
+                raise ValueError(
+                    "an image-resident DPA4 model must be an absolute .pt2 path"
+                )
         if self.inter_type in MULTI_MODELS_INTER_TYPE:
             self.model = list(map(os.path.abspath, inter_parameter["model"]))
         else:
@@ -173,13 +200,17 @@ class Lammps(Task):
     def set_model_param(self):
         deepmd_version = self.inter.get("deepmd_version", "2.1.1")
         if self.inter_type == "deepmd":
-            model_name = os.path.basename(self.model)
+            model_name = self.model if self.model_in_image else os.path.basename(self.model)
             self.model_param = {
                 "type": self.inter_type,
                 "model_name": [model_name],
                 "param_type": self.type_map,
                 "deepmd_version": deepmd_version,
             }
+            if "deepmd_runtime" in self.inter:
+                self.model_param["deepmd_runtime"] = self.inter["deepmd_runtime"]
+            if self.model_in_image:
+                self.model_param["model_in_image"] = True
         elif self.inter_type in ["meam", "snap"]:
             model_name = list(map(os.path.basename, self.model))
             self.model_param = {
@@ -222,6 +253,10 @@ class Lammps(Task):
         os.symlink(target, link_name)
 
     def make_potential_files(self, output_dir):
+        if self.model_in_image:
+            dumpfn(self.inter, os.path.join(output_dir, "inter.json"), indent=4)
+            return
+
         parent_dir = os.path.join(output_dir, "../../")
         if self.inter_type in MULTI_MODELS_INTER_TYPE:
             model_file = map(os.path.basename, self.model)
@@ -301,7 +336,32 @@ class Lammps(Task):
                 )
                 maxeval = cal_setting["maxeval"]
 
-            if cal_type == "relaxation":
+            if task_type == "melting_point":
+                fc = _render_melting_point_input(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    task_param,
+                )
+            elif task_type == "finite_t_latt":
+                fc = lammps_utils.make_lammps_FiniteTlatt(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+            elif task_type in ["annealing", "Annealing"]:
+                # MD annealing schedule: equilibrate -> ramp -> hold -> cool
+                fc = lammps_utils.make_lammps_annealing(
+                    "conf.lmp",
+                    self.type_map,
+                    self.inter_func,
+                    self.model_param,
+                    cal_setting,
+                )
+            elif cal_type == "relaxation":
                 relax_pos = cal_setting["relax_pos"]
                 relax_shape = cal_setting["relax_shape"]
                 relax_vol = cal_setting["relax_vol"]
@@ -402,25 +462,6 @@ class Lammps(Task):
                     self.model_param,
                     output_dir,
                 )
-            elif task_type in ["annealing", "Annealing"]:
-                # MD annealing schedule: equilibrate -> ramp -> hold -> cool
-                fc = lammps_utils.make_lammps_annealing(
-                    "conf.lmp",
-                    self.type_map,
-                    self.inter_func,
-                    self.model_param,
-                    cal_setting,
-                )
-
-            elif task_type == "finite_t_latt":
-                fc = lammps_utils.make_lammps_FiniteTlatt(
-                    "conf.lmp",
-                    self.type_map,
-                    self.inter_func,
-                    self.model_param,
-                    cal_setting,
-                )
-
             else:
                 raise RuntimeError("not supported calculation type for LAMMPS")
 
@@ -430,6 +471,9 @@ class Lammps(Task):
             and task_param.get("add_fix") is not None
         ):
             fc = _apply_gamma_fix_to_lammps_input(fc, task_param["add_fix"])
+
+        # This also covers user-supplied and property-specific LAMMPS inputs.
+        fc = lammps_utils.ensure_atom_map_before_read_data(fc, self.model_param)
 
         dumpfn(task_param, os.path.join(output_dir, "task.json"), indent=4)
 
@@ -456,8 +500,25 @@ class Lammps(Task):
         except Exception:
             task_param = {}
         task_type = task_param.get("type", task_param.get("cal_type"))
-        if task_type in ["annealing", "Annealing"]:
+        if task_type in ["annealing", "Annealing", "melting_point"]:
             return None
+
+        status_path = os.path.join(output_dir, "apex_task_status.json")
+        if os.path.isfile(status_path):
+            try:
+                task_status = loadfn(status_path)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"cannot parse LAMMPS task status {status_path}: {exc}"
+                ) from exc
+            if task_status.get("state") != "succeeded":
+                raise RuntimeError(
+                    "LAMMPS task failed before post-processing: "
+                    f"state={task_status.get('state')!r}, "
+                    f"reason={task_status.get('reason')!r}, "
+                    f"exit_code={task_status.get('exit_code')!r}, "
+                    f"message={task_status.get('message')!r}"
+                )
 
         log_lammps = os.path.join(output_dir, "log.lammps")
         dump_lammps = os.path.join(output_dir, "dump.relax")
@@ -488,6 +549,7 @@ class Lammps(Task):
         with open(dump_lammps, "r") as fin:
             dump = fin.read().split("\n")
         dumptime = []
+        type_list = []
         for idx, ii in enumerate(dump):
             if ii == "ITEM: TIMESTEP":
                 box.append([])
@@ -539,6 +601,10 @@ class Lammps(Task):
                     fz = float(dump[idx + 9 + jj].split()[7])
                     force[-1].append([fx, fy, fz])
         
+        if not dumptime:
+            raise RuntimeError(
+                f"LAMMPS dump contains no TIMESTEP frames: {dump_lammps}"
+            )
         return dumptime, type_list
     
     def _check_lammps_finished(self, log_lammps):
@@ -679,10 +745,26 @@ class Lammps(Task):
         }
         return result_dict
 
-    def forward_files(self, property_type="relaxation"):
-        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
+    def forward_files(self, property_type="relaxation", task_param=None):
+        model_files = [] if self.model_in_image else (
+            list(map(os.path.basename, self.model))
+            if self.inter_type in MULTI_MODELS_INTER_TYPE
+            else [os.path.basename(self.model)]
+        )
         if property_type == "finite_t_latt":
             return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
+        elif property_type == "melting_point":
+            files = [
+                "in.lammps",
+                "variable_MeltingPoint.in",
+                "MeltingPoint.json",
+            ]
+            restart_files = (task_param or {}).get("cal_setting", {}).get(
+                "restart_files"
+            )
+            if restart_files is not None:
+                files.append("restart.coexistence.start")
+            return files + model_files
         elif property_type in ["annealing", "Annealing"]:
             return ["in.lammps", "variable_Annealing.in"] + model_files
         elif property_type == "finite_t_elastic":
@@ -700,10 +782,16 @@ class Lammps(Task):
             return ["conf.lmp", "in.lammps"] + model_files
 
     def forward_common_files(self, property_type="relaxation"):
-        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
+        model_files = [] if self.model_in_image else (
+            list(map(os.path.basename, self.model))
+            if self.inter_type in MULTI_MODELS_INTER_TYPE
+            else [os.path.basename(self.model)]
+        )
         if property_type not in ["eos"]:
             if property_type == "finite_t_latt":
                 return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
+            elif property_type == "melting_point":
+                return ["in.lammps"] + model_files
             elif property_type in ["annealing", "Annealing"]:
                 return ["in.lammps", "variable_Annealing.in"] + model_files
             elif property_type == "finite_t_elastic":
@@ -732,6 +820,14 @@ class Lammps(Task):
             ]
         elif property_type == "finite_t_latt":
             return ["log.lammps", "outlog"] + debug_files + ["dump.relax", "average_box.txt"]
+        elif property_type == "melting_point":
+            return [
+                "log.lammps",
+                "outlog",
+                *debug_files,
+                "dump.melting",
+                "restart.melting.*",
+            ]
         elif property_type in ["annealing", "Annealing"]:
             return [
                 "log.lammps",

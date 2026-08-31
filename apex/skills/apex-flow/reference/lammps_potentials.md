@@ -15,12 +15,13 @@ APEX supports 10 LAMMPS potential types through the `interaction.type` field. Ea
 ```json
 {
     "type": "deepmd",
-    "model": "frozen_model.pb",
+    "model": "model.pt",
     "type_map": "auto"
 }
 ```
 
-**Model files**: `.pb` (frozen graph) or `.pth` (PyTorch)
+**Model files**: `.pb` (frozen graph), `.pth` (PyTorch), or a compatible
+single-task `.pt` checkpoint supported by the selected runtime
 **Notes**:
 - Most widely used MLIP in APEX workflows
 - GPU strongly recommended for large systems
@@ -218,9 +219,10 @@ manual map.
 
 | Potential Type | Recommended Image | GPU? |
 |---------------|-------------------|------|
-| deepmd | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Yes |
-| mace | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Yes |
-| nep | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Yes |
+| deepmd | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (NVIDIA L20 default; RTX 4090 compatible) |
+| mace | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (NVIDIA L20 default; RTX 4090 compatible) |
+| nep | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | Yes (NVIDIA L20 default; RTX 4090 compatible) |
+| DPA4 alloytongqi candidate | Locked `dpa4-alloytongqi-t4` profile; no published image yet | One T4 only after exact-image qualification |
 | gap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No (CPU) |
 | snap | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
 | rann | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
@@ -229,7 +231,23 @@ manual map.
 | meam | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
 | meam_spline | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | No |
 
-All potential types are supported by the unified APEX image. The APEX 1.3.0 image ships LAMMPS compiled with DeePMD, MACE, NEP, and standard LAMMPS potentials.
+GPU and CPU potentials use separate images. The DPA4 image is not a CPU
+fallback: sequential `c8_m32_cpu` validation stalled during container
+preparation. Standard CPU potentials use the APEX 1.3.0 image.
+The table records APEX defaults, not compatibility with every model format.
+The old tag's
+Bohrium registry mirror at repo digest
+`sha256:43a27ca4a7bba7f774bbd56104d205a6a80cd9d65928f249f6109e9ef37b8402`
+rejects the bundled DPA4 `model.pt` with `Unknown model type: dpa4`. Do not
+submit that model under the default image or silently choose another image.
+The DPA4 profile fails closed while image placeholders or
+`pre_snapshot_only` status remain. The only pre-snapshot candidate hardware is
+one rank/one GPU on `c4_m15_1 * NVIDIA T4`; c8/c16 T4, non-T4 GPUs, CPU,
+multi-rank, multi-GPU, and cross-architecture PT2 reuse are not recommended.
+V100/SM 7.0 and older devices and NVIDIA Linux drivers below 580.65.06 are
+prohibited by the CUDA 13 runtime. A published profile must use absolute
+`/usr/local/bin/dpa4-lmp` and `/usr/local/bin/dpa4-phonolammps` wrappers.
+Other potential types also require their own compatible model files.
 
 ---
 
@@ -237,7 +255,7 @@ All potential types are supported by the unified APEX image. The APEX 1.3.0 imag
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `pair_style not found` | LAMMPS not compiled with required package | Use APEX official image |
+| `pair_style not found` | LAMMPS not compiled with required package | Use the potential-specific configured image |
 | `type_map` inference failure | Structure file is missing or matched structures use incompatible element sets | Fix `structures` paths or provide one verified manual map |
 | `model file not found` | File not in job directory | Ensure model file is copied to submission dir |
 | `GPU not available` | Running GPU potential on CPU node | Switch to GPU machine type |

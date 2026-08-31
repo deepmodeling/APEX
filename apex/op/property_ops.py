@@ -12,13 +12,25 @@ from dflow.python import (
 from monty.serialization import dumpfn
 from apex.utils import recursive_search, apex_task_succeeded
 from apex.core.lib.utils import create_path
-from apex.core.calculator import LAMMPS_INTER_TYPE
+from apex.core.calculator import LAMMPS_INTER_TYPE, lammps_model_files_for_cleanup
 from apex.task_failure import (
     REMOTE_LAMMPS_STARTUP_FAILURE,
     classify_apex_task_status,
 )
 
 upload_packages.append(__file__)
+
+
+TASK_FAILURE_TOLERANT_TYPES = {
+    "gamma_surface",
+    "gamma",
+    "eos",
+    "surface",
+    "vacancy",
+    "interstitial",
+    "cohesive",
+    "decohesive",
+}
 
 
 def _load_task_status(status_path: Path):
@@ -159,7 +171,8 @@ class PropsMake(OP):
             'output_work_path': Artifact(Path),
             'task_names': List[str],
             'njobs': int,
-            'task_paths': Artifact(List[Path])
+            'task_paths': Artifact(List[Path]),
+            'backward_list': List[str],
         })
 
     @OP.exec_sign_check
@@ -200,7 +213,8 @@ class PropsMake(OP):
                 'output_work_path': abs_path_to_prop,
                 'task_names': [],
                 'njobs': 0,
-                'task_paths': []
+                'task_paths': [],
+                'backward_list': [],
             })
 
         inter_param_prop = inter_param
@@ -208,6 +222,9 @@ class PropsMake(OP):
             inter_param_prop = prop_param["cal_setting"]["overwrite_interaction"]
 
         prop = make_property_instance(prop_param, inter_param_prop)
+        backward_list = make_calculator(
+            inter_param_prop, "POSCAR"
+        ).backward_files(prop.task_type())
         task_list = prop.make_confs(abs_path_to_prop, path_to_equi, do_refine)
         for kk in task_list:
             if (not rerun_finished) and apex_task_succeeded(kk):
@@ -243,7 +260,8 @@ class PropsMake(OP):
             "output_work_path": input_work_path,
             "task_names": run_task_names,
             "njobs": njobs,
-            "task_paths": jobs
+            "task_paths": jobs,
+            "backward_list": backward_list,
         })
         return op_out
 
@@ -329,13 +347,21 @@ class PropsPost(OP):
                 abs_path_to_prop / "failed_lammps_tasks.json",
                 indent=4,
             )
-            raise RuntimeError(
-                "LAMMPS failed for property task(s): "
-                + ", ".join(item["task"] for item in lammps_failures)
-                + ". Retrieved task directories contain apex_task_status.json "
-                "with failed status records, .debug.log, log.lammps, outlog, "
-                "and any partial output files."
-            )
+            failed_task_names = ", ".join(item["task"] for item in lammps_failures)
+            if prop_param.get("type") in TASK_FAILURE_TOLERANT_TYPES:
+                logging.warning(
+                    "LAMMPS failed for property task(s): %s. "
+                    "Continuing post-process with NaN placeholders for failed points.",
+                    failed_task_names,
+                )
+            else:
+                raise RuntimeError(
+                    "LAMMPS failed for property task(s): "
+                    + failed_task_names
+                    + ". Retrieved task directories contain apex_task_status.json "
+                    "with failed status records, .debug.log, log.lammps, outlog, "
+                    "and any partial output files."
+                )
 
         prop = make_property_instance(prop_param, inter_param)
         param_json = os.path.join(abs_path_to_prop, "param.json")
@@ -351,11 +377,7 @@ class PropsPost(OP):
         # remove potential files in each task
         if inter_type in LAMMPS_INTER_TYPE:
             os.chdir(abs_path_to_prop)
-            inter_files_name = []
-            if type(inter_param["model"]) is str:
-                inter_files_name = [inter_param["model"]]
-            elif type(inter_param["model"]) is list:
-                inter_files_name.extend(inter_param["model"])
+            inter_files_name = lammps_model_files_for_cleanup(inter_param)
             for file in inter_files_name:
                 cmd = f"rm -f ../{file}"
                 subprocess.call(cmd, shell=True)

@@ -13,7 +13,7 @@ from pymatgen.core.surface import SlabGenerator
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
 
@@ -208,18 +208,28 @@ class Decohesive(Property):
             ptr_data += "Vacuum_size(A) \tDecohesion_E(J/m^2) \tDecohesion_S(Pa)\n"
 
             first_result = loadfn(os.path.join(all_tasks[0], "result_task.json"))
+            if is_failed_task_result(first_result):
+                raise RuntimeError(
+                    "decohesive reference task "
+                    f"{os.path.basename(all_tasks[0])} failed; "
+                    "cannot compute decohesion energies"
+                )
             equi_evac = first_result["energies"][-1]
             pre_evac = 0.0
             CF_EV_TO_J_PER_M2 = 1.60217657e-16 / 1e-20 * 0.001
 
             for task_dir in all_tasks:
-                task_result = loadfn(os.path.join(task_dir, "result_task.json"))
-                area = np.linalg.norm(
-                    np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
-                )
-                evac = (task_result["energies"][-1] - equi_evac) / area * CF_EV_TO_J_PER_M2
                 vacuum_size = loadfn(os.path.join(task_dir, "decohesive.json"))["vacuum_size"]
-                stress = (evac - pre_evac) / vacuum_size_step * 1e10
+                task_result = loadfn(os.path.join(task_dir, "result_task.json"))
+                if is_failed_task_result(task_result):
+                    evac = float("nan")
+                    stress = float("nan")
+                else:
+                    area = np.linalg.norm(
+                        np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
+                    )
+                    evac = (task_result["energies"][-1] - equi_evac) / area * CF_EV_TO_J_PER_M2
+                    stress = (evac - pre_evac) / vacuum_size_step * 1e10
 
                 ptr_data += f"{vacuum_size:7.3f}   {evac:7.3f}     {stress:10.3e} \n"
                 res_data[f"{vacuum_size}_{os.path.basename(task_dir)}"] = [

@@ -59,6 +59,55 @@ class TestGammaSurface(unittest.TestCase):
     def test_task_param(self):
         self.assertEqual(self.prop_param, self.gamma_surface.task_param())
 
+    def test_parent_lattice_hint_is_normalized(self):
+        gamma_surface = GammaSurface(
+            {
+                "type": "gamma_surface",
+                "parent_lattice": " BCC ",
+                "plane_miller": [0, 1, 1],
+                "slip_direction": [1, -1, 1],
+            }
+        )
+        self.assertEqual(gamma_surface.parent_lattice, "bcc")
+        self.assertEqual(
+            gamma_surface.task_param()["parent_lattice"], "bcc"
+        )
+
+    def test_invalid_parent_lattice_hint_fails(self):
+        with self.assertRaisesRegex(ValueError, "bcc, fcc, hcp"):
+            GammaSurface(
+                {"type": "gamma_surface", "parent_lattice": "b2"}
+            )
+
+    def test_nonrecommended_system_warns_and_uses_geometric_check(self):
+        self.gamma_surface.structure_type = "fcc"
+        structure = Structure(
+            Lattice.cubic(4.0),
+            ["Al"],
+            [[0.0, 0.0, 0.0]],
+        )
+
+        with self.assertLogs(level="WARNING") as captured:
+            plane, direction, slip_length, _ = (
+                self.gamma_surface._GammaSurface__convert_input_miller(
+                    structure
+                )
+            )
+
+        self.assertEqual(plane, (0, 0, 1))
+        self.assertEqual(direction, (1, 0, 0))
+        self.assertEqual(slip_length, 1)
+        self.assertTrue(
+            any(
+                "falling back to a geometric construction" in message
+                for message in captured.output
+            )
+        )
+
+        self.gamma_surface.slip_direction = [1, 0, 1]
+        with self.assertRaisesRegex(RuntimeError, "is not on plane"):
+            self.gamma_surface._GammaSurface__convert_input_miller(structure)
+
     def test_make_confs_bcc(self):
         if not os.path.exists(os.path.join(self.equi_path, "CONTCAR")):
             with self.assertRaises(RuntimeError):
@@ -78,6 +127,11 @@ class TestGammaSurface(unittest.TestCase):
         dfm_dirs = glob.glob(os.path.join(self.target_path, "task.*"))
         self.assertEqual(len(dfm_dirs), (self.gamma_surface.n_steps_x + 1) * (self.gamma_surface.n_steps_y + 1))
         self.assertEqual(len(task_list), len(dfm_dirs))
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(self.target_path, "slab_generation.json")
+            )
+        )
 
         pairs = set()
         for ii in sorted(dfm_dirs):
@@ -231,7 +285,7 @@ def test_gamma_surface_default_cal_setting_fills_missing_values():
         "relax_vol": False,
     }
     assert prop.supercell_size == (1, 1, 5)
-    assert prop.vacuum_size == 0
+    assert prop.vacuum_size == 20
     assert prop.add_fix == ["true", "true", "false"]
 
 
@@ -272,6 +326,27 @@ def test_gamma_surface_closed_loop_is_opt_in():
     assert closed.closed_loop is True
     with pytest.raises(ValueError, match="must be a boolean"):
         GammaSurface({"type": "gamma_surface", "closed_loop": "true"})
+
+
+def test_gamma_surface_rejects_invalid_vacuum_and_accepts_strict_alias():
+    for value in (-1.0, float("nan"), float("inf"), True):
+        with pytest.raises(ValueError, match="finite number"):
+            GammaSurface({"type": "gamma_surface", "vacuum_size": value})
+    prop = GammaSurface(
+        {"type": "gamma_surface", "orthogonalize_cell": True}
+    )
+    assert prop.require_orthogonal_cell is True
+    assert prop.task_param()["require_orthogonal_cell"] is True
+    with pytest.raises(ValueError, match="must be a boolean"):
+        GammaSurface({"type": "gamma_surface", "orthogonalize_cell": "false"})
+    with pytest.raises(ValueError, match="disagree"):
+        GammaSurface(
+            {
+                "type": "gamma_surface",
+                "require_orthogonal_cell": True,
+                "orthogonalize_cell": False,
+            }
+        )
 
 
 def test_gamma_surface_finds_and_validates_oblique_periodic_vectors():
@@ -476,6 +551,69 @@ def test_gamma_surface_compute_lower_with_synthetic_results(tmp_path):
     assert (prop_dir / "result.json").is_file()
 
 
+def test_gamma_surface_compute_lower_nan_for_failed_task(tmp_path):
+    prop_dir = tmp_path / "conf" / "gamma_surface_00"
+    task0 = prop_dir / "task.000000"
+    task1 = prop_dir / "task.000001"
+    equi_dir = tmp_path / "conf" / "relaxation" / "relax_task"
+    task0.mkdir(parents=True)
+    task1.mkdir(parents=True)
+    equi_dir.mkdir(parents=True)
+
+    cell = np.eye(3).tolist()
+    dumpfn({"energies": [-2.0], "atom_numbs": [2]}, equi_dir / "result.json")
+    dumpfn(
+        {"energies": [-2.0], "atom_numbs": [2], "cells": [cell]},
+        task0 / "result_task.json",
+    )
+    dumpfn({"failed": True}, task1 / "result_task.json")
+    for task, frac_x, frac_y in [(task0, 0.0, 0.0), (task1, 0.5, 0.0)]:
+        dumpfn([0, 0, 1], task / "miller.json")
+        dumpfn({"frac_x": frac_x, "frac_y": frac_y}, task / "displacement.json")
+    dumpfn(2.0, task0 / "slip_length_x.json")
+    dumpfn(3.0, task0 / "slip_length_y.json")
+
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+        }
+    )
+    res_data, _ = prop._compute_lower(
+        str(prop_dir / "result.json"),
+        [str(task0), str(task1)],
+        {},
+    )
+    assert res_data["0.000000,0.000000"][2] == 0.0
+    assert np.isnan(res_data["0.500000,0.000000"][2])
+    assert np.isnan(res_data["0.500000,0.000000"][3])
+
+
+def test_gamma_surface_compute_lower_fails_if_reference_task_failed(tmp_path):
+    prop_dir = tmp_path / "conf" / "gamma_surface_00"
+    task0 = prop_dir / "task.000000"
+    equi_dir = tmp_path / "conf" / "relaxation" / "relax_task"
+    task0.mkdir(parents=True)
+    equi_dir.mkdir(parents=True)
+    dumpfn({"energies": [-2.0], "atom_numbs": [2]}, equi_dir / "result.json")
+    dumpfn({"failed": True}, task0 / "result_task.json")
+    dumpfn([0, 0, 1], task0 / "miller.json")
+    dumpfn({"frac_x": 0.0, "frac_y": 0.0}, task0 / "displacement.json")
+    dumpfn(2.0, task0 / "slip_length_x.json")
+    dumpfn(3.0, task0 / "slip_length_y.json")
+
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [0, 0, 1],
+            "slip_direction": [1, 0, 0],
+        }
+    )
+    with pytest.raises(RuntimeError, match="reference task"):
+        prop._compute_lower(str(prop_dir / "result.json"), [str(task0)], {})
+
+
 def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(tmp_path):
     prop_dir = tmp_path / "conf" / "gamma_surface_00"
     task = prop_dir / "task.000000"
@@ -519,6 +657,60 @@ def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(tmp_pa
     assert entry[:2] == [2.0, 3.1]
     assert entry[5]["disp_cart"] == [2.25, 3.0, 0.5]
     assert entry[5]["slip_vector_y"] == [0.25, 3.0, 0.5]
+
+
+def test_gamma_surface_compute_lower_uses_interface_count_and_fixed_area(tmp_path):
+    prop_dir = tmp_path / "conf" / "gamma_surface_00"
+    task0 = prop_dir / "task.000000"
+    task1 = prop_dir / "task.000001"
+    equi_dir = tmp_path / "conf" / "relaxation" / "relax_task"
+    task0.mkdir(parents=True)
+    task1.mkdir(parents=True)
+    equi_dir.mkdir(parents=True)
+    dumpfn({"energies": [-2.0], "atom_numbs": [2]}, equi_dir / "result.json")
+    cell = [[2.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 10.0]]
+    for task, energy, frac_x in (
+        (task0, -10.0, 0.0),
+        (task1, -9.0, 0.5),
+    ):
+        dumpfn(
+            {"energies": [energy], "atom_numbs": [2], "cells": [cell]},
+            task / "result_task.json",
+        )
+        dumpfn([1, 1, 0], task / "miller.json")
+        dumpfn(
+            {"frac_x": frac_x, "frac_y": 0.0, "disp_cart": [frac_x, 0.0, 0.0]},
+            task / "displacement.json",
+        )
+        dumpfn(1.0, task / "slip_length_x.json")
+        dumpfn(1.0, task / "slip_length_y.json")
+        dumpfn(
+            {"slab_geometry": {"interface_count": 2}},
+            task / "gamma_geometry.json",
+        )
+    prop = GammaSurface(
+        {
+            "type": "gamma_surface",
+            "plane_miller": [1, 1, 0],
+            "slip_direction": [-1, 1, 1],
+            "vacuum_size": 0.0,
+        }
+    )
+    result, _ = prop._compute_lower(
+        str(prop_dir / "result.json"), [str(task0), str(task1)], {}
+    )
+    expected = 1.0 / (2.0 * 2.0) * 16.0217657
+    assert result["0.500000,0.000000"][2] == pytest.approx(expected)
+
+    changed_cell = [[2.1, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 10.0]]
+    dumpfn(
+        {"energies": [-9.0], "atom_numbs": [2], "cells": [changed_cell]},
+        task1 / "result_task.json",
+    )
+    with pytest.raises(RuntimeError, match="in-plane area changed"):
+        prop._compute_lower(
+            str(prop_dir / "result.json"), [str(task0), str(task1)], {}
+        )
 
 
 def test_gamma_surface_refine_inherits_metadata_and_constraints(tmp_path):
@@ -659,6 +851,14 @@ class TestGammaSurfaceCoverage(unittest.TestCase):
     def test_gamma_surface_compute_lower_with_synthetic_results(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_gamma_surface_compute_lower_with_synthetic_results(Path(tmp))
+
+    def test_gamma_surface_compute_lower_nan_for_failed_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_compute_lower_nan_for_failed_task(Path(tmp))
+
+    def test_gamma_surface_compute_lower_fails_if_reference_task_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_gamma_surface_compute_lower_fails_if_reference_task_failed(Path(tmp))
 
     def test_gamma_surface_compute_lower_preserves_closed_loop_cartesian_data(self):
         with tempfile.TemporaryDirectory() as tmp:

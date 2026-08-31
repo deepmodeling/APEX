@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 
 import numpy as np
@@ -13,7 +14,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 __package__ = "tests"
 
 from apex.core.calculator.VASP import VASP
-from apex.core.calculator.lib.vasp_utils import incar_upper
+from apex.core.calculator.lib.vasp_utils import (
+    incar_upper,
+    regulate_poscar,
+    sort_poscar,
+)
 
 
 class TestVASP(unittest.TestCase):
@@ -194,3 +199,38 @@ class TestVASP(unittest.TestCase):
             self.VASP.backward_files("gruneisen"),
             ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR", "vasprun.xml"],
         )
+
+
+class TestVASPPoscarUtilities(unittest.TestCase):
+    def test_regulate_and_sort_preserve_selective_dynamics(self):
+        contents = """TiV selective
+1.0
+2 0 0
+0 2 0
+0 0 2
+V Ti V
+1 1 1
+Selective dynamics
+Direct
+0.0 0.0 0.0 F F T V
+0.5 0.5 0.5 F F T Ti
+0.25 0.25 0.25 F F T V
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            source = os.path.join(tmp, "POSCAR.in")
+            regulated = os.path.join(tmp, "POSCAR.regulated")
+            sorted_path = os.path.join(tmp, "POSCAR.sorted")
+            with open(source, "w") as fp:
+                fp.write(contents)
+
+            regulate_poscar(source, regulated)
+            sort_poscar(regulated, sorted_path, ["Ti", "V"])
+
+            with open(sorted_path) as fp:
+                lines = fp.read().splitlines()
+            self.assertEqual(lines[5], "Ti V")
+            self.assertEqual(lines[6], "1 2")
+            self.assertEqual(lines[7], "Selective dynamics")
+            self.assertEqual(lines[8], "Direct")
+            self.assertEqual(lines[9].split()[-4:], ["F", "F", "T", "Ti"])
+            self.assertTrue(all(line.split()[-4:-1] == ["F", "F", "T"] for line in lines[9:12]))

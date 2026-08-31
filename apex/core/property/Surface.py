@@ -11,7 +11,7 @@ from pymatgen.core.surface import generate_all_slabs
 
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
@@ -219,18 +219,21 @@ class Surface(Property):
             )
 
             for ii in all_tasks:
-                task_result = loadfn(os.path.join(ii, "result_task.json"))
-                natoms = np.sum(task_result["atom_numbs"])
-                epa = task_result["energies"][-1] / natoms
-                AA = np.linalg.norm(
-                    np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
-                )
-
                 structure_dir = os.path.basename(ii)
-                Cf = 1.60217657e-16 / (1e-20 * 2) * 0.001
-                evac = (task_result["energies"][-1] - equi_epa * natoms) / AA * Cf
                 miller_index = loadfn(os.path.join(ii, "miller.json"))
-                
+                task_result = loadfn(os.path.join(ii, "result_task.json"))
+                if is_failed_task_result(task_result):
+                    evac = float("nan")
+                    epa = float("nan")
+                else:
+                    natoms = np.sum(task_result["atom_numbs"])
+                    epa = task_result["energies"][-1] / natoms
+                    AA = np.linalg.norm(
+                        np.cross(task_result["cells"][0][0], task_result["cells"][0][1])
+                    )
+                    Cf = 1.60217657e-16 / (1e-20 * 2) * 0.001
+                    evac = (task_result["energies"][-1] - equi_epa * natoms) / AA * Cf
+
                 ptr_data += "%-25s     %7.3f    %8.3f %8.3f\n" % (
                     str(miller_index) + "-" + structure_dir + ":",
                     evac,

@@ -9,7 +9,7 @@ from pymatgen.analysis.defects.generators import VacancyGenerator
 from pymatgen.core.structure import Structure
 
 from apex.core.calculator.lib import abacus_utils
-from apex.core.property.Property import Property
+from apex.core.property.Property import Property, is_failed_task_result
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro
 from dflow.python import upload_packages
@@ -199,21 +199,28 @@ class Vacancy(Property):
 
             for idid, ii in enumerate(all_tasks):
                 structure_dir = os.path.basename(ii)
-                task_result = loadfn(all_res[idid])
-                natoms = sum(task_result["atom_numbs"])                
-                evac = task_result["energies"][-1] - equi_epa * natoms
-
                 supercell_index = loadfn(os.path.join(ii, "supercell.json"))
+                task_result = loadfn(all_res[idid])
+                if is_failed_task_result(task_result):
+                    evac = float("nan")
+                    task_energy = float("nan")
+                    equi_energy = float("nan")
+                else:
+                    natoms = sum(task_result["atom_numbs"])
+                    task_energy = task_result["energies"][-1]
+                    equi_energy = equi_epa * natoms
+                    evac = task_energy - equi_energy
+
                 ptr_data += "%s: %7.3f  %7.3f %7.3f \n" % (
                     str(supercell_index) + "-" + structure_dir,
                     evac,
-                    task_result["energies"][-1],
-                    equi_epa * natoms,
+                    task_energy,
+                    equi_energy,
                 )
                 res_data[str(supercell_index) + "-" + structure_dir] = [
                     evac,
-                    task_result["energies"][-1],
-                    equi_epa * natoms,
+                    task_energy,
+                    equi_energy,
                 ]
 
         else:

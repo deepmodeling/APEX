@@ -535,7 +535,7 @@ class TestGruneisen(unittest.TestCase):
         deepmd_gruneisen.post_process([str(task_dir)])
 
         rewritten = (task_dir / "in.lammps").read_text()
-        self.assertIn("plugin load libdeepmd_lmp.so", rewritten)
+        self.assertNotIn("plugin load libdeepmd_lmp.so", rewritten)
         self.assertIn("pair_style deepmd frozen_model.pth", rewritten)
         self.assertNotIn("run 0", rewritten)
         self.assertTrue((task_dir / "in.relax.lammps").is_file())

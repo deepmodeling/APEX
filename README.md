@@ -57,6 +57,7 @@ APEX currently offers calculation methods for the following alloy properties:
   - [3.6 After Submission](#36-after-submission)
   - [3.7 Graphical Interface (GUI)](#37-graphical-interface-gui)
   - [3.8 Bohrium Account Defaults](#38-bohrium-account-defaults)
+  - [3.9 Agent Skill](#39-agent-skill)
 - [4. Detailed Parameter Reference](#4-detailed-parameter-reference)
   - [4.1 Global Configuration](#41-global-configuration-globaljson)
   - [4.2 Calculation Parameters](#42-calculation-parameters-paramjson)
@@ -70,9 +71,10 @@ APEX currently offers calculation methods for the following alloy properties:
   - [4.10 Gamma Line/Surface](#410-gamma-line-generalized-stacking-fault)
   - [4.11 Phonon Spectra](#411-phonon-spectra)
   - [4.12 Grüneisen Parameters and Thermal Expansion](#412-grüneisen-parameters-and-thermal-expansion)
-  - [4.13 Finite-Temperature Lattice Parameters](#413-finite-temperature-lattice-parameters)
-  - [4.14 Finite-Temperature Elastic constant](#414-finite-temperature-elastic-constant)
-  - [4.15 Annealing](#415-annealing)
+  - [4.13 Two-Phase Coexistence Melting Point](#413-two-phase-coexistence-melting-point)
+  - [4.14 Finite-Temperature Lattice Parameters](#414-finite-temperature-lattice-parameters)
+  - [4.15 Finite-Temperature Elastic constant](#415-finite-temperature-elastic-constant)
+  - [4.16 Annealing](#416-annealing)
 - [More Resources](#more-resources)
 
 ## 1.Installation
@@ -237,9 +239,9 @@ Create `global_bohrium.json` to submit workflows to the Bohrium cloud platform:
 
 ```json
 {
-  "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
+  "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
   "lammps_run_command":"lmp -in in.lammps",
-  "scass_type":"c8_m31_1 * NVIDIA T4"
+  "scass_type":"c16_m120_1 * NVIDIA L20"
 }
 ```
 
@@ -255,6 +257,14 @@ Or set it directly:
 
 ```shell
 apex account --email YOUR_EMAIL --password YOUR_PASSWD --program-id 1234
+
+# AccessKey authentication (email/password not required)
+apex account --access-key YOUR_ACCESS_KEY --program-id 1234
+
+# Clear both login methods, or only one method
+apex account --clear
+apex account --clear access-key
+apex account --clear email
 ```
 
 When running `apex submit -c global_bohrium.json`, values in your json file still have highest priority and override the saved defaults.
@@ -440,6 +450,14 @@ apex account
 
 # non-interactive mode
 apex account --email YOUR_EMAIL --password YOUR_PASSWD --program-id 1234
+
+# AccessKey mode (takes precedence over email/password)
+apex account --access-key YOUR_ACCESS_KEY --program-id 1234
+
+# Clear both login methods, only AccessKey, or only email/password
+apex account --clear
+apex account --clear access-key
+apex account --clear email
 ```
 
 Useful commands:
@@ -454,10 +472,31 @@ When you run `apex submit -c global_bohrium.json`, APEX auto-fills these default
 - `dflow_host`: `https://workflows.deepmodeling.com`
 - `k8s_api_server`: `https://workflows.deepmodeling.com`
 - `batch_type`: `Bohrium`
-- `context_type`: `Bohrium`
+- `context_type`: `Bohrium` (AccessKey mode exchanges a short-lived ticket for DPDispatcher)
 - `apex_image_name`: `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post`
 
 Priority rule: values in your `-c` json file override account defaults.
+
+### 3.9 Agent Skill
+
+APEX ships two Agent-skill editions with different execution assumptions:
+
+- `apex skill` prints a local Agent installation prompt. During installation,
+  the Agent asks whether calculations use Bohrium cloud, the local workstation,
+  or a local Slurm/PBS cluster, then installs the matching execution profile.
+  The Bohrium profile uses `apex account` and runs `apex submit` directly from
+  the local machine; it does not require an access-key ticket or outer job.
+- `apex skill --zip` writes `apex-flow.zip` for Bohrium Cloud/MatMaster. This
+  separate edition uses a ticket and a lightweight outer submission job because
+  the cloud container cannot read the user's local APEX account file.
+
+```shell
+# Print the local Agent installation prompt
+apex skill
+
+# Build the Bohrium Cloud/MatMaster upload archive
+apex skill --zip
+```
 
 
 
@@ -511,6 +550,7 @@ Priority rule: values in your `-c` json file override account defaults.
 | `email` | String | `None` | Bohrium account email. |
 | `phone` | String | `None` | Bohrium account phone. |
 | `password` | String | `None` | Bohrium password. |
+| `access_key` | String | `None` | Bohrium AccessKey. When set, it takes precedence over email/password authentication. |
 | `program_id` | Integer | `None` | Bohrium program ID. |
 | `scass_type` | String | `None` | Bohrium node type. |
 
@@ -710,17 +750,46 @@ Notes:
 
 APEX generates displaced slab structures from the specified Miller plane and slip directions. The slip vector always follows the primary direction. Use predefined slip systems for FCC, BCC, and HCP crystals when possible to avoid invalid structures.
 
+#### Physically recommended slip planes
+
+The following plane families are the most important physical defaults for
+dislocation slip and generalized stacking-fault calculations. The listed
+directions are representative members; symmetry-equivalent planes, opposite
+directions, and other deliberately selected paths remain valid user inputs.
+
+| Crystal | Physically important plane families | Principal Burgers vectors / paths |
+|---------|-------------------------------------|------------------------------------|
+| **FCC** | close-packed $\{111\}$ | perfect $a/2\langle110\rangle$; Shockley partial $a/6\langle112\rangle$ |
+| **BCC** | primary $\{110\}$; also $\{112\}$ and $\{123\}$ | $a/2\langle111\rangle$ |
+| **HCP** | basal $\{0001\}$, prismatic $\{10\bar{1}0\}$ / $\{11\bar{2}0\}$, and pyramidal $\{10\bar{1}1\}$ / $\{11\bar{2}2\}$ | $\langle a\rangle$, $\langle c\rangle$, and $\langle c+a\rangle$ systems |
+
+Only the representative systems on these recommended plane families use the
+predefined crystallographic orientation and automatic slip-length metadata
+below. If an input plane/direction pair is not in this recommended registry,
+both `gamma` and `gamma_surface` emit a warning and fall back to the same
+geometric construction: after any HCP Miller--Bravais conversion, APEX checks
+only that `plane_miller · slip_direction == 0`. A non-orthogonal pair is still
+an error. This warning-only fallback permits intentional non-primary studies,
+but the generated slab and displacement vectors must be inspected manually.
+For a Gamma line or Gamma surface with `parent_lattice` set, APEX automatically resolves the
+integer mapping from the supplied relaxed RSS/SQS cell to that parent lattice.
+The user-facing Miller plane and slip direction therefore remain parent-lattice
+indices even when the input is a large, sheared, chemically disordered
+supercell. APEX does not symmetrize the atoms or lattice. Set
+`require_orthogonal_cell = true` when a zero-tilt Cartesian-z cell is part of
+the scientific protocol. This is a strict gate: APEX never Gram--Schmidts a
+periodic cell because doing so changes its periodic boundaries. The legacy
+alias `orthogonalize_cell = true` has the same fail-closed validation meaning.
+
+Recommended representative systems:
+
 | Crystal | Plane Miller | Slip direction | Secondary direction | Default slip length |
 |---------|--------------|----------------|---------------------|---------------------|
-| **FCC** | $(001)$ | $[100]$ | $[010]$ | $a$ |
-|         | $(110)$ | $[\bar{1}10]$ | $[001]$ | $\sqrt{2}a$ |
-|         | $(111)$ | $[11\bar{2}]$ | $[\bar{1}10]$ | $\sqrt{6}a$ |
+| **FCC** | $(111)$ | $[11\bar{2}]$ | $[\bar{1}10]$ | $\sqrt{6}a$ |
 |         | $(111)$ | $[\bar{1}\bar{1}2]$ | $[1\bar{1}0]$ | $\sqrt{6}a$ |
 |         | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\sqrt{2}a$ |
 |         | $(111)$ | $[1\bar{1}0]$ | $[11\bar{2}]$ | $\sqrt{2}a$ |
-| **BCC** | $(001)$ | $[100]$ | $[010]$ | $a$ |
-|         | $(111)$ | $[\bar{1}10]$ | $[\bar{1}\bar{1}2]$ | $\frac{\sqrt{2}}{2}a$ |
-|         | $(110)$ | $[\bar{1}11]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
+| **BCC** | $(110)$ | $[\bar{1}11]$ | $[00\bar{1}]$ | $\frac{\sqrt{3}}{2}a$ |
 |         | $(110)$ | $[1\bar{1}\bar{1}]$ | $[001]$ | $\frac{\sqrt{3}}{2}a$ |
 |         | $(112)$ | $[11\bar{1}]$ | $[\bar{1}10]$ | $\frac{\sqrt{3}}{2}a$ |
 |         | $(112)$ | $[\bar{1}\bar{1}1]$ | $[1\bar{1}0]$ | $\frac{\sqrt{3}}{2}a$ |
@@ -740,19 +809,30 @@ APEX generates displaced slab structures from the specified Miller plane and sli
 |         | $(\bar{1}2\bar{1}2)$ | $[10\bar{1}0]$ | $[1\bar{2}13]$ | $\sqrt{3}a$ |
 |         | $(\bar{1}2\bar{1}2)$ | $[1\bar{2}13]$ | $[\bar{1}010]$ | $\sqrt{a^2+c^2}$ |
 
+`Default slip length` is APEX's legacy automatic scan span and is not always
+one elementary Burgers-vector magnitude. Set `slip_length` explicitly for a
+one-Burgers-vector Gamma line. For a complete 2D Gamma surface, prefer
+`closed_loop = true`, which derives periodic in-plane translations instead.
+
 Key parameters:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `plane_miller` | Sequence[Int] | `None` | Miller indices of the target plane. |
 | `slip_direction` | Sequence[Int] | `None` | Primary slip direction. |
+| `parent_lattice` | String or `None` | `None` | Parent lattice (`bcc`, `fcc`, or `hcp`) for RSS/disordered supercells. Gamma line and Gamma surface automatically infer the integer parent-to-supercell mapping and interpret `plane_miller` / `slip_direction` in the parent basis without symmetrizing the supplied geometry. |
 | `slip_length` | Float or Sequence | `1` | Slip magnitude (vector format `[x, y, z]` means $\sqrt{(xa)^2 + (yb)^2 + (zc)^2}$). |
 | `plane_shift` | Float | `0` | Shift of the displacement plane in units of lattice parameter `c`. |
-| `n_steps` | Integer | `10` | Number of sampling points along the slip. |
-| `vacuum_size` | Float | `0` | Added vacuum layer thickness (Å). |
-| `supercell_size` | Sequence[Int] | `[1, 1, 5]` | Slab supercell size. |
+| `n_steps` | Integer | `10` | Number of equal slip increments; the uniform path contains `n_steps + 1` points including zero. |
+| `displacement_points` | Sequence[Float] or `None` | `None` | Gamma-line-only explicit normalized fractions in `[0,1]`; unique and must include zero. |
+| `vacuum_size` | Float | `20` | Added vacuum layer thickness (Å). |
+| `require_orthogonal_cell` | Bool | `false` | Fail unless the generated slab is orthogonal, zero-tilt, and has a Cartesian-z normal. No cell orthogonalization is applied. |
+| `supercell_size` | Sequence[Int] | `[1, 1, 5]` | In-plane replication and target number of Miller-plane spacings. |
+| `min_slab_height` | Float or `None` | `None` | Minimum material-slab thickness (Å); APEX adds only the oriented-cell repeats required to reach it. |
+| `max_atoms` | Integer or `None` | `None` | Stop structure generation when the final slab exceeds this atom count. |
+| `min_distance` | Float | `0.2` | Stop when any periodic atom-pair distance is below this threshold (Å). |
 | `add_fix` | Sequence[String] | `["true","true","false"]` | Position constraints along x/y/z. |
-| `closed_loop` | Bool | `false` |  when `true`, derive two periodic in-plane translation vectors from the generated slab. and slip_length or slip_length_y will be **ignored** |
+| `closed_loop` | Bool | `false` | When `true`, derive two periodic in-plane translation vectors from the generated slab; combining it with `slip_length` or `slip_length_y` is an error. |
 
 Example:
 
@@ -769,12 +849,27 @@ Example:
     "plane_shift": 0.25
   },
   "supercell_size": [1, 1, 6],
+  "min_slab_height": 18,
+  "max_atoms": 216,
   "vacuum_size": 10,
   "add_fix": ["true", "true", "false"],
   "n_steps": 10
 }
 ```
-To preview structure behave as expected before brusting computational resource, you can use `preview` to generate a gif file to visulize it.
+
+The third `supercell_size` value is handled as a Miller-plane count, avoiding
+floating-point promotion such as `ceil(2.0000000000000004) = 3`. Generation
+statistics are written to `slab_generation.json`, including the requested and
+effective plane counts, material-slab height, atom count, and minimum pair
+distance. `min_slab_height`, `max_atoms`, and `min_distance` apply equally to
+`gamma` and `gamma_surface`.
+
+Before committing computational resources, use `preview` to generate GIFs of
+the displaced structures. Gamma line and gamma surface previews write both the
+slip-plane and parent-`bc` projections by default; use `--gif-view default` to
+request the legacy single Cartesian view. The rendered viewport includes the
+projected unit-cell boundary, so a configured vacuum layer remains visible in
+views with a slab-normal component.
 
 ```shell
 apex preview gammaline.json
@@ -782,6 +877,23 @@ apex preview gammaline.json
 
 
 Nested dictionaries (`fcc`, `bcc`, `hcp`, etc.) override the top-level parameters for the corresponding lattice type.
+For chemically disordered RSS structures that symmetry analysis classifies as
+`other`, set `parent_lattice` explicitly. Gamma-line and Gamma-surface generation then infer the
+integer parent-supercell mapping, convert the parent Miller indices internally,
+uses the reciprocal-lattice plane normal, chooses the elementary parent Burgers
+translation, freezes the atom split before adding vacuum, and records the full
+mapping/geometry/provenance in `gamma_geometry.json`. Generation fails closed
+if the mapping, layer-gap split, minimum distance, or parent-translation
+topology is not valid. For an RSS, the relaxed-coordinate and chemical
+`u = 1` mismatches are recorded as diagnostics because one elementary parent
+translation is not a symmetry of the disordered relaxed configuration. The
+supplied relaxed cell is not symmetrized.
+
+Both properties write `gamma_geometry.json`, freeze the same material-internal
+fault split before adding vacuum, and normalize by the recorded number of
+interfaces: `Delta E/A` for a vacuum slab and `Delta E/(2A)` for a fully
+periodic zero-vacuum cell. Post-processing fails if task areas differ from the
+zero-displacement reference.
 
 Similarly, to investigate Gamma Surface, change the type to `gamma_surface`, and adjust steps accordingly.
 `gamma_surface` keeps the same crystallographic interface: `plane_miller` and
@@ -794,22 +906,43 @@ adds vacuum along the selected fault normal for slab/free-surface calculations.
         {
             "type": "gamma_surface",
             "req_calc": true,
-            "plane_miller": [1, 1, 0],
-            "slip_direction": [1, -1, -1],
+            "plane_miller": [1, 1, 1],
+            "slip_direction": [-1, 1, 0],
+            "bcc": {
+                "plane_miller": [1, 1, 0],
+                "slip_direction": [-1, 1, 1]
+            },
+            "hcp": {
+                "plane_miller": [0, 0, 0, 1],
+                "slip_direction": [2, -1, -1, 0]
+            },
             "supercell_size": [1, 1, 20],
             "vacuum_size": 15,
-            "closed_loop": false,
+            "closed_loop": true,
             "add_fix": ["true", "true", "false"],
             "n_steps_x": 20,
             "n_steps_y": 20
         }
     ]
 ```
+
+The top-level pair is the FCC recommendation and is also the explicit fallback
+for structures classified as `other`; edit it for a disordered BCC/HCP parent.
+Recognized BCC and HCP structures use their nested recommendations.
+`closed_loop = true` is recommended for a complete 2D surface because it
+derives periodic in-plane translations and verifies closure at all grid
+corners. Set it to `false` only when intentionally defining custom
+`slip_length` / `slip_length_y` paths.
+
 ### 4.11 Phonon spectra
 
 APEX integrates parts of [dflow-phonon](https://github.com/Chengqian-Zhang/dflow-phonon) and wraps [Phonopy](https://github.com/phonopy/phonopy) / [phonoLAMMPS](https://github.com/abelcarreras/phonolammps). [SeeK-path](https://seekpath.readthedocs.io/en/latest/index.html) automatically generates high-symmetry k-paths.
 
-> **Important:** LAMMPS phonon and Grüneisen workflows always use `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`. During `apex submit`, APEX overrides any other configured LAMMPS image for these properties.
+> **Important:** LAMMPS phonon and Grüneisen workflows using GPU potentials
+> (`deepmd`, `mace`, `nep`) use
+> `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`.
+> CPU potentials keep the CPU-safe `apex-flow:1.3.0.post` image; 0.0.2 must
+> not be paired with a `*_cpu` machine.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -850,28 +983,90 @@ APEX supports Grüneisen workflows based on phonon calculations at multiple stra
 
 For `full` mode, use fixed-volume internal relaxation in `cal_setting` (`relax_pos = true`, `relax_shape = false`, `relax_vol = false`) so the phonon and energy points share the intended volume grid.
 
-### 4.13 Finite-temperature lattice parameters
+### 4.13 Two-phase coexistence melting point
 
-APEX supports lattice parameter calculations at finite temperatures using molecular dynamics in LAMMPS.
-This workflow performs NVT equilibration at target temperatures and averages lattice parameters over the equilibrated trajectory.
+`melting_point` is a LAMMPS-only direct two-phase coexistence workflow. For
+each target temperature and velocity-seed replica, APEX premelts the upper
+part of the cell while pinning the lower crystal, conditions the liquid at the
+target temperature, then releases the complete cell under zero-pressure NPT
+dynamics. The melting bracket is determined from the sign of the local-
+$q_6$-derived interface velocity. A positive velocity denotes solid growth; a
+negative velocity denotes liquid growth. The reported uncertainty is half the
+temperature interval between the nearest consensus solid- and liquid-side
+endpoints, not a thermodynamic confidence interval.
+
+```json
+{
+  "type": "melting_point",
+  "method": "two_phase",
+  "supercell_size": [1, 1, 2],
+  "cal_setting": {
+    "temperature": [1600, 1650, 1700],
+    "premelt_temperature": 4500,
+    "premelt_steps": 5000,
+    "conditioning_steps": 5000,
+    "production_steps": 100000,
+    "timestep": 0.001,
+    "tdamp": 0.1,
+    "pdamp": 1.0,
+    "pressure": 0.0,
+    "barostat": "iso",
+    "interface_axis": "z",
+    "liquid_fraction": 0.5,
+    "dump_step": 100,
+    "thermo_step": 100,
+    "restart_interval": 10000,
+    "q6_cutoff": 3.5,
+    "q6_neighbors": 12,
+    "replicas": 3,
+    "velocity_seeds": {
+      "premelt": 324159,
+      "condition": 271828,
+      "release": 161803
+    }
+  }
+}
+```
+
+If `replicas > 1` and one seed triplet is supplied, APEX deterministically
+derives independent triplets for later replicas. Alternatively, provide a
+list of explicit seed triplets. Independent random-alloy chemical
+realizations should be supplied as separate entries in `structures`; APEX
+does not silently randomize chemistry inside this property.
+
+The result directory contains `result.json`, `result.out`,
+`melting_point_tidy.csv`, `solid_fraction_vs_time.png`,
+`interface_velocity_vs_temperature.png`, and
+`solid_liquid_interface_snapshots.png`. Every temperature task retains
+`dump.melting`, `log.lammps`, `MeltingPoint.json`, task status evidence,
+alternating periodic restarts `restart.melting.1/2`, and the normal-completion
+checkpoint `restart.melting.final`. `restart_interval` is measured in LAMMPS
+timesteps and defaults to 10000 (10 ps for the default 0.001 ps timestep).
+
+### 4.14 Finite-temperature lattice parameters
+
+APEX supports lattice parameter calculations at finite temperatures using NpT molecular dynamics in LAMMPS and VASP. ABACUS is not supported for this property.
+The workflow runs separate equilibration and production stages and averages lattice parameters from the production trajectory. VASP uses Langevin–Parrinello–Rahman NpT (`MDALGO=3`, `ISIF=3`) and therefore requires a VASP executable compiled with `-Dtbdyn`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
 
-LAMMPS-specific calculation settings in `cal_setting`:
+Common and LAMMPS calculation settings in `cal_setting`:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `temperature` | Sequence[Float] | Required | Target temperatures (K) for lattice parameter calculation, e.g., `[200, 400, 600, 800]`. |
-| `equi_step` | Integer | `80000` | Number of equilibration steps before averaging. |
-| `ave_step` | Integer | `40000` | Number of steps for averaging lattice parameters. |
+| `temperature` | Sequence[Float] | `[200, 400, 600, 800]` (LAMMPS), `[300, 500, 700, 900, 1100, 1300, 1500]` (VASP) | Target temperatures (K). |
+| `equi_step` | Integer | `80000` (LAMMPS), `5000` (VASP) | Number of equilibration steps before averaging. |
+| `ave_step` | Integer | `40000` (LAMMPS), `10000` (VASP) | Number of production steps used for statistics. |
 | `timestep` | Float | `0.001` | MD timestep (ps). |
 | `tdamp` | Float | `0.1` | Thermostat damping parameter. |
 | `pdamp` | Float | `1.0` | Barostat damping parameter. |
 | `N_every` | Integer | `100` | Interval for computing averages. |
 | `N_repeat` | Integer | `10` | Number of average samples. |
 | `N_freq` | Integer | `2000` | Sample output frequency. |
+
+For VASP, use `timestep_fs` (fs) and `pressure_kbar` (kbar); `langevin_gamma`, `langevin_gamma_l`, and `pmass` configure the Langevin thermostat and lattice barostat. Results preserve the legacy `temperature -> [a, b, c, T]` entries and add `_metadata` with the mean, standard deviation, block standard error, and sample count for cell tensors, lengths, angles, and volume.
 
 Example:
 
@@ -893,7 +1088,7 @@ Example:
 }
 ```
 
-### 4.14 Finite-temperature elastic constant
+### 4.15 Finite-temperature elastic constant
 
 APEX supports elastic constant calculations at finite temperatures using molecular dynamics in LAMMPS.
 This implementation uses the noise-cancellation method (see [DOI: 10.1103/sd49-wqd6](https://doi.org/10.1103/sd49-wqd6)) to compute temperature-dependent elastic constants from stress fluctuations.
@@ -942,17 +1137,18 @@ Example:
 }
 ```
 
-### 4.15 Annealing
+### 4.16 Annealing
 
-APEX supports annealing simulations using molecular dynamics in LAMMPS.
-This workflow equilibrates the structure at a starting temperature, ramps to a target temperature, cools to an ending temperature, and performs final equilibration. Post-processing extracts radial distribution functions (RDF), mean squared displacement (MSD), and volume-temperature data from the heating and cooling stages for report visualization.
+APEX supports annealing simulations using molecular dynamics in LAMMPS and VASP. ABACUS is not supported for this property.
+The default `protocol="ramp_cool"` preserves the legacy schedule: equilibrate at a starting temperature, ramp to a target, cool to an ending temperature, and perform final equilibration. VASP also supports `protocol="coexistence"`, a fixed-target-temperature equilibration followed by a fixed-temperature production stage. Both VASP modes use `MDALGO=3` and require `-Dtbdyn`.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| `protocol` | String | `"ramp_cool"` | `"ramp_cool"` for the legacy heat/cool schedule, or VASP-only `"coexistence"` for fixed-T equilibration and production. |
 | `supercell_size` | Sequence[Int] | `[2, 2, 2]` | Supercell dimensions for the simulation. |
 | `supercell_length` | Float | `None` | Optional target supercell length. When provided, APEX derives a near-cubic replication from the relaxed structure. |
 
-LAMMPS-specific calculation settings in `cal_setting`:
+Calculation settings in `cal_setting`:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -961,10 +1157,11 @@ LAMMPS-specific calculation settings in `cal_setting`:
 | `end_temp` | Float | `4` | Final cooling temperature (K). |
 | `temp_ramp_rate` | Float | `1000` | Heating rate used to derive `ramp_step` when explicit step counts are not provided. Alias: `ramp_rate`. |
 | `cool_rate` | Float | `temp_ramp_rate` | Cooling rate used to derive `cool_step` when explicit step counts are not provided. |
-| `equi_step` | Integer | `20000` | Initial equilibration steps at `start_temp`. |
-| `ramp_step` | Integer | rate-derived | Heating steps from `start_temp` to `target_temp`. Alias: `temp_ramp_step`. |
-| `hold_step` | Integer | `20000` | Final equilibration steps. |
-| `cool_step` | Integer | rate-derived | Cooling steps from `target_temp` to `end_temp`. Alias: `temp_decline_step`. |
+| `equi_step` | Integer | `20000` (`100` for DFT) | Initial equilibration steps at `start_temp`. |
+| `ramp_step` | Integer | rate-derived (`200` for DFT) | Heating steps from `start_temp` to `target_temp`. Alias: `temp_ramp_step`. |
+| `hold_step` | Integer | `20000` (`100` for DFT) | Final equilibration steps. |
+| `cool_step` | Integer | rate-derived (`200` for DFT) | Cooling steps from `target_temp` to `end_temp`. Alias: `temp_decline_step`. |
+| `production_step` | Integer | `10000` | Production steps for VASP `protocol="coexistence"`. |
 | `thermostat` | String | `"nose_hoover"` | Thermostat method: `"nose_hoover"` or `"langevin"`. |
 | `ensemble` | String | `"npt"` | Ensemble. For Nose-Hoover use `"npt"` or `"nvt"`; for Langevin use `"nph"` or `"nve"`. |
 | `timestep` | Float | `0.001` | MD timestep (ps). |
@@ -984,6 +1181,8 @@ LAMMPS-specific calculation settings in `cal_setting`:
 | `msd_nevery` | Integer | `100` | MSD sampling interval for `fix ave/time`. |
 | `msd_nrepeat` | Integer | `1` | Number of MSD samples per average. |
 | `msd_nfreq` | Integer | `200` | MSD output frequency. |
+
+VASP uses the `timestep_fs` and `pressure_kbar` fields described for `finite_t_latt`. Ramp/cool stages or coexistence equilibration/production stages run sequentially inside each task; `OUTCAR` and `XDATCAR` provide RDF, MSD, volume, pressure, temperature, and energy data for post-processing.
 
 Example:
 

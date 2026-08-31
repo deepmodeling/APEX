@@ -284,6 +284,34 @@ def test_format_step_failure_includes_traceback_excerpt(tmp_path):
     assert "RuntimeError: phonopy failed" in formatted
 
 
+def test_failure_log_excerpt_redacts_credentials(tmp_path):
+    log_path = tmp_path / "main.log"
+    log_path.write_text(
+        'machine={"access_key": "secret-access", "password": "secret-password"}\n'
+        "BOHR_TICKET=secret-ticket python run.py\n"
+        "accessKey=secret-unquoted\n"
+        "ticket=secret-plain\n"
+        "Authorization: Bearer secret-bearer\n"
+        'headers={"authorization": "Bearer secret-json-bearer"}\n'
+        "url=https://example.invalid/run?accessKey=secret-query&expiration=24\n"
+        "RuntimeError: submission failed\n",
+        encoding="utf-8",
+    )
+
+    excerpt = flow.FlowGenerator._failure_log_excerpt(str(log_path))
+
+    assert "secret-access" not in excerpt
+    assert "secret-password" not in excerpt
+    assert "secret-ticket" not in excerpt
+    assert "secret-unquoted" not in excerpt
+    assert "secret-plain" not in excerpt
+    assert "secret-bearer" not in excerpt
+    assert "secret-json-bearer" not in excerpt
+    assert "secret-query" not in excerpt
+    assert excerpt.count("[REDACTED]") == 8
+    assert "RuntimeError: submission failed" in excerpt
+
+
 def test_format_step_failure_includes_lammps_diagnostic_excerpt(tmp_path):
     task_dir = tmp_path / "failed-artifacts" / "prop-key" / "RunLAMMPS" / "backward_dir" / "task.000000"
     task_dir.mkdir(parents=True)
@@ -548,6 +576,10 @@ class TestFlowCoverage(unittest.TestCase):
     def test_format_step_failure_includes_traceback_excerpt(self):
         with tempfile.TemporaryDirectory() as tmp:
             test_format_step_failure_includes_traceback_excerpt(Path(tmp))
+
+    def test_failure_log_excerpt_redacts_credentials(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            test_failure_log_excerpt_redacts_credentials(Path(tmp))
 
     def test_format_step_failure_includes_lammps_diagnostic_excerpt(self):
         with tempfile.TemporaryDirectory() as tmp:

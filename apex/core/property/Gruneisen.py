@@ -492,7 +492,7 @@ class Gruneisen(Property):
                     if pair_line_id is not None:
                         contents = contents[: pair_line_id + 1]
                     with open("in.lammps", "w") as f2:
-                        f2.write(helper._ensure_deepmd_plugin_loaded("".join(contents)))
+                        f2.write(helper._strip_legacy_deepmd_plugin("".join(contents)))
                 self._write_fixed_volume_relax_inputs(task_dir)
                 with open("run_command", "w") as f3:
                     f3.write("bash run_gruneisen_task.sh")

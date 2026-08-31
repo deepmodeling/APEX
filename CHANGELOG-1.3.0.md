@@ -15,6 +15,8 @@ Major additions include:
 - Finite-temperature lattice workflow improvements
 - Finite-temperature elasticity workflow support and example documentation
 - Annealing workflow support for LAMMPS
+- Melting-point workflow support for solid-liquid coexistence calculations
+- Image-resident DPA4/PT2 runtime support with a fail-closed T4 qualification profile
 - Shape-controlled automatic supercell generation
 - `req_calc`-based relaxation/property selection for joint workflows
 - GUI-side batched submission for large configuration sets
@@ -74,6 +76,21 @@ Major additions include:
 - Added LAMMPS annealing workflow support.
 - Improved generated annealing input scripts for heating, cooling, RDF output, and holding stages.
 
+### Melting Point Workflow
+
+- Added a LAMMPS solid-liquid coexistence workflow for estimating melting points across multiple temperatures and replicas.
+- Added restart-file staging, interface-axis controls, per-temperature restart validation, and generated skill templates.
+- Added input validation and regression coverage for melting-specific temperature, replica, restart, and backend constraints.
+
+### DPA4/PT2 Runtime and Qualification
+
+- Added image-resident DeePMD PT2 model handling so immutable runtime artifacts are not copied into task upload packages.
+- Added DPA4-aware LAMMPS input generation, including the required atom maps, runtime plugin auto-loading, and rejection of incompatible legacy plugin commands.
+- Added an audited `DPA4-alloytongqi` source checkpoint, container wrapper templates, runtime manifest template, and a reproducible CPU/GPU and phonoLAMMPS benchmark harness.
+- Added a single-source DPA4 runtime profile used by generation, recommendation, standalone validation, and submission. The bundled profile remains fail-closed until an immutable image `ref@digest` passes the recorded post-snapshot T4 qualification.
+- Restricted the qualified production contract to one MPI rank on one `c4_m15_1 * NVIDIA T4`, with exact image, wrapper, model hash, and dispatcher validation.
+- Added complete automatic `type_map` expansion across every resolved structure and every effective LAMMPS `overwrite_interaction`.
+
 ### Workflow Selection and Submission
 
 - Added `req_calc`-based workflow selection for relaxation and property calculations.
@@ -94,6 +111,7 @@ Major additions include:
   - `.debug.log`
   - `.debug.stdout`
   - `.debug.stderr`
+- Added bounded retries for transient LAMMPS remote-startup failures, including header-only logs, retry evidence preservation, and explicit retry classification in task status files.
 
 ### Reporting
 
@@ -126,4 +144,5 @@ Major additions include:
 - Added runnable examples for RSS, GammaSurface, and finite-temperature elasticity.
 - Added GUI developer documentation.
 - Added `monty` to the package dependencies and constrained supported Python versions to `<3.13`.
-- Added support for Phonopy v4 in terms of phonon calculation.
+- Added Phonopy v4-compatible setup, force-constant, and band-generation fallbacks.
+- Expanded the bundled `apex-flow` skill with backend-aware generation and validation for Bohrium, local debug, local cluster, VASP, LAMMPS, DPA4/PT2, melting-point, gamma, and finite-temperature workflows.

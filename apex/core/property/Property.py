@@ -3,11 +3,58 @@ import json
 import os
 from abc import ABC, abstractmethod
 
-from monty.serialization import dumpfn
+from monty.serialization import dumpfn, loadfn
 
 from apex.core.calculator.calculator import make_calculator
 from dflow.python import upload_packages
 upload_packages.append(__file__)
+
+
+def _result_energies(result):
+    """Extract energies from a task result payload.
+
+    Supports:
+    - flat dicts / mapping-like objects with top-level ``energies``
+      (rehydrated dpdata LabeledSystem)
+    - calculator ``as_dict`` payloads with nested ``data.energies``
+    """
+    try:
+        return result["energies"]
+    except Exception:
+        pass
+    if not isinstance(result, dict):
+        return None
+    data = result.get("data")
+    if isinstance(data, dict):
+        return data.get("energies")
+    return None
+
+
+def is_failed_task_result(result) -> bool:
+    """Return True when a task result cannot be used for property aggregation.
+
+    Accepts plain dicts, calculator ``as_dict`` payloads (``data.energies``),
+    and mapping-like objects such as dpdata LabeledSystem (fixture
+    ``result_task.json`` files often load as the latter).
+    """
+    if result is None:
+        return True
+    if isinstance(result, dict) and result.get("failed") is True:
+        return True
+    return _result_energies(result) is None
+
+
+def _task_marked_failed(task_dir: str) -> bool:
+    status_path = os.path.join(task_dir, "apex_task_status.json")
+    if not os.path.isfile(status_path):
+        return False
+    try:
+        status = loadfn(status_path)
+    except Exception:
+        return True
+    if not isinstance(status, dict):
+        return True
+    return status.get("state") != "succeeded" or status.get("exit_code", 0) != 0
 
 
 class Property(ABC):
@@ -93,7 +140,9 @@ class Property(ABC):
                 idata = json.load(fp)
             poscar = os.path.join(ii, "POSCAR")
             task = make_calculator(idata, poscar)
-            res = task.compute(ii)
+            res = None if _task_marked_failed(ii) else task.compute(ii)
+            if is_failed_task_result(res):
+                res = {"failed": True}
             dumpfn(res, os.path.join(ii, "result_task.json"), indent=4)
             # all_res.append(res)
             all_res.append(os.path.join(ii, "result_task.json"))

@@ -41,6 +41,37 @@
             "pdamp": 1.0}
         },
         {
+            "type": "melting_point",
+            "req_calc": false,
+            "method": "two_phase",
+            "supercell_size": [1, 1, 2],
+            "cal_setting": {
+                "temperature": [1500, 1600, 1700],
+                "premelt_temperature": 4500,
+                "premelt_steps": 5000,
+                "conditioning_steps": 5000,
+                "production_steps": 100000,
+                "timestep": 0.001,
+                "tdamp": 0.1,
+                "pdamp": 1.0,
+                "pressure": 0.0,
+                "barostat": "iso",
+                "interface_axis": "z",
+                "liquid_fraction": 0.5,
+                "dump_step": 100,
+                "thermo_step": 100,
+                "restart_interval": 10000,
+                "q6_cutoff": 3.5,
+                "q6_neighbors": 12,
+                "replicas": 1,
+                "velocity_seeds": {
+                    "premelt": 324159,
+                    "condition": 271828,
+                    "release": 161803
+                }
+            }
+        },
+        {
          "type":         "elastic",
 	 "req_calc":     false,
          "norm_deform":  1e-2,
@@ -92,21 +123,29 @@
       "plane_miller":    [1,1,1],
       "slip_direction":  [1,1,-2],
       "supercell_size":   [2,2,100],
-      "vacuum_size": 15,
+      "vacuum_size": 20,
 	  "add_fix": ["true","true","false"],
       "n_steps":         10
 	},
-	{
-	  "type":            "gamma_surface",
-	  "req_calc":        false,
-            "plane_miller":    [1,1,0],
-            "slip_direction":  [1,-1,-1],
-            "supercell_size":   [1,1,20],
-            "vacuum_size": 15,
-            "closed_loop": false,
-	  "add_fix": ["true","true","false"],
-            "n_steps_x":       20,
-            "n_steps_y":       20
+		{
+		  "type":            "gamma_surface",
+		  "req_calc":        false,
+	            "plane_miller":    [1,1,1],
+	            "slip_direction":  [-1,1,0],
+	            "bcc": {
+	              "plane_miller":   [1,1,0],
+	              "slip_direction": [-1,1,1]
+	            },
+	            "hcp": {
+	              "plane_miller":   [0,0,0,1],
+	              "slip_direction": [2,-1,-1,0]
+	            },
+	            "supercell_size":   [1,1,20],
+            "vacuum_size": 20,
+	            "closed_loop": true,
+		  "add_fix": ["true","true","false"],
+	            "n_steps_x":       20,
+	            "n_steps_y":       20
 	}
         ]
 }

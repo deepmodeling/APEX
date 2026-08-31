@@ -14,6 +14,59 @@ from dflow.python import upload_packages
 upload_packages.append(__file__)
 
 
+DEEPMD_RUNTIME_DPA4_PT2 = "dpa4_pt2"
+
+
+def is_deepmd_pt2(param):
+    """Return whether an interaction uses the DeepMD AOTI ``.pt2`` runtime."""
+    return (
+        param.get("type") == "deepmd"
+        and str(param.get("deepmd_runtime", "")).strip().lower()
+        == DEEPMD_RUNTIME_DPA4_PT2
+    )
+
+
+def ensure_atom_map_before_read_data(input_text, param):
+    """Enable a LAMMPS atom map before each PT2 box-loading command.
+
+    DPA4 AOTI inference consumes LAMMPS atom IDs through the DeepMD plugin.
+    Keep legacy DeepMD inputs byte-for-byte unchanged unless the interaction
+    explicitly opts into ``deepmd_runtime: dpa4_pt2``.
+    """
+    if not is_deepmd_pt2(param):
+        return input_text
+
+    lines = input_text.splitlines(keepends=True)
+    rewritten = []
+    previous_command = []
+    for line in lines:
+        command = line.split("#", 1)[0].strip().split()
+        if (
+            command[:2] == ["plugin", "load"]
+            and len(command) >= 3
+            and os.path.basename(command[2].strip("'\"")) == "libdeepmd_lmp.so"
+        ):
+            raise ValueError(
+                "DPA4/PT2 inputs must use LAMMPS_PLUGIN_PATH auto-loading; "
+                "explicitly loading legacy libdeepmd_lmp.so is not supported"
+            )
+        if (
+            command
+            and command[0] in {"read_data", "read_restart"}
+            and not (
+                previous_command[:2] == ["atom_modify", "map"]
+                and len(previous_command) >= 3
+                and previous_command[2].lower() in {"yes", "array", "hash"}
+            )
+        ):
+            newline = "\r\n" if line.endswith("\r\n") else "\n"
+            rewritten.append(f"atom_modify map yes{newline}")
+        rewritten.append(line)
+        if command:
+            previous_command = command
+    return "".join(rewritten)
+
+
 def cvt_lammps_conf(fin, fout, type_map, ofmt="lammps/data"):
     """
     Format convert from fin to fout, specify the output format by ofmt
@@ -262,7 +315,7 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -298,7 +351,7 @@ def make_lammps_eval(conf, type_map, interaction, param):
     ret += 'print "Final volume per atoms = ${Vpa}"\n'
     ret += 'print "Final Base area = ${AA}"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 
 def make_lammps_equi(
@@ -320,10 +373,9 @@ def make_lammps_equi(
     make lammps input for equilibritation
     """
     deepmd_version = param.get("deepmd_version", None)
-    is_new_dpmd = False
-    if deepmd_version:
-        split_v = deepmd_version.split('.')
-        is_new_dpmd = bool(int(split_v[0]) >= 2 and int(split_v[1]) >= 1 and int(split_v[2]) >= 5)
+    is_new_dpmd = bool(
+        deepmd_version and Version(deepmd_version) >= Version("2.1.5")
+    )
     prop_type = kwargs.get("prop_type", "others")
     dump_step = 100
     # detour sychronizing problem of dumping in new version of deepmd-kit >=2.1.5
@@ -338,7 +390,7 @@ def make_lammps_equi(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -385,7 +437,7 @@ def make_lammps_equi(
     ret += 'print "Final volume per atoms = ${Vpa}"\n'
     ret += 'print "Final Base area = ${AA}"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 
 def make_lammps_elastic(
@@ -402,7 +454,7 @@ def make_lammps_elastic(
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -435,7 +487,7 @@ def make_lammps_elastic(
     ret += 'print "Final energy per atoms = ${Epa}"\n'
     ret += 'print "Final volume per atoms = ${Vpa}"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None):
     type_map_list = element_list(type_map)
@@ -461,6 +513,9 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None
     ret += "dimension	3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
+    if param["type"] in {"deepmd", "mace"}:
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     ret += "replicate   ${nx} ${ny} ${nz}\n"
@@ -518,7 +573,7 @@ def make_lammps_FiniteTlatt(conf, type_map, interaction, param, cal_setting=None
     ret += 'print "Final Base area = ${AA}"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
     ret += 'print "Final Length (box_x box_y box_z) = ${lx} ${ly} ${lz}"\n'
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir="."):
     type_map_list = element_list(type_map)
@@ -538,7 +593,7 @@ def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir=".")
         text += "dimension	3\n"
         text += "boundary	p p p\n"
         text += "atom_style	atomic\n"
-        if param["type"] == "mace":
+        if param["type"] in {"deepmd", "mace"}:
             text += "atom_modify map yes\n"
             text += "newton on\n"
         text += "box         tilt large\n"
@@ -554,7 +609,7 @@ def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir=".")
         text += "dimension	3\n"
         text += "boundary	p p p\n"
         text += "atom_style	atomic\n"
-        if param["type"] == "mace":
+        if param["type"] in {"deepmd", "mace"}:
             text += "atom_modify map yes\n"
             text += "newton on\n"
         text += "box         tilt large\n"
@@ -614,7 +669,7 @@ def make_lammps_FiniteTelastic(conf, type_map, interaction, param, task_dir=".")
     ret += "print \"Final energy per atoms = ${Epa}\"\n"
     ret += "print \"Final volume per atoms = ${Vpa}\"\n"
     ret += "print \"Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}\"\n"
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 def make_lammps_press_relax(
     conf,
@@ -650,7 +705,7 @@ def make_lammps_press_relax(
     ret += "dimension   3\n"
     ret += "boundary	p p p\n"
     ret += "atom_style	atomic\n"
-    if param["type"] == "mace":
+    if param["type"] in {"deepmd", "mace"}:
         ret += "atom_modify map yes\n"
         ret += "newton on\n"
     ret += "box         tilt large\n"
@@ -687,7 +742,7 @@ def make_lammps_press_relax(
     ret += 'print "Final energy per atoms = ${Epa} eV"\n'
     ret += 'print "Final volume per atoms = ${Vpa} A^3"\n'
     ret += 'print "Final Stress (xx yy zz xy xz yz) = ${Pxx} ${Pyy} ${Pzz} ${Pxy} ${Pxz} ${Pyz}"\n'
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     """LAMMPS input for annealing using the same stage controls as annealing/.
@@ -777,6 +832,9 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
     ret += "dimension\t3\n"
     ret += "boundary\tp p p\n"
     ret += "atom_style\tatomic\n"
+    if param["type"] in {"deepmd", "mace"}:
+        ret += "atom_modify map yes\n"
+        ret += "newton on\n"
     ret += "box         tilt large\n"
     ret += "read_data   %s\n" % conf
     ret += "replicate   ${nx} ${ny} ${nz}\n"
@@ -890,7 +948,7 @@ def make_lammps_annealing(conf, type_map, interaction, param, cal_setting):
 
     ret += 'print "__end_of_lmp_annealing_calculation__"\n'
     ret += 'label end_of_run\n'
-    return ret
+    return ensure_atom_map_before_read_data(ret, param)
 
 """
 def make_lammps_phonon(

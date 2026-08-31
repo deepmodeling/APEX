@@ -27,7 +27,8 @@ APEX uses a **two-layer submission architecture**:
                            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  Inner containers (managed by dflow on Bohrium)                 │
-│  - LAMMPS image: deepmd-kit-phonolammps:3.1.3                  │
+│  - GPU LAMMPS: dpa4-phonolammps:0.0.2                        │
+│  - CPU LAMMPS: apex-flow:1.3.0.post                          │
 │  - ABACUS image: registry.dp.tech/dptech/abacus:3.2.3          │
 │  - VASP image: (user-provided)                                  │
 │  - Machine type per task: scass_type in global.json             │
@@ -118,17 +119,43 @@ dflow validates workflow names against RFC 1123 subdomain regex. Names like `"Cu
 | Role | Image | Notes |
 |------|-------|-------|
 | **Outer job (submission client)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | Lightweight; just runs `apex submit` |
-| **LAMMPS calculator** | `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3` | Default; includes phonoLAMMPS |
+| **LAMMPS calculator (GPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2` | NVIDIA L20 default; RTX 4090 compatible; includes phonoLAMMPS |
+| **LAMMPS calculator (CPU potentials)** | `registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post` | EAM/MEAM/SNAP/GAP/RANN CPU backend |
 | **ABACUS calculator** | (same APEX image has ABACUS) | Or user-specified |
 | **VASP calculator** | User must provide after confirming license | Commercial; **never invent a default image** |
 
-> ⚠️ **Do NOT combine `deepmd-kit:3.1.1` with any NVIDIA T4 machine**. It also has a known segfault bug when handling triclinic cells (non-orthogonal boxes), including on CPU. Use `3.1.3` or later.
+> Legacy `deepmd-kit:3.1.1` remains blocked with NVIDIA T4 and for triclinic
+> cells.
 
-> LAMMPS phonon and Grüneisen tasks are forced to use `registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3`, which includes the required phonoLAMMPS executable.
+> LAMMPS phonon and Grüneisen tasks using GPU potentials are forced to use
+> `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`.
+> CPU potentials retain the CPU image. Do not use 0.0.2 with a `*_cpu`
+> machine: sequential CPU validation stalled before the container command
+> started. Do not add the legacy `plugin load libdeepmd_lmp.so` command to
+> 0.0.2.
+> An older phonoLAMMPS 3.1.3 image at Bohrium registry mirror digest
+> `sha256:43a27ca4a7bba7f774bbd56104d205a6a80cd9d65928f249f6109e9ef37b8402`
+> rejects the bundled DPA4 model with `Unknown model type: dpa4`; do not submit
+> that model under the old image or silently route it to another image.
+
+The DPA4 exception is explicit and currently locked. Inspect it with
+`validate_apex_combo.py list-combos --runtime-profile
+dpa4-alloytongqi-t4`. Do not use `recommend` or `generate_config.py create
+--runtime-profile ...` until an immutable image ref/digest has passed the
+packaged benchmark and the profile says `post_snapshot_passed`.
+Pre-snapshot evidence exists only for one rank/one GPU on
+`c4_m15_1 * NVIDIA T4`; it is not a published-image recommendation. Generic
+APEX and legacy phonon/Grüneisen continue to use the old image above.
+When published, `generate_config.py` writes both
+`lammps_run_command=/usr/local/bin/dpa4-lmp -in in.lammps` and the complete
+`phonolammps_run_command=/usr/local/bin/dpa4-phonolammps {input_file} -c
+{poscar} --dim {dim} {primitive_axes}` template. Do not replace them with bare
+binary names. These fields are DPA4-only; legacy configuration remains
+unchanged.
 
 | Backend | scass_type (inner containers) | Notes |
 |---------|-------------------------------|-------|
-| LAMMPS (DeePMD/MACE/NEP) | `c8_m31_1 * NVIDIA T4` | GPU beneficial |
+| LAMMPS (DeePMD/MACE/NEP) | `c16_m120_1 * NVIDIA L20` | Validated sm89 default; RTX 4090 remains compatible |
 | LAMMPS (EAM/MEAM/SNAP) | `c16_m32_cpu` | CPU sufficient |
 | ABACUS | `c16_m32_cpu` | CPU |
 | VASP | `c32_m128_cpu` (default) | Align `mpirun -n <N>` with CPU count |
@@ -188,7 +215,7 @@ The following is a type-annotated shape, not valid JSON:
         "project_id": <the same unquoted integer>
     },
     "apex_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/apex-flow:1.3.0.post",
-    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-397637/deepmd-kit-phonolammps:3.1.3",
+    "lammps_image_name": "registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2",
     "lammps_run_command": "lmp -in in.lammps",
     "scass_type": "c16_m32_cpu",
     "group_size": 1,
@@ -209,7 +236,7 @@ Do not upload or submit unless validation reports `Validation PASSED` and both
 project ID lines report `type=int`. Submit the newly validated directory as a
 new outer Bohrium job; retrying an old outer job reuses its old input snapshot.
 
-> For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c8_m31_1 * NVIDIA T4"`.
+> For GPU potentials (DeePMD, MACE, NEP), change `scass_type` to `"c16_m120_1 * NVIDIA L20"` by default; RTX 4090 remains compatible.
 > Before submitting, run `scripts/validate_apex_combo.py check` on the chosen image × scass_type.
 
 ## Agent-Managed Submission Workflow (Complete Lifecycle)

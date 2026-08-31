@@ -4,6 +4,30 @@ from dflow.python import upload_packages
 
 upload_packages.append(__file__)
 
+
+SUPPORTED_PARENT_LATTICE_HINTS = frozenset({"bcc", "fcc", "hcp"})
+
+
+def normalize_parent_lattice_hint(value):
+    """Validate an explicit parent-lattice hint for disordered structures."""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("parent_lattice must be one of: bcc, fcc, hcp")
+    normalized = value.strip().lower()
+    if normalized not in SUPPORTED_PARENT_LATTICE_HINTS:
+        allowed = ", ".join(sorted(SUPPORTED_PARENT_LATTICE_HINTS))
+        raise ValueError(f"parent_lattice must be one of: {allowed}")
+    return normalized
+
+
+def resolve_parent_lattice_hint(detected_structure_type, parent_lattice=None):
+    """Return the effective lattice family and its provenance."""
+    hint = normalize_parent_lattice_hint(parent_lattice)
+    if hint is None:
+        return detected_structure_type, "auto_detected"
+    return hint, "user_override"
+
 class StructureInfo(object):
     """Analyze structure type
     Arg:

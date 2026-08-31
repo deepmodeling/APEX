@@ -9,7 +9,7 @@ from dflow.python import (
     Artifact,
     upload_packages
 )
-from apex.core.calculator import LAMMPS_INTER_TYPE
+from apex.core.calculator import LAMMPS_INTER_TYPE, lammps_model_files_for_cleanup
 from apex.utils import recursive_search, apex_task_succeeded
 
 upload_packages.append(__file__)
@@ -199,23 +199,21 @@ class RelaxPost(OP):
             # remove potential files
             inter_files_name = []
             if inter_type in LAMMPS_INTER_TYPE:
-                if type(inter_param["model"]) is str:
-                    inter_files_name = [inter_param["model"]]
-                elif type(inter_param["model"]) is list:
-                    inter_files_name.extend(inter_param["model"])
+                inter_files_name = lammps_model_files_for_cleanup(inter_param)
             elif inter_type == 'vasp':
                 inter_files_name = ['POTCAR']
 
-            for ii in conf_dirs:
-                cmd = 'rm -f'
-                for jj in inter_files_name:
-                    cmd += f' {jj}'
-                os.chdir(ii)
-                subprocess.call(cmd, shell=True)
-                os.chdir(op_in['input_all'])
-                os.chdir(os.path.join(ii, 'relaxation/relax_task'))
-                subprocess.call(cmd, shell=True)
-                os.chdir(op_in['input_all'])
+            if inter_files_name:
+                for ii in conf_dirs:
+                    cmd = 'rm -f'
+                    for jj in inter_files_name:
+                        cmd += f' {jj}'
+                    os.chdir(ii)
+                    subprocess.call(cmd, shell=True)
+                    os.chdir(op_in['input_all'])
+                    os.chdir(os.path.join(ii, 'relaxation/relax_task'))
+                    subprocess.call(cmd, shell=True)
+                    os.chdir(op_in['input_all'])
 
         os.chdir(cwd)
         for ii in copy_dir_list:

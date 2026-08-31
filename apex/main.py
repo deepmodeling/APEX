@@ -19,10 +19,6 @@ from apex import (
     __version__,
 )
 from apex.config import Config
-from apex.step import do_step_from_args
-from apex.submit import submit_from_args
-from apex.archive import archive_from_args
-from apex.report import report_from_args
 from apex.utils import load_config_file
 from apex.task_failure import classify_apex_task_status
 
@@ -552,6 +548,17 @@ def parse_args():
         default=0.0,
         help="Shift the rendered viewport vertically by a fraction of the data span; positive values move the structure downward",
     )
+    parser_preview.add_argument(
+        "--gif-view",
+        choices=("auto", "default", "slip-plane", "parent-bc", "both"),
+        default="auto",
+        help=(
+            "Gamma projection: auto writes both scientific views for gamma "
+            "and gamma_surface; alternatively preserve the legacy Cartesian "
+            "view, look normal to the slip plane, look normal to the parent "
+            "bc plane, or explicitly write both views"
+        ),
+    )
 
     ##########################################
     # GUI
@@ -612,6 +619,17 @@ def parse_args():
     parser_account.add_argument("--context-type", dest="context_type", type=str, default=None)
     parser_account.add_argument("--email", type=str, default=None)
     parser_account.add_argument("--password", type=str, default=None)
+    parser_account.add_argument("--access-key", dest="access_key", type=str, default=None)
+    parser_account.add_argument(
+        "--clear",
+        nargs="?",
+        const="all",
+        choices=("all", "access-key", "email"),
+        help=(
+            "Clear both login methods when used alone, or clear only "
+            "'access-key' or the email/password pair"
+        ),
+    )
     parser_account.add_argument("--program-id", dest="program_id", type=int, default=None)
     parser_account.add_argument("--apex-image-name", dest="apex_image_name", type=str, default=None)
 
@@ -619,13 +637,16 @@ def parse_args():
     # Agent skill
     parser_skill = subparsers.add_parser(
         "skill",
-        help="Print an Agent prompt for installing apex-flow, or build a zip file for uploading to MatMaster",
+        help=(
+            "Print the local Agent installation prompt, or build the separate "
+            "Bohrium Cloud/MatMaster skill zip"
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser_skill.add_argument(
         "--zip",
         action="store_true",
-        help="Write a zip of the bundled apex-flow",
+        help="Write the Bohrium Cloud/MatMaster apex-flow zip",
     )
     parser_skill.add_argument(
         "-o", "--output",
@@ -1274,6 +1295,8 @@ def main():
     # parse args
     parser, args = parse_args()
     if args.cmd == 'submit':
+        from apex.submit import submit_from_args
+
         header()
         try:
             submit_from_args(
@@ -1518,6 +1541,8 @@ def main():
                         f"under {os.path.join(work_dir, '.failed-artifacts')}"
                     )
     elif args.cmd == 'do':
+        from apex.step import do_step_from_args
+
         header()
         do_step_from_args(
             parameter=args.parameter,
@@ -1525,6 +1550,8 @@ def main():
             step=args.step
         )
     elif args.cmd == 'archive':
+        from apex.archive import archive_from_args
+
         archive_from_args(
             parameters=args.json,
             config_file=args.config,
@@ -1536,6 +1563,8 @@ def main():
             is_result=args.result
         )
     elif args.cmd == 'report':
+        from apex.report import report_from_args
+
         header()
         report_from_args(
             config_file=args.config,
@@ -1564,7 +1593,8 @@ def main():
     elif args.cmd == 'preview':
         from apex.preview import preview_from_args
 
-        preview_from_args(args)
+        for output_path in preview_from_args(args):
+            print(output_path)
     elif args.cmd == 'skill':
         from apex.skill import skill_from_args
 

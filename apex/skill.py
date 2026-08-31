@@ -8,94 +8,97 @@ from pathlib import Path
 from apex.skills import SKILL_NAME, get_skill_root
 
 # Skip noise when packing for MatMaster / agent skill upload.
-_ZIP_SKIP_DIR_NAMES = {"__pycache__", ".git"}
-_ZIP_SKIP_FILE_NAMES = {".DS_Store"}
+_ZIP_SKIP_DIR_NAMES = {"__pycache__", ".git", "variants"}
+_ZIP_SKIP_FILE_NAMES = {
+    ".DS_Store",
+    "global_bohrium_direct.json",
+    "global_local_cluster_slurm.json",
+    "global_local_debug.json",
+}
 _ZIP_SKIP_FILE_SUFFIXES = {".pyc", ".pyo", ".pt", ".partial"}
+_ZIP_INCLUDED_PT_FILES = {
+    Path("models") / "DPA4-alloytongqi" / "model.pt",
+}
 
 
-def _agent_install_prompt(skill_root: Path) -> str:
-    skill_md = skill_root / "SKILL.md"
+def _agent_install_prompt() -> str:
+    """Return a portable local-Agent installation prompt."""
     return f"""\
-# Agent prompt: install the APEX skill ({SKILL_NAME})
+# Agent prompt: install the local APEX skill ({SKILL_NAME})
 
 You are an AI coding agent. Install the bundled APEX agent skill so future
-sessions can orchestrate APEX (Alloy Property EXplorer) workflows.
+sessions can run APEX from this machine.
 
-## Preferred: MatMaster zip upload
+## Required: choose the execution profile
 
-Ask the user (or run yourself) to build an uploadable archive:
+Before copying files, ask the user exactly where APEX calculations will run:
+
+1. **Bohrium cloud** — this local Agent runs `apex submit` directly and uses
+   credentials saved by `apex account`; do not require a ticket or outer job.
+2. **local** — run calculators on this workstation with `apex submit -d`.
+3. **local cluster** — run from a cluster login node and dispatch calculator
+   tasks through Slurm/PBS with DPDispatcher.
+
+Do not guess. Wait for the user's answer, then map it to one profile file:
+
+- Bohrium cloud: `bohrium-direct.md`
+- local: `local-debug.md`
+- local cluster: `local-cluster.md`
+
+## Install from this package
+
+Resolve the bundled skill directory at runtime. Do not hardcode or copy a
+host-absolute path into a shared prompt:
 
 ```bash
-apex skill --zip
+SKILL_ROOT="$(python -c 'from apex.skills import get_skill_root; print(get_skill_root())')"
+LOCAL_VARIANT="$SKILL_ROOT/variants/local"
 ```
 
-This writes `./{SKILL_NAME}.zip` with top-level folder `{SKILL_NAME}/`
-(containing `SKILL.md`, `reference/`, `scripts/`, small frozen models under
-`models/`, etc.). Upload that zip in MatMaster's skill upload UI.
-
-Optional output path:
+Confirm `$LOCAL_VARIANT/SKILL.md` exists. Copy the shared directory, then
+overlay the local entry/reference and the selected execution profile:
 
 ```bash
-apex skill --zip -o /tmp/{SKILL_NAME}.zip
-```
-
-## Alternative: copy from the local package
-
-- Skill directory: `{skill_root}`
-- Entry file: `{skill_md}`
-
-Confirm `{skill_md}` exists before copying. Do not invent or regenerate the
-skill content; copy the directory as-is (including `reference/`, `scripts/`,
-`data/`, `models/DPA-3.2-5M`, and `plugin.yaml`).
-
-For DeePMD/DPA jobs, use the bundled frozen DPA-3.2 model:
-- `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth`
-
-The source multi-head checkpoint (`.pt`) is **not** bundled. Download it only
-when the user explicitly needs a different task head:
-
-```bash
-python scripts/fetch_models.py --source-checkpoint
-```
-
-Install destinations (create parents if missing):
-
-1. Cursor (user-global): `~/.cursor/skills/{SKILL_NAME}/`
-2. Codex / OpenAI agents (user-global): `~/.codex/skills/{SKILL_NAME}/`
-3. Cursor (project-local, optional): `<repo>/.cursor/skills/{SKILL_NAME}/`
-
-```bash
-mkdir -p ~/.cursor/skills ~/.codex/skills
-cp -R "{skill_root}" ~/.cursor/skills/{SKILL_NAME}
-cp -R "{skill_root}" ~/.codex/skills/{SKILL_NAME}
+SKILL_ROOT="$(python -c 'from apex.skills import get_skill_root; print(get_skill_root())')"
+LOCAL_VARIANT="$SKILL_ROOT/variants/local"
+DEST="$HOME/.cursor/skills/{SKILL_NAME}"  # or ~/.codex/skills/{SKILL_NAME}
+PROFILE="<bohrium-direct.md|local-debug.md|local-cluster.md>"
+mkdir -p "$(dirname "$DEST")"
+rm -rf "$DEST"
+cp -R "$SKILL_ROOT" "$DEST"
+cp "$LOCAL_VARIANT/SKILL.md" "$DEST/SKILL.md"
+cp "$LOCAL_VARIANT/reference/submission.md" \
+  "$DEST/reference/submission.md"
+cp "$LOCAL_VARIANT/profiles/$PROFILE" \
+  "$DEST/reference/execution-profile.md"
+rm -rf "$DEST/variants"
 ```
 
 ## Verification
 
-- MatMaster: skill appears after zip upload, name `{SKILL_NAME}`
-- Local: `~/.cursor/skills/{SKILL_NAME}/SKILL.md` exists
+- `$DEST/SKILL.md` exists and contains `Local Agent Edition`
+- `$DEST/reference/execution-profile.md` exists and names the selected profile
 - YAML frontmatter `name:` is `{SKILL_NAME}`
 
 ## After install
 
 - Tell the user the skill is available as `{SKILL_NAME}` / `/apex-flow`
+- State which execution profile was installed and how to change it
 - For APEX calculation requests, read `SKILL.md` first, then load referenced
   docs under `reference/` only as needed
-## Notes
 
-- The PyPI / pip package and agent skill both use the name `{SKILL_NAME}`.
-- Re-run `apex skill` to reprint this prompt, or `apex skill --zip` to rebuild
-  the MatMaster upload archive.
+`apex skill --zip` is a separate Bohrium Cloud/MatMaster distribution. Do not
+install that ticket/outer-job variant for a local Agent.
 """
 
 
 def build_skill_zip(output: Path | None = None) -> Path:
     """
-    Pack the bundled apex-flow directory into a zip for MatMaster upload.
+    Pack the Bohrium Cloud apex-flow variant into a zip for MatMaster upload.
 
-    Large DeePMD source checkpoints (``*.pt``) are excluded on purpose.
-    Ready-to-run frozen ``*.pb`` and ``*.pth`` models under ``models/`` are
-    included.
+    Arbitrary DeePMD source/training checkpoints (``*.pt``) are excluded on
+    purpose. The explicitly allow-listed, ready-to-run single-task DPA4
+    checkpoint bundled under ``models/`` is included.
     """
     skill_root = get_skill_root()
     if not (skill_root / "SKILL.md").is_file():
@@ -115,22 +118,26 @@ def build_skill_zip(output: Path | None = None) -> Path:
         for path in sorted(skill_root.rglob("*")):
             if not path.is_file():
                 continue
+            relative = path.relative_to(skill_root)
             if any(part in _ZIP_SKIP_DIR_NAMES for part in path.parts):
                 continue
             if path.name in _ZIP_SKIP_FILE_NAMES:
                 continue
-            if path.suffix in _ZIP_SKIP_FILE_SUFFIXES:
+            if (
+                path.suffix in _ZIP_SKIP_FILE_SUFFIXES
+                and relative not in _ZIP_INCLUDED_PT_FILES
+            ):
                 continue
             if path.name.endswith(".partial"):
                 continue
-            arcname = Path(SKILL_NAME) / path.relative_to(skill_root)
+            arcname = Path(SKILL_NAME) / relative
             zf.write(path, arcname.as_posix())
 
     return out
 
 
 def skill_from_args(args) -> None:
-    """Print the Agent install prompt, or write a MatMaster-ready skill zip."""
+    """Print the local Agent prompt, or write the Bohrium Cloud skill zip."""
     skill_root = get_skill_root()
     if not (skill_root / "SKILL.md").is_file():
         raise FileNotFoundError(
@@ -140,7 +147,7 @@ def skill_from_args(args) -> None:
     if getattr(args, "zip", False):
         output = getattr(args, "output", None)
         zip_path = build_skill_zip(Path(output) if output else None)
-        print(f"Wrote MatMaster skill archive: {zip_path}")
+        print(f"Wrote Bohrium Cloud/MatMaster skill archive: {zip_path}")
         print(f"Upload this zip in MatMaster (top-level folder: {SKILL_NAME}/).")
         return
-    print(_agent_install_prompt(skill_root).rstrip())
+    print(_agent_install_prompt().rstrip())

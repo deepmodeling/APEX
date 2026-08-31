@@ -46,6 +46,8 @@ def return_prop_class(prop_type: str):
         return FiniteTelasticReport
     elif prop_type == 'annealing':
         return AnnealingReport
+    elif prop_type == 'melting_point':
+        return MeltingPointReport
 
 
 def return_prop_type(prop: str):
@@ -56,6 +58,8 @@ def return_prop_type(prop: str):
             return 'finite_t_latt'
         if prop.startswith('finite_t_elastic'):
             return 'finite_t_elastic'
+        if prop.startswith('melting_point'):
+            return 'melting_point'
         prop_type = prop.split('_')[0]
     except AttributeError:
         return None
