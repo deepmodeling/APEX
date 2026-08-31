@@ -1,5 +1,8 @@
 import numpy as np
 import pytest
+import tempfile
+import unittest
+from pathlib import Path
 from monty.serialization import dumpfn, loadfn
 from pymatgen.core import Structure
 
@@ -334,3 +337,30 @@ def test_parent_gamma_strict_orthogonal_gate_accepts_pure_bcc():
     )
     assert built.metadata["cell_geometry"]["zero_tilt"] is True
     assert built.metadata["cell_geometry"]["orthogonalization_applied"] is False
+
+
+def load_tests(loader, tests, pattern):
+    """Expose the pytest-style regression functions to unittest CI."""
+    del loader, tests, pattern
+    suite = unittest.TestSuite()
+    functions = (
+        test_resolve_bcc_parent_mapping_and_indices,
+        test_resolve_non_diagonal_hnf_supercell,
+        test_parent_gamma_slab_is_200_atoms_and_layer_gap_split,
+        test_gamma_make_confs_uses_parent_indices_without_extra_parameters,
+        test_lammps_conversion_preserves_local_surface_normal,
+        test_parent_gamma_surface_matches_gamma_line_x_section,
+        test_parent_gamma_strict_orthogonal_gate_is_fail_closed,
+        test_parent_gamma_strict_orthogonal_gate_accepts_pure_bcc,
+    )
+    for function in functions:
+        if "tmp_path" in function.__code__.co_varnames:
+            def run_with_tmp_path(function=function):
+                with tempfile.TemporaryDirectory() as directory:
+                    function(Path(directory))
+
+            test = unittest.FunctionTestCase(run_with_tmp_path)
+        else:
+            test = unittest.FunctionTestCase(function)
+        suite.addTest(test)
+    return suite
