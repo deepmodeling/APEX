@@ -18,6 +18,7 @@ from apex.core.structure import StructureInfo
 from apex.core.calculator.calculator import LAMMPS_INTER_TYPE
 from apex.core.calculator.lib import abacus_utils
 from apex.core.calculator.lib import vasp_utils
+from apex.core.calculator.lib.lammps_utils import is_deepmd_pt2
 from apex.core.property.Property import Property
 from apex.core.refine import make_refine
 from apex.core.reproduce import make_repro, post_repro

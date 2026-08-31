@@ -149,6 +149,24 @@ class Lammps(Task):
         self.inter_type = inter_parameter["type"]
         self.type_map = inter_parameter["type_map"]
         self.in_lammps = inter_parameter.get("in_lammps", "auto")
+        self.model_in_image = inter_parameter.get("model_in_image", False)
+        if not isinstance(self.model_in_image, bool):
+            raise ValueError("interaction.model_in_image must be a boolean")
+        if self.model_in_image:
+            model = inter_parameter.get("model")
+            if not lammps_utils.is_deepmd_pt2(inter_parameter):
+                raise ValueError(
+                    "interaction.model_in_image is only supported with "
+                    "type=deepmd and deepmd_runtime=dpa4_pt2"
+                )
+            if (
+                not isinstance(model, str)
+                or not os.path.isabs(model)
+                or not model.lower().endswith(".pt2")
+            ):
+                raise ValueError(
+                    "an image-resident DPA4 model must be an absolute .pt2 path"
+                )
         if self.inter_type in MULTI_MODELS_INTER_TYPE:
             self.model = list(map(os.path.abspath, inter_parameter["model"]))
         else:
@@ -182,13 +200,17 @@ class Lammps(Task):
     def set_model_param(self):
         deepmd_version = self.inter.get("deepmd_version", "2.1.1")
         if self.inter_type == "deepmd":
-            model_name = os.path.basename(self.model)
+            model_name = self.model if self.model_in_image else os.path.basename(self.model)
             self.model_param = {
                 "type": self.inter_type,
                 "model_name": [model_name],
                 "param_type": self.type_map,
                 "deepmd_version": deepmd_version,
             }
+            if "deepmd_runtime" in self.inter:
+                self.model_param["deepmd_runtime"] = self.inter["deepmd_runtime"]
+            if self.model_in_image:
+                self.model_param["model_in_image"] = True
         elif self.inter_type in ["meam", "snap"]:
             model_name = list(map(os.path.basename, self.model))
             self.model_param = {
@@ -231,6 +253,10 @@ class Lammps(Task):
         os.symlink(target, link_name)
 
     def make_potential_files(self, output_dir):
+        if self.model_in_image:
+            dumpfn(self.inter, os.path.join(output_dir, "inter.json"), indent=4)
+            return
+
         parent_dir = os.path.join(output_dir, "../../")
         if self.inter_type in MULTI_MODELS_INTER_TYPE:
             model_file = map(os.path.basename, self.model)
@@ -445,6 +471,9 @@ class Lammps(Task):
             and task_param.get("add_fix") is not None
         ):
             fc = _apply_gamma_fix_to_lammps_input(fc, task_param["add_fix"])
+
+        # This also covers user-supplied and property-specific LAMMPS inputs.
+        fc = lammps_utils.ensure_atom_map_before_read_data(fc, self.model_param)
 
         dumpfn(task_param, os.path.join(output_dir, "task.json"), indent=4)
 
@@ -717,7 +746,11 @@ class Lammps(Task):
         return result_dict
 
     def forward_files(self, property_type="relaxation", task_param=None):
-        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
+        model_files = [] if self.model_in_image else (
+            list(map(os.path.basename, self.model))
+            if self.inter_type in MULTI_MODELS_INTER_TYPE
+            else [os.path.basename(self.model)]
+        )
         if property_type == "finite_t_latt":
             return ["in.lammps", "variable_FiniteTlatt.in"] + model_files
         elif property_type == "melting_point":
@@ -749,7 +782,11 @@ class Lammps(Task):
             return ["conf.lmp", "in.lammps"] + model_files
 
     def forward_common_files(self, property_type="relaxation"):
-        model_files = list(map(os.path.basename, self.model)) if self.inter_type in MULTI_MODELS_INTER_TYPE else [os.path.basename(self.model)]
+        model_files = [] if self.model_in_image else (
+            list(map(os.path.basename, self.model))
+            if self.inter_type in MULTI_MODELS_INTER_TYPE
+            else [os.path.basename(self.model)]
+        )
         if property_type not in ["eos"]:
             if property_type == "finite_t_latt":
                 return ["in.lammps", "variable_FiniteTlatt.in"] + model_files

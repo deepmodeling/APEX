@@ -16,6 +16,9 @@ _ZIP_SKIP_FILE_NAMES = {
     "global_local_debug.json",
 }
 _ZIP_SKIP_FILE_SUFFIXES = {".pyc", ".pyo", ".pt", ".partial"}
+_ZIP_INCLUDED_PT_FILES = {
+    Path("models") / "DPA4-alloytongqi" / "model.pt",
+}
 
 
 def _agent_install_prompt() -> str:
@@ -93,9 +96,9 @@ def build_skill_zip(output: Path | None = None) -> Path:
     """
     Pack the Bohrium Cloud apex-flow variant into a zip for MatMaster upload.
 
-    Large DeePMD source checkpoints (``*.pt``) are excluded on purpose.
-    Ready-to-run frozen ``*.pb`` and ``*.pth`` models under ``models/`` are
-    included.
+    Arbitrary DeePMD source/training checkpoints (``*.pt``) are excluded on
+    purpose. The explicitly allow-listed, ready-to-run single-task DPA4
+    checkpoint bundled under ``models/`` is included.
     """
     skill_root = get_skill_root()
     if not (skill_root / "SKILL.md").is_file():
@@ -115,15 +118,19 @@ def build_skill_zip(output: Path | None = None) -> Path:
         for path in sorted(skill_root.rglob("*")):
             if not path.is_file():
                 continue
+            relative = path.relative_to(skill_root)
             if any(part in _ZIP_SKIP_DIR_NAMES for part in path.parts):
                 continue
             if path.name in _ZIP_SKIP_FILE_NAMES:
                 continue
-            if path.suffix in _ZIP_SKIP_FILE_SUFFIXES:
+            if (
+                path.suffix in _ZIP_SKIP_FILE_SUFFIXES
+                and relative not in _ZIP_INCLUDED_PT_FILES
+            ):
                 continue
             if path.name.endswith(".partial"):
                 continue
-            arcname = Path(SKILL_NAME) / path.relative_to(skill_root)
+            arcname = Path(SKILL_NAME) / relative
             zf.write(path, arcname.as_posix())
 
     return out

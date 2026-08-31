@@ -1,0 +1,276 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_kind": "dpa4-phonolammps-b95-t4-runtime",
+  "status": "unpublished",
+  "observed_build_host_at": "2026-08-12",
+  "image": {
+    "build_method": "bohrium_snapshot",
+    "reference": null,
+    "digest": null,
+    "snapshot_id": null,
+    "identity_status": "not_provided"
+  },
+  "runtime": {
+    "venv": "/opt/dpa4-phonolammps-3.2.0b0-py310",
+    "python": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/python",
+    "python_version": "3.10.12",
+    "lammps_binary": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/lmp",
+    "phonolammps_binary": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/phonolammps",
+    "installed_wrappers": {
+      "lammps": "/usr/local/bin/dpa4-lmp",
+      "phonolammps": "/usr/local/bin/dpa4-phonolammps",
+      "python": "/usr/local/bin/dpa4-python3",
+      "dflow_python3": "/root/.bohrium/python3"
+    },
+    "fixed_environment": {
+      "LAMMPS_PLUGIN_PATH": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib",
+      "DP_BACKEND_PLUGIN_PATH": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib",
+      "DP_COMPILE_INFER": "0",
+      "DP_AMP_INFER": "0",
+      "DP_TRITON_INFER": "0",
+      "DP_CUTE_INFER": "0",
+      "DP_TF32_INFER": "0",
+      "OMP_NUM_THREADS": "1",
+      "DP_INTRA_OP_PARALLELISM_THREADS": "1",
+      "DP_INTER_OP_PARALLELISM_THREADS": "1"
+    },
+    "path_prefix": [
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/bin"
+    ],
+    "ld_library_path_prefix": [
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/lammps",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/torch/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/nvidia/cu13/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/nvidia/cudnn/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/nvidia/cusparselt/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/nvidia/nccl/lib",
+      "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/nvidia/nvshmem/lib"
+    ]
+  },
+  "models": {
+    "checkpoint": {
+      "path": "/opt/dpa4-runtime/models/DPA4-alloytongqi/model.pt",
+      "build_host_source": "/opt/dpa4-phonolammps-3.2.0b0-py310/share/models/DPA4-alloytongqi/model.pt",
+      "bytes": 30403297,
+      "sha256": "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad",
+      "role": "identity_and_freeze_input"
+    },
+    "cpu_pt2": {
+      "path": "/opt/dpa4-runtime/models/DPA4-alloytongqi/alloytongqi.cpu-x86_64.pt2",
+      "build_host_source": "/opt/dpa4-artifacts/cpu-x86_64/alloytongqi.pt2",
+      "bytes": 73318573,
+      "sha256": "d24525ed454c181354397d46ea62b6376b4b79e1df66a160e89160dbb2284dc9",
+      "role": "diagnostic_and_cpu_gpu_parity_only",
+      "production_allowed": false
+    },
+    "t4_pt2": {
+      "path": "/opt/dpa4-runtime/models/DPA4-alloytongqi/alloytongqi.t4-sm75.pt2",
+      "build_host_source": "/opt/dpa4-artifacts/t4-sm75/alloytongqi.pt2",
+      "bytes": 78960581,
+      "sha256": "2614db9463f5864d80a78fec037aeae26930df2004bb9f1148a69b83c25b3daf",
+      "role": "production_runtime",
+      "production_allowed": true,
+      "target": {
+        "gpu_model": "NVIDIA Tesla T4",
+        "compute_capability": "7.5",
+        "sm": "sm75"
+      }
+    },
+    "final_paths_verified": true
+  },
+  "components": {
+    "deepmd_kit": {
+      "version": "3.2.0b0.post0+b95f21e9",
+      "repository": "https://github.com/deepmodeling/deepmd-kit.git",
+      "source_commit": "b95f21e998f9c294f4d467cf1422d38fa6b5e80a",
+      "source_describe": "v3.2.0b0-106-gb95f21e9",
+      "source_commit_date": "2026-07-07T01:30:07Z",
+      "source_archive": {
+        "build_host_path": "/opt/dpa4-src/deepmd-kit-b95f21e9-exact.tar.gz",
+        "bytes": 20444047,
+        "sha256": "73ad46bd257c48786df20279749bde3d6fe1883fa0cfef4d096303a37477122f"
+      },
+      "python_wheel": {
+        "build_host_path": "/opt/dpa4-src/wheels-python-only/deepmd_kit-3.2.0b0.post0+b95f21e9-py37-none-linux_x86_64.whl",
+        "bytes": 2682404,
+        "sha256": "6d1749dc973541057b301df5f598ca31e353b34cf196cab4f225a2c855db8759"
+      },
+      "native_core": {
+        "variant": "cpu",
+        "native_cuda": false,
+        "pytorch_backend_enabled": true,
+        "evidence": "deepmd/lib/run_config.ini: DP_VARIANT=cpu and ENABLE_PYTORCH=1"
+      }
+    },
+    "torch": {
+      "metadata_version": "2.11.0",
+      "runtime_version": "2.11.0+cu130",
+      "repository": "https://github.com/pytorch/pytorch.git",
+      "source_commit": "70d99e998b4955e0049d13a98d77ae1b14db1f45",
+      "cuda_version": "13.0",
+      "cuda_enabled": true,
+      "dist_record": {
+        "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/torch-2.11.0.dist-info/RECORD",
+        "bytes": 1413875,
+        "sha256": "cf4e5a2e297b7fcadb2e2139ef748021611e367f86f3c8b51ca6ae8ce0b1bce4"
+      }
+    },
+    "lammps": {
+      "package_version": "2025.7.22.2.0",
+      "runtime_version": "22 Jul 2025 Update 2",
+      "repository": "https://github.com/lammps/lammps.git",
+      "source_tag": "stable_22Jul2025_update2",
+      "source_tag_object": "9621ce9c6136874188a2f29c6659821a11d3bc47",
+      "source_commit": "a33449868448baf3c73d8eacdb2d329b13361696",
+      "source_archive": {
+        "build_host_path": "/opt/dpa4-src/lammps-stable_22Jul2025_update2.tar.gz",
+        "bytes": 152263953,
+        "sha256": "8fca775d9637139fc45ba5d2d0d14db2ff43fba1e73887f7c948e29253149d45"
+      },
+      "dist_record": {
+        "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/lammps-2025.7.22.2.0.dist-info/RECORD",
+        "bytes": 48637,
+        "sha256": "f1f0353a0ab807da9ac37b0f9ff20580cb6b37f6b68dcf9530544dea3f5794f8"
+      }
+    },
+    "phonolammps": {
+      "version": "0.10.1",
+      "repository": "https://github.com/abelcarreras/phonolammps.git",
+      "source_tag": null,
+      "source_commit": "c590fd77efdf5e196ea3c7b5245b168eec8e332f",
+      "source_commit_evidence": "upstream commit introducing __version__ 0.10.1; installed distribution has no direct_url.json, so the installed bytes do not independently attest the commit",
+      "dist_record": {
+        "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/phonolammps-0.10.1.dist-info/RECORD",
+        "bytes": 1496,
+        "sha256": "8c6f6bae7b40f029ab1c8a2d1b701cb1b54c937856a9164cd27de134ee31ac8a"
+      }
+    },
+    "python_packages": {
+      "ase": "3.29.0",
+      "dpdata": "0.2.17",
+      "dynaphopy": "1.18.0",
+      "mpich": "5.0.1.post1",
+      "numpy": "1.26.4",
+      "phonopy": "4.3.1",
+      "scipy": "1.15.3",
+      "seekpath": "2.2.1",
+      "spglib": "2.7.0"
+    }
+  },
+  "critical_artifacts": [
+    {
+      "path": "/usr/local/bin/dpa4-lmp",
+      "source": "images/dpa4-phonolammps-b95-t4/dpa4-lmp",
+      "bytes": 1040,
+      "sha256": "ab151ba5197a2820da96ffc0b9ab09a81e4963b47563ef6a7ec508ebd6314697"
+    },
+    {
+      "path": "/usr/local/bin/dpa4-phonolammps",
+      "source": "images/dpa4-phonolammps-b95-t4/dpa4-phonolammps",
+      "bytes": 1048,
+      "sha256": "429e962bc5024b55e71fcb42dc5c356dbd12a0ddbebc817a125e2f886d879a16"
+    },
+    {
+      "path": "/usr/local/bin/dpa4-python3",
+      "source": "images/dpa4-phonolammps-b95-t4/dpa4-python3",
+      "bytes": 1043,
+      "sha256": "b2f898e39aaa2cd6ea7bb72b586cbf428866509ccdd50898f7550c7169c3b471"
+    },
+    {
+      "path": "/root/.bohrium/python3",
+      "source": "images/dpa4-phonolammps-b95-t4/dpa4-python3",
+      "bytes": 1043,
+      "sha256": "b2f898e39aaa2cd6ea7bb72b586cbf428866509ccdd50898f7550c7169c3b471"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/python",
+      "resolved_path": "/usr/bin/python3.10",
+      "bytes": 5917224,
+      "sha256": "7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/dp",
+      "bytes": 188,
+      "sha256": "92c0b1ef4f6ac6bfcd71e000543af6c7af26de18a26f77897e74053eada3411a"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/lmp",
+      "bytes": 192,
+      "sha256": "a73138bf427e64b524f5ce9322f5ef388171b46ddeb98e9230b7eab8fcbe8385"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/lammps/lmp",
+      "bytes": 27744,
+      "sha256": "2636c5b16dd1e0b30b6681b733dfa1d21fb7ab896290102040c58b9dfe558a48"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/lammps/liblammps.so.0",
+      "bytes": 43337080,
+      "sha256": "2dad25619c9bd2a92310e7e5e9cf68d70bd9ade0f0dc3ae13acd575d54a69e1b"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/bin/phonolammps",
+      "bytes": 7145,
+      "sha256": "9f2a0a7337bcada3d4f7b4968533638b3c0d0629cfccf0cf6f551389a63fcafe"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/run_config.ini",
+      "bytes": 698,
+      "sha256": "6aa2acd9cac3c5c45bd19f84168640eca1b068560ff7f4d182c71ece82c9ffa3"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd.so",
+      "bytes": 346984,
+      "sha256": "40b6efbbfb283cd3535d936db2e60120972198bed769b6aabc449197985681ed"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd_c.so",
+      "bytes": 221160,
+      "sha256": "3c5c73c338254af7ad2545e0456d0b8cd65e968d4e9f6c3fc77e380ce9bc8927"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd_cc.so",
+      "bytes": 293712,
+      "sha256": "01994c564d90a29b2bfad701abca63d95241a76272f7e2fa2bd6b56e83bf9f71"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd_backend_pt.so",
+      "bytes": 437800,
+      "sha256": "8bc46dd864a7a5d7aa52289afd6ae0b7f8640ea417cca790ade6cc3f34fef52d"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd_backend_ptexpt.so",
+      "bytes": 507200,
+      "sha256": "67ad88f279f1b5ac57580364329203cb10e787f0cdbb8886fbdfe1aba0125bab"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd_lmpplugin.so",
+      "bytes": 595592,
+      "sha256": "16c2e2c5c594c8f559d3978c253104c97315ae76405b1a98ba898eab68a72094"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/python3.10/site-packages/deepmd/lib/libdeepmd_op_pt.so",
+      "bytes": 762496,
+      "sha256": "fb22f9496d6e64181ccbd98839ecfa9136d3619d965be2886b90294c67d4236c"
+    },
+    {
+      "path": "/opt/dpa4-phonolammps-3.2.0b0-py310/lib/libmpi.so.12",
+      "bytes": 13306545,
+      "sha256": "d6b92a7f76b886b537066c65ef241f0d011afc79a0cb368d32d47c270ecd5e25"
+    }
+  ],
+  "qualification_boundary": {
+    "production_model": "/opt/dpa4-runtime/models/DPA4-alloytongqi/alloytongqi.t4-sm75.pt2",
+    "cpu_model_is_diagnostic_only": true,
+    "mpi_ranks": 1,
+    "gpu_count": 1,
+    "gpu_model": "NVIDIA Tesla T4",
+    "compute_capability": "7.5",
+    "native_deepmd_cuda": false,
+    "pytorch_cuda_backend": true,
+    "final_image_benchmark_manifest": null,
+    "qualification_status": "awaiting_final_image_identity_and_benchmark"
+  }
+}

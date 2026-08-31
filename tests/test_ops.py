@@ -27,6 +27,7 @@ from apex.op.property_ops import (
 )
 from apex.op.RunLAMMPS import RunLAMMPS
 from apex.op.RunVASP import RunVASP
+from apex.core.calculator import lammps_model_files_for_cleanup
 from apex.superop.SimplePropertySteps import SimplePropertySteps
 from apex.core.lib.vasp_runtime import build_kpoint_aware_vasp_command
 from apex.core.lib import dispatcher as dispatcher_module
@@ -55,6 +56,19 @@ __package__ = "tests"
 
 
 class TestTaskStatusHelpers(unittest.TestCase):
+    def test_image_resident_model_is_excluded_from_cleanup(self):
+        image_model = "/opt/dpa4-runtime/models/alloytongqi.pt2"
+        self.assertEqual(
+            lammps_model_files_for_cleanup(
+                {"model": image_model, "model_in_image": True}
+            ),
+            [],
+        )
+        self.assertEqual(
+            lammps_model_files_for_cleanup({"model": "local.pt2"}),
+            ["local.pt2"],
+        )
+
     def test_is_failed_task_result_accepts_dict_and_mapping_like(self):
         self.assertTrue(is_failed_task_result(None))
         self.assertTrue(is_failed_task_result({"failed": True, "energies": [1.0]}))
@@ -591,6 +605,38 @@ class TestRunVASP(unittest.TestCase):
                 ["1"],
             )
 
+    def test_single_stage_recovers_mismatched_runtime_log_alias(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "input"
+            task_dir.mkdir()
+            self._write_common_inputs(task_dir)
+            op_input = self._op_input(
+                task_dir,
+                "single-log-alias",
+                "python fake_vasp.py",
+                ["OUTCAR", "outlog", "CONTCAR", "OSZICAR", "XDATCAR"],
+            )
+            op_input["log_name"] = "runner.log"
+            cwd = os.getcwd()
+            try:
+                os.chdir(root)
+                result = RunVASP().execute(op_input)
+            finally:
+                os.chdir(cwd)
+
+            backward = root / result["backward_dir"]
+            self.assertTrue((backward / "runner.log").is_file())
+            self.assertTrue((backward / "outlog").is_file())
+            self.assertEqual(
+                (backward / "runner.log").read_bytes(),
+                (backward / "outlog").read_bytes(),
+            )
+            self.assertEqual(
+                loadfn(backward / "apex_vasp_stage_status.json")["state"],
+                "succeeded",
+            )
+
     def test_finite_t_latt_runs_both_writable_incar_stages(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -1094,6 +1140,26 @@ class TestRunVASP(unittest.TestCase):
 
 
 class TestRunLAMMPSDebug(unittest.TestCase):
+    def test_cleanup_preserves_image_resident_model_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            task_dir = root / "task"
+            task_dir.mkdir()
+            image_model = root / "image-model.pt2"
+            image_model.symlink_to(root / "missing-image-target.pt2")
+            dumpfn(
+                {
+                    "type": "deepmd",
+                    "model": str(image_model),
+                    "model_in_image": True,
+                },
+                task_dir / "inter.json",
+            )
+
+            RunLAMMPS._cleanup_model_links(task_dir)
+
+            self.assertTrue(image_model.is_symlink())
+
     def test_run_lammps_writes_debug_log_on_success(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             task_dir = Path(tmpdir)

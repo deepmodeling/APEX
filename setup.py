@@ -22,6 +22,7 @@ setuptools.setup(
             "skills/apex-flow/models/*/*",
             "skills/apex-flow/reference/*",
             "skills/apex-flow/scripts/*",
+            "skills/apex-flow/benchmarks/*/*",
             "skills/apex-flow/variants/local/SKILL.md",
             "skills/apex-flow/variants/local/profiles/*",
             "skills/apex-flow/variants/local/reference/*",

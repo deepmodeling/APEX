@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly DPA4_VENV=/opt/dpa4-phonolammps-3.2.0b0-py310
+readonly DPA4_SITE_PACKAGES="$DPA4_VENV/lib/python3.10/site-packages"
+readonly DPA4_DEEPMD_LIB="$DPA4_SITE_PACKAGES/deepmd/lib"
+readonly DPA4_RUNTIME_LIBS="$DPA4_VENV/lib:$DPA4_DEEPMD_LIB:$DPA4_SITE_PACKAGES/lammps:$DPA4_SITE_PACKAGES/torch/lib:$DPA4_SITE_PACKAGES/nvidia/cu13/lib:$DPA4_SITE_PACKAGES/nvidia/cudnn/lib:$DPA4_SITE_PACKAGES/nvidia/cusparselt/lib:$DPA4_SITE_PACKAGES/nvidia/nccl/lib:$DPA4_SITE_PACKAGES/nvidia/nvshmem/lib"
+
+export PATH="$DPA4_VENV/bin:${PATH:-/usr/bin:/bin}"
+export LD_LIBRARY_PATH="$DPA4_RUNTIME_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LAMMPS_PLUGIN_PATH="$DPA4_DEEPMD_LIB"
+export DP_BACKEND_PLUGIN_PATH="$DPA4_DEEPMD_LIB"
+
+export DP_COMPILE_INFER=0
+export DP_AMP_INFER=0
+export DP_TRITON_INFER=0
+export DP_CUTE_INFER=0
+export DP_TF32_INFER=0
+export OMP_NUM_THREADS=1
+export DP_INTRA_OP_PARALLELISM_THREADS=1
+export DP_INTER_OP_PARALLELISM_THREADS=1
+
+exec /opt/dpa4-phonolammps-3.2.0b0-py310/bin/phonolammps "$@"

@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -57,6 +58,10 @@ class TestFiniteTemperatureTemplates(unittest.TestCase):
         self.assertEqual(
             {"lammps": True, "abacus": False, "vasp": False},
             properties["finite_t_elastic"],
+        )
+        self.assertEqual(
+            {"lammps": True, "abacus": False, "vasp": False},
+            properties["melting_point"],
         )
 
         vasp_props = json.loads(
@@ -281,6 +286,93 @@ class TestGenerateConfigHelpers(unittest.TestCase):
                     "lammps", "deepmd", access_key="key", project_id=1
                 )
 
+    def test_unpublished_dpa4_profile_fails_closed_before_ticket(self):
+        with patch.object(self.gen, "get_bohrium_ticket") as ticket:
+            with self.assertRaisesRegex(RuntimeError, "not published"):
+                self.gen.build_global_json(
+                    "lammps",
+                    "deepmd",
+                    access_key="key",
+                    project_id=42,
+                    runtime_profile=self.gen.DPA4_RUNTIME_PROFILE,
+                )
+        ticket.assert_not_called()
+
+    def test_published_dpa4_profile_builds_exact_contract(self):
+        profile = json.loads(
+            (
+                get_skill_root()
+                / "data"
+                / "dpa4_alloytongqi_t4_profile.json"
+            ).read_text(encoding="utf-8")
+        )
+        profile["qualification_status"] = "post_snapshot_passed"
+        profile["image"] = {
+            "ref": "registry.example/dpa4:qualified",
+            "digest": "sha256:" + "a" * 64,
+        }
+        with patch.object(
+            self.gen, "get_bohrium_ticket", return_value="t" * 36
+        ), patch.object(self.gen, "_validate_image_scass") as validate:
+            global_config = self.gen.build_global_json(
+                "lammps",
+                "deepmd",
+                access_key="key",
+                project_id=42,
+                runtime_profile=profile,
+            )
+        self.assertEqual(
+            global_config["lammps_image_name"],
+            "registry.example/dpa4:qualified@sha256:" + "a" * 64,
+        )
+        self.assertEqual(
+            global_config["scass_type"], "c4_m15_1 * NVIDIA T4"
+        )
+        self.assertEqual(
+            global_config["lammps_run_command"],
+            "/usr/local/bin/dpa4-lmp -in in.lammps",
+        )
+        self.assertEqual(
+            global_config["phonolammps_run_command"],
+            "/usr/local/bin/dpa4-phonolammps {input_file} "
+            "-c {poscar} --dim {dim} {primitive_axes}",
+        )
+        validate.assert_called_once_with(
+            global_config["lammps_image_name"],
+            "c4_m15_1 * NVIDIA T4",
+            runtime_profile=self.gen.DPA4_RUNTIME_PROFILE,
+        )
+
+        interaction = self.gen.build_interaction(
+            "lammps", "deepmd", runtime_profile=profile
+        )
+        self.assertEqual(interaction, {
+            "type": "deepmd",
+            "deepmd_runtime": "dpa4_pt2",
+            "model_in_image": True,
+            "model": (
+                "/opt/dpa4-runtime/models/DPA4-alloytongqi/"
+                "alloytongqi.t4-sm75.pt2"
+            ),
+            "runtime_model_sha256": (
+                "2614db9463f5864d80a78fec037aeae26930df2004bb9f1148a69b83c25b3daf"
+            ),
+            "source_checkpoint": (
+                "/opt/dpa4-runtime/models/DPA4-alloytongqi/model.pt"
+            ),
+            "source_checkpoint_sha256": (
+                "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad"
+            ),
+            "type_map": "auto",
+        })
+        with self.assertRaisesRegex(ValueError, "do not pass --model"):
+            self.gen.build_interaction(
+                "lammps",
+                "deepmd",
+                model="model.pt",
+                runtime_profile=profile,
+            )
+
     def test_validate_image_scass_accepts_and_rejects_combos(self):
         self.gen._validate_image_scass(
             "deepmd-kit:3.1.3", "c32_m64_cpu"
@@ -374,12 +466,16 @@ class TestGenerateConfigHelpers(unittest.TestCase):
         )
 
         args = Namespace(
+            gamma_parent_lattice="bcc",
             gamma_plane_miller=[1.0, 1.0, 0.0],
             gamma_slip_direction=[1.0, -1.0, 0.0],
             gamma_supercell_size=[2.0, 3.0, 4.5],
+            gamma_vacuum_size=20.0,
+            gamma_require_orthogonal_cell=True,
             gamma_min_slab_height=7.5,
             gamma_max_atoms=80,
             gamma_min_distance=0.4,
+            gamma_displacement_points=[0.5, 0.0],
             gamma_n_steps=5,
             gamma_n_steps_x=3,
             gamma_n_steps_y=4,
@@ -400,9 +496,16 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             gamma_overrides=overrides,
         )
         line, surface = configured["properties"]
+        self.assertEqual(line["parent_lattice"], "bcc")
         self.assertEqual(line["supercell_size"], [2, 3, 4.5])
+        self.assertEqual(line["vacuum_size"], 20.0)
+        self.assertTrue(line["require_orthogonal_cell"])
+        self.assertEqual(line["displacement_points"], [0.0, 0.5])
         self.assertEqual(line["n_steps"], 5)
         self.assertNotIn("n_steps_x", line)
+        self.assertEqual(surface["parent_lattice"], "bcc")
+        self.assertTrue(surface["require_orthogonal_cell"])
+        self.assertNotIn("displacement_points", surface)
         self.assertEqual(surface["n_steps_x"], 3)
         self.assertEqual(surface["n_steps_y"], 4)
         self.assertTrue(surface["closed_loop"])
@@ -433,6 +536,18 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             (["gamma_surface"], {"n_steps_x": 0}, "positive integer"),
             (["gamma_surface"], {"n_steps_y": 0}, "positive integer"),
             (["gamma"], {"closed_loop": True}, "gamma_surface"),
+            (["gamma"], {"parent_lattice": "b2"}, "bcc, fcc, or hcp"),
+            (["gamma"], {"vacuum_size": -1}, "non-negative"),
+            (
+                ["gamma"],
+                {"displacement_points": [0.5, 1.0]},
+                "must include 0",
+            ),
+            (
+                ["gamma_surface"],
+                {"displacement_points": [0.0, 0.5]},
+                "requires --properties gamma",
+            ),
         )
         for properties, overrides, message in cases:
             with self.subTest(properties=properties, overrides=overrides):
@@ -442,6 +557,52 @@ class TestGenerateConfigHelpers(unittest.TestCase):
                 self.assertTrue(
                     any(message in error for error in errors), errors
                 )
+
+    def test_melting_overrides_and_restart_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            restart_a = Path(tmp) / "restart.1600"
+            restart_b = Path(tmp) / "restart.1700"
+            restart_a.write_bytes(b"a")
+            restart_b.write_bytes(b"b")
+            args = Namespace(
+                melting_temperatures=[1600.0, 1700.0],
+                melting_replicas=2,
+                melting_restart_files=[str(restart_a), str(restart_b)],
+            )
+            overrides = self.gen.melting_overrides_from_args(args)
+            self.assertEqual(
+                [],
+                self.gen.validate_melting_cli_options(
+                    ["melting_point"], overrides
+                ),
+            )
+            configured = self.gen.build_param_json(
+                "confs/input",
+                {"type": "deepmd"},
+                ["melting_point"],
+                flow_type="props",
+                melting_overrides=overrides,
+            )
+            cal = configured["properties"][0]["cal_setting"]
+            self.assertEqual([1600, 1700], cal["temperature"])
+            self.assertEqual(2, cal["replicas"])
+            self.assertEqual(
+                [str(restart_a), str(restart_b)], cal["restart_files"]
+            )
+            self.assertTrue(
+                self.gen.validate_melting_cli_options(
+                    ["elastic"], overrides
+                )
+            )
+            bad = dict(overrides, restart_files=[str(restart_a)])
+            self.assertTrue(
+                any(
+                    "one file per" in error
+                    for error in self.gen.validate_melting_cli_options(
+                        ["melting_point"], bad
+                    )
+                )
+            )
 
     def test_validate_config_and_parse_str_map(self):
         self.assertTrue(
@@ -506,6 +667,80 @@ class TestGenerateConfigHelpers(unittest.TestCase):
             self.assertIn('-n "al-test"', submit.read_text())
             self.assertTrue(submit.stat().st_mode & stat.S_IXUSR)
             self.assertIn("Workflow name sanitized", stdout.getvalue())
+
+    def test_main_dpa4_runtime_profile_is_locked_before_ticket(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            structure = Path(tmp) / "Ti.vasp"
+            structure.write_text("structure", encoding="utf-8")
+            argv = [
+                "generate_config.py",
+                "create",
+                "--structure", str(structure),
+                "--backend", "lammps",
+                "--runtime-profile", "dpa4-alloytongqi-t4",
+                "--properties", "elastic",
+                "--project-id", "7",
+                "--access-key", "key",
+            ]
+            stderr = io.StringIO()
+            with patch.object(sys, "argv", argv), patch.object(
+                self.gen, "get_bohrium_ticket"
+            ) as ticket, patch("sys.stderr", stderr), patch(
+                "sys.stdout", io.StringIO()
+            ):
+                with self.assertRaisesRegex(SystemExit, "1"):
+                    self.gen.main()
+            ticket.assert_not_called()
+            self.assertIn("not published", stderr.getvalue())
+
+    def test_main_stages_melting_restarts_per_temperature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            structure = root / "Ti.vasp"
+            model = root / "model.pb"
+            restart_a = root / "restart.1600"
+            restart_b = root / "restart.1700"
+            output = root / "job"
+            structure.write_text("structure", encoding="utf-8")
+            model.write_text("model", encoding="utf-8")
+            restart_a.write_bytes(b"restart-a")
+            restart_b.write_bytes(b"restart-b")
+            argv = [
+                "generate_config.py",
+                "create",
+                "--structure", str(structure),
+                "--backend", "lammps",
+                "--potential", "deepmd",
+                "--model", str(model),
+                "--properties", "melting_point",
+                "--melting-temperatures", "1600", "1700",
+                "--melting-replicas", "2",
+                "--melting-restart-files", str(restart_a), str(restart_b),
+                "--output-dir", str(output),
+                "--project-id", "7",
+                "--access-key", "key",
+            ]
+            with patch.object(sys, "argv", argv), patch.object(
+                self.gen, "get_bohrium_ticket", return_value="t" * 36
+            ), patch("sys.stdout", io.StringIO()):
+                self.gen.main()
+
+            param = json.loads(
+                (output / "param.json").read_text(encoding="utf-8")
+            )
+            cal = param["properties"][0]["cal_setting"]
+            self.assertEqual([1600, 1700], cal["temperature"])
+            self.assertEqual(2, cal["replicas"])
+            self.assertEqual(
+                ["melting_restart_000000.1600", "melting_restart_000001.1700"],
+                cal["restart_files"],
+            )
+            self.assertEqual(
+                b"restart-a", (output / cal["restart_files"][0]).read_bytes()
+            )
+            self.assertEqual(
+                b"restart-b", (output / cal["restart_files"][1]).read_bytes()
+            )
 
     def test_main_rejects_invalid_config_before_ticket_request(self):
         argv = [
@@ -624,6 +859,315 @@ class TestValidateInputs(unittest.TestCase):
     def setUpClass(cls):
         cls.validator = _load_script("validate_inputs.py")
         cls.gen = _load_script("generate_config.py")
+
+    def _dpa4_global(self, exact_image):
+        return {
+            "batch_type": "Bohrium",
+            "context_type": "Bohrium",
+            "lammps_image_name": exact_image,
+            "lammps_run_command": self.validator.DPA4_LAMMPS_RUN_COMMAND,
+            "phonolammps_run_command": (
+                self.validator.DPA4_PHONOLAMMPS_RUN_COMMAND
+            ),
+            "scass_type": self.validator.DPA4_SCASS_TYPE,
+            "group_size": self.validator.DPA4_GROUP_SIZE,
+            "pool_size": self.validator.DPA4_POOL_SIZE,
+        }
+
+    @staticmethod
+    def _published_dpa4_profile(image_ref, image_digest):
+        return {
+            "published": True,
+            "image": {"ref": image_ref, "digest": image_digest},
+        }
+
+    def test_bundled_dpa4_source_checkpoint_is_never_a_lammps_runtime(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            model = root / "model.pt"
+            model.write_bytes(b"unit-test-dpa4")
+            digest = hashlib.sha256(model.read_bytes()).hexdigest()
+            param = {
+                "interaction": {
+                    "type": "deepmd",
+                    "model": "model.pt",
+                    "type_map": "auto",
+                },
+                "properties": [{"type": "eos"}],
+            }
+            with patch.object(self.validator, "BUNDLED_DPA4_SHA256", digest):
+                errors, warnings = self.validator.validate_bundled_dpa4_runtime(
+                    param,
+                    {"lammps_image_name": "legacy/default"},
+                    root,
+                )
+                self.assertTrue(any("never model.pt" in e for e in errors))
+                self.assertFalse(warnings)
+
+                errors, warnings = self.validator.validate_bundled_dpa4_runtime(
+                    param,
+                    {"lammps_image_name": "registry.example/compatible:dpa4"},
+                    root,
+                )
+                self.assertTrue(any("never model.pt" in e for e in errors))
+                self.assertFalse(warnings)
+
+    def test_exact_dpa4_skill_contract_and_phonon_exception(self):
+        image_ref = "registry.example/apex/dpa4-runtime:tested"
+        image_digest = "sha256:" + "b" * 64
+        exact_image = f"{image_ref}@{image_digest}"
+        interaction = {
+            "type": "deepmd",
+            "deepmd_runtime": self.validator.DPA4_RUNTIME_KIND,
+            "model_in_image": True,
+            "model": self.validator.DPA4_RUNTIME_MODEL_PATH,
+            "runtime_model_sha256": self.validator.DPA4_RUNTIME_MODEL_SHA256,
+            "source_checkpoint": self.validator.DPA4_SOURCE_CHECKPOINT_PATH,
+            "source_checkpoint_sha256": self.validator.BUNDLED_DPA4_SHA256,
+            "type_map": "auto",
+        }
+        param = {
+            "interaction": interaction,
+            "properties": [{"type": "phonon"}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            self.validator,
+            "_load_dpa4_profile",
+            return_value=self._published_dpa4_profile(
+                image_ref,
+                image_digest,
+            ),
+        ):
+            errors, warnings = self.validator.validate_bundled_dpa4_runtime(
+                param, self._dpa4_global(exact_image), Path(tmpdir)
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual(warnings, [])
+
+            errors, _ = self.validator.validate_bundled_dpa4_runtime(
+                param,
+                self._dpa4_global("legacy/default"),
+                Path(tmpdir),
+            )
+            self.assertTrue(any("lammps_image_name" in error for error in errors))
+
+    def test_dpa4_skill_contract_accepts_expanded_type_map(self):
+        image_ref = "registry.example/apex/dpa4-runtime:tested"
+        image_digest = "sha256:" + "e" * 64
+        exact_image = f"{image_ref}@{image_digest}"
+        interaction = {
+            "type": "deepmd",
+            "deepmd_runtime": self.validator.DPA4_RUNTIME_KIND,
+            "model_in_image": True,
+            "model": self.validator.DPA4_RUNTIME_MODEL_PATH,
+            "runtime_model_sha256": self.validator.DPA4_RUNTIME_MODEL_SHA256,
+            "source_checkpoint": self.validator.DPA4_SOURCE_CHECKPOINT_PATH,
+            "source_checkpoint_sha256": self.validator.BUNDLED_DPA4_SHA256,
+            "type_map": {"Ti": 0, "V": 1},
+        }
+        param = {
+            "interaction": interaction,
+            "properties": [{"type": "eos"}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            self.validator,
+            "_load_dpa4_profile",
+            return_value=self._published_dpa4_profile(
+                image_ref,
+                image_digest,
+            ),
+        ):
+            errors, warnings = self.validator.validate_bundled_dpa4_runtime(
+                param,
+                self._dpa4_global(exact_image),
+                Path(tmpdir),
+            )
+            self.assertEqual(errors, [])
+            self.assertEqual(warnings, [])
+
+            interaction["type_map"] = {"Ti": 1, "V": 3}
+            errors, _ = self.validator.validate_bundled_dpa4_runtime(
+                param,
+                self._dpa4_global(exact_image),
+                Path(tmpdir),
+            )
+            self.assertTrue(any("contiguous" in error for error in errors))
+
+    def test_dpa4_skill_contract_rejects_unverified_execution_combos(self):
+        image_ref = "registry.example/apex/dpa4-runtime:tested"
+        image_digest = "sha256:" + "c" * 64
+        exact_image = f"{image_ref}@{image_digest}"
+        interaction = {
+            "type": "deepmd",
+            "deepmd_runtime": self.validator.DPA4_RUNTIME_KIND,
+            "model_in_image": True,
+            "model": self.validator.DPA4_RUNTIME_MODEL_PATH,
+            "runtime_model_sha256": self.validator.DPA4_RUNTIME_MODEL_SHA256,
+            "source_checkpoint": self.validator.DPA4_SOURCE_CHECKPOINT_PATH,
+            "source_checkpoint_sha256": self.validator.BUNDLED_DPA4_SHA256,
+            "type_map": "auto",
+        }
+        param = {
+            "interaction": interaction,
+            "properties": [{"type": "phonon"}],
+        }
+        invalid_globals = {
+            "other T4 SKU": {"scass_type": "c8_m31_1 * NVIDIA T4"},
+            "wrong job type": {"job_type": "not-container"},
+            "wrong platform": {"platform": "not-ali"},
+            "bare LAMMPS": {"lammps_run_command": "lmp -in in.lammps"},
+            "bare phonoLAMMPS": {
+                "phonolammps_run_command": "phonolammps"
+            },
+            "multi task": {"group_size": 2},
+            "remote multi-rank wrapper": {
+                "dispatcher_remote_command": [
+                    "mpirun",
+                    "-n",
+                    "2",
+                    "python3",
+                ]
+            },
+            "dispatcher multi-rank wrapper": {
+                "dispatcher_config": {
+                    "command": ["mpirun", "-n", "2", "python3"]
+                }
+            },
+            "dispatcher remote multi-rank wrapper": {
+                "dispatcher_config": {
+                    "remote_command": ["mpirun", "-n", "2", "python3"]
+                }
+            },
+            "dispatcher JSON injection": {
+                "dispatcher_config": {"json_file": "attacker.json"}
+            },
+            "resource override": {
+                "resources": {"number_node": 2, "gpu_per_node": 1}
+            },
+            "task override": {"task": {"command": "mpirun -n 2 dpa4-lmp"}},
+            "nested image override": {
+                "machine": {
+                    "remote_profile": {
+                        "input_data": {
+                            "image_name": "registry.example/wrong:latest"
+                        }
+                    }
+                }
+            },
+            "dispatcher nested image override": {
+                "dispatcher_config": {
+                    "machine_dict": {
+                        "context_type": "Bohrium",
+                        "batch_type": "Bohrium",
+                        "remote_profile": {
+                            "input_data": {
+                                "scass_type": self.validator.DPA4_SCASS_TYPE,
+                                "image_name": "registry.example/wrong:latest",
+                            }
+                        },
+                    }
+                }
+            },
+            "local": {"context_type": "LocalContext", "batch_type": "Shell"},
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            self.validator,
+            "_load_dpa4_profile",
+            return_value=self._published_dpa4_profile(
+                image_ref,
+                image_digest,
+            ),
+        ):
+            for label, override in invalid_globals.items():
+                global_config = self._dpa4_global(exact_image)
+                global_config.update(override)
+                with self.subTest(label=label):
+                    errors, _ = self.validator.validate_bundled_dpa4_runtime(
+                        param, global_config, Path(tmpdir)
+                    )
+                    self.assertTrue(errors)
+
+            errors, _ = self.validator.validate_bundled_dpa4_runtime(
+                param, None, Path(tmpdir)
+            )
+            self.assertTrue(any("requires global.json" in error for error in errors))
+
+    def test_dpa4_skill_contract_rejects_non_lammps_base_overwrite(self):
+        image_ref = "registry.example/apex/dpa4-runtime:tested"
+        image_digest = "sha256:" + "d" * 64
+        exact_image = f"{image_ref}@{image_digest}"
+        dpa4 = {
+            "type": "deepmd",
+            "deepmd_runtime": self.validator.DPA4_RUNTIME_KIND,
+            "model_in_image": True,
+            "model": self.validator.DPA4_RUNTIME_MODEL_PATH,
+            "runtime_model_sha256": self.validator.DPA4_RUNTIME_MODEL_SHA256,
+            "source_checkpoint": self.validator.DPA4_SOURCE_CHECKPOINT_PATH,
+            "source_checkpoint_sha256": self.validator.BUNDLED_DPA4_SHA256,
+            "type_map": "auto",
+        }
+        param = {
+            "interaction": {
+                "type": "vasp",
+                "potcars": {"Ti": "Ti"},
+                "potcar_prefix": ".",
+            },
+            "properties": [
+                {
+                    "type": "eos",
+                    "cal_setting": {"overwrite_interaction": dpa4},
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, patch.object(
+            self.validator,
+            "_load_dpa4_profile",
+            return_value=self._published_dpa4_profile(
+                image_ref,
+                image_digest,
+            ),
+        ):
+            errors, _ = self.validator.validate_bundled_dpa4_runtime(
+                param, self._dpa4_global(exact_image), Path(tmpdir)
+            )
+        self.assertTrue(
+            any("requires a LAMMPS base interaction" in error for error in errors)
+        )
+
+    def test_dpa4_skill_contract_rejects_placeholder_wrong_hash_and_mix(self):
+        interaction = {
+            "type": "deepmd",
+            "deepmd_runtime": self.validator.DPA4_RUNTIME_KIND,
+            "model_in_image": True,
+            "model": self.validator.DPA4_RUNTIME_MODEL_PATH,
+            "runtime_model_sha256": "0" * 64,
+            "source_checkpoint": self.validator.DPA4_SOURCE_CHECKPOINT_PATH,
+            "source_checkpoint_sha256": self.validator.BUNDLED_DPA4_SHA256,
+            "type_map": "auto",
+        }
+        param = {
+            "interaction": interaction,
+            "properties": [
+                {"type": "eos"},
+                {
+                    "type": "elastic",
+                    "cal_setting": {
+                        "overwrite_interaction": {
+                            "type": "deepmd",
+                            "model": "legacy.pb",
+                            "type_map": "auto",
+                        }
+                    },
+                },
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            errors, _ = self.validator.validate_bundled_dpa4_runtime(
+                param, {"lammps_image_name": "anything"}, Path(tmpdir)
+            )
+        self.assertTrue(any("runtime_model_sha256" in error for error in errors))
+        self.assertTrue(any("cannot mix legacy" in error for error in errors))
+        self.assertTrue(any("not finalized" in error for error in errors))
 
     def test_validate_global(self):
         errors, warnings = self.validator.validate_global({})
@@ -934,6 +1478,7 @@ class TestValidateInputs(unittest.TestCase):
                 '/opt/vasp.5.4.4/bin/vasp_gam"'
             )
             global_config = {
+                "batch_type": "Bohrium",
                 "vasp_run_command": command,
                 "scass_type": "c8_m16_cpu",
             }
@@ -992,6 +1537,43 @@ class TestValidateInputs(unittest.TestCase):
                 param, global_config, root, [gamma_report]
             )
             self.assertTrue(any("same time" in item for item in errors))
+
+    def test_non_bohrium_vasp_does_not_compare_ranks_with_scass_type(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "INCAR").write_text(
+                "NCORE = 2\nKPAR = 1\n", encoding="utf-8"
+            )
+            param = {
+                "interaction": {"type": "vasp", "incar": "INCAR"},
+            }
+            common = {
+                "vasp_run_command": "mpirun -n 8 /cluster/bin/vasp_std",
+                "scass_type": "c4_m8_cpu",
+            }
+            profiles = {
+                "local": {
+                    "context_type": "Local",
+                    "batch_type": "Shell",
+                },
+                "dpdispatcher": {
+                    "context_type": "Local",
+                    "machine": {
+                        "context_type": "Local",
+                        "batch_type": "Slurm",
+                    },
+                },
+            }
+
+            for profile, config in profiles.items():
+                with self.subTest(profile=profile):
+                    errors, warnings = (
+                        self.validator.validate_vasp_parallel_settings(
+                            param, {**common, **config}, root, []
+                        )
+                    )
+                    self.assertEqual(errors, [])
+                    self.assertEqual(warnings, [])
 
     def test_validate_vasp_gam_selection_uses_sampling_not_property_name(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1108,6 +1690,36 @@ class TestValidateInputs(unittest.TestCase):
             [{"type": "finite_t_elastic"}], "vasp"
         )
         self.assertTrue(any("LAMMPS-only" in error for error in errors))
+
+        valid_melting = {
+            "type": "melting_point",
+            "method": "two_phase",
+            "supercell_size": [1, 1, 2],
+            "cal_setting": {
+                "temperature": [1600, 1650, 1700],
+                "production_steps": 100000,
+                "interface_axis": "z",
+            },
+        }
+        errors, _ = self.validator.validate_properties(
+            [valid_melting], "deepmd"
+        )
+        self.assertEqual([], errors)
+        errors, _ = self.validator.validate_properties(
+            [valid_melting], "vasp"
+        )
+        self.assertTrue(any("LAMMPS-only" in error for error in errors))
+        invalid_melting = json.loads(json.dumps(valid_melting))
+        invalid_melting["cal_setting"]["temperature"] = []
+        invalid_melting["cal_setting"]["interface_axis"] = "bad"
+        invalid_melting["cal_setting"]["restart_interval"] = 0
+        errors, _ = self.validator.validate_properties(
+            [invalid_melting], "deepmd"
+        )
+        self.assertTrue(any("non-empty" in error for error in errors))
+        self.assertTrue(any("interface_axis" in error for error in errors))
+        self.assertTrue(any("restart_interval" in error for error in errors))
+
     def test_validate_gruneisen_and_gamma_geometry(self):
         errors, _ = self.validator.validate_properties(
             [{
@@ -1163,6 +1775,57 @@ class TestValidateInputs(unittest.TestCase):
         )
         self.assertTrue(any("n_steps_x" in error for error in errors))
         self.assertTrue(any("n_steps_y" in error for error in errors))
+
+    def test_validate_parent_gamma_displacements_and_restart_boundary(self):
+        valid_gamma = {
+            "type": "gamma",
+            "parent_lattice": "bcc",
+            "plane_miller": [1, 1, 0],
+            "slip_direction": [-1, 1, 1],
+            "vacuum_size": 20,
+            "require_orthogonal_cell": True,
+            "displacement_points": [0.0, 0.5],
+        }
+        errors, _ = self.validator.validate_properties(
+            [valid_gamma], "lammps"
+        )
+        self.assertEqual([], errors)
+
+        for key, value, message in (
+            ("parent_lattice", "b2", "parent_lattice"),
+            ("vacuum_size", -1, "vacuum_size"),
+            ("require_orthogonal_cell", "true", "must be a boolean"),
+            ("displacement_points", [0.5], "include 0"),
+        ):
+            prop = dict(valid_gamma, **{key: value})
+            errors, _ = self.validator.validate_properties([prop], "lammps")
+            self.assertTrue(any(message in error for error in errors), errors)
+
+        finite_latt = {
+            "type": "finite_t_latt",
+            "cal_setting": {"restart_files": ["restart.bad"]},
+        }
+        errors, _ = self.validator.validate_properties(
+            [finite_latt], "lammps"
+        )
+        self.assertTrue(
+            any("supported only by melting_point" in error for error in errors)
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "restart.1600").write_bytes(b"restart")
+            melting = {
+                "type": "melting_point",
+                "cal_setting": {
+                    "temperature": [1600, 1700],
+                    "restart_files": ["restart.1600", "restart.missing"],
+                },
+            }
+            errors, _ = self.validator.validate_properties(
+                [melting], "deepmd", base_dir=root
+            )
+            self.assertTrue(any("not found" in error for error in errors))
 
     def test_validate_structures(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1234,6 +1897,62 @@ class TestValidateInputs(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("strict mode", stderr)
 
+    def test_main_accepts_relaxation_only_with_missing_or_empty_properties(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "POSCAR").write_text("structure", encoding="utf-8")
+            param = root / "param.json"
+            payload = {
+                "structures": ["POSCAR"],
+                "interaction": {
+                    "type": "deepmd",
+                    "model": "model.pb",
+                    "type_map": "auto",
+                },
+                "relaxation": {
+                    "cal_type": "relaxation",
+                    "cal_setting": {},
+                },
+            }
+
+            for properties in (None, []):
+                with self.subTest(properties=properties):
+                    candidate = dict(payload)
+                    if properties is not None:
+                        candidate["properties"] = properties
+                    param.write_text(json.dumps(candidate))
+
+                    code, stdout, stderr = self._run_main([
+                        "validate_inputs.py", "--param", str(param),
+                    ])
+
+                    self.assertEqual(code, 0)
+                    self.assertIn("Validation PASSED", stdout)
+                    self.assertIn("Properties: []", stdout)
+                    self.assertNotIn("No properties defined", stderr)
+
+    def test_main_still_rejects_empty_property_only_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "POSCAR").write_text("structure", encoding="utf-8")
+            param = root / "param.json"
+            param.write_text(json.dumps({
+                "structures": ["POSCAR"],
+                "interaction": {
+                    "type": "deepmd",
+                    "model": "model.pb",
+                    "type_map": "auto",
+                },
+                "properties": [],
+            }))
+
+            code, _, stderr = self._run_main([
+                "validate_inputs.py", "--param", str(param),
+            ])
+
+            self.assertEqual(code, 1)
+            self.assertIn("No properties defined", stderr)
+
     def test_main_reports_missing_and_invalid_sections(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1253,6 +1972,81 @@ class TestValidateInputs(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("global.json not found", stderr)
             self.assertIn("Missing 'interaction'", stderr)
+
+
+class TestDpa4Profile(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.profile_mod = _load_script("dpa4_profile.py")
+
+    def test_bundled_profile_is_pre_snapshot_and_fails_closed(self):
+        profile = self.profile_mod.load_dpa4_profile(
+            require_published=False
+        )
+        self.assertFalse(profile["published"])
+        self.assertFalse(profile["identity_finalized"])
+        self.assertFalse(profile["qualified"])
+        self.assertEqual(
+            profile["machine_compatibility"]["recommended"][0][
+                "scass_type"
+            ],
+            "c4_m15_1 * NVIDIA T4",
+        )
+        self.assertEqual(
+            profile["calculator"]["run_command"],
+            self.profile_mod.DPA4_LAMMPS_RUN_COMMAND,
+        )
+        self.assertEqual(
+            profile["calculator"]["phonolammps_command"],
+            self.profile_mod.DPA4_PHONOLAMMPS_RUN_COMMAND,
+        )
+        with self.assertRaisesRegex(RuntimeError, "not published"):
+            self.profile_mod.load_dpa4_profile(require_published=True)
+
+    def test_published_profile_produces_exact_image_and_interaction(self):
+        source = json.loads(
+            self.profile_mod.DPA4_PROFILE_PATH.read_text(encoding="utf-8")
+        )
+        source["qualification_status"] = "post_snapshot_passed"
+        source["image"] = {
+            "ref": "registry.example/dpa4:qualified",
+            "digest": "sha256:" + "e" * 64,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "profile.json"
+            path.write_text(json.dumps(source), encoding="utf-8")
+            profile = self.profile_mod.load_dpa4_profile(path=path)
+        self.assertEqual(
+            self.profile_mod.dpa4_image_name(profile),
+            "registry.example/dpa4:qualified@sha256:" + "e" * 64,
+        )
+        interaction = self.profile_mod.dpa4_interaction(profile)
+        self.assertEqual(
+            interaction["model"], self.profile_mod.DPA4_RUNTIME_MODEL_PATH
+        )
+        self.assertEqual(
+            interaction["source_checkpoint_sha256"],
+            self.profile_mod.DPA4_SOURCE_CHECKPOINT_SHA256,
+        )
+
+    def test_profile_rejects_tampered_runtime_or_wrapper(self):
+        source = json.loads(
+            self.profile_mod.DPA4_PROFILE_PATH.read_text(encoding="utf-8")
+        )
+        source["runtime"]["model_sha256"] = "0" * 64
+        with self.assertRaisesRegex(RuntimeError, "runtime.model_sha256"):
+            self.profile_mod.validate_dpa4_profile(
+                source, require_published=False
+            )
+
+        source = json.loads(
+            self.profile_mod.DPA4_PROFILE_PATH.read_text(encoding="utf-8")
+        )
+        source["calculator"]["run_command"] = "dpa4-lmp -in in.lammps"
+        with self.assertRaisesRegex(RuntimeError, "audited dpa4-lmp"):
+            self.profile_mod.validate_dpa4_profile(
+                source, require_published=False
+            )
 
 
 class TestValidateComboAdditionalPaths(unittest.TestCase):
@@ -1310,6 +2104,79 @@ class TestValidateComboAdditionalPaths(unittest.TestCase):
                 with patch("sys.stdout", stdout):
                     self.assertEqual(self.combo.main(argv), 0)
                 self.assertIn(expected, stdout.getvalue())
+
+    def test_dpa4_unpublished_profile_lists_candidate_but_never_recommends(self):
+        data = self.combo.list_combos(
+            runtime_profile=self.combo.DPA4_RUNTIME_PROFILE
+        )
+        self.assertEqual(data["status"], "unpublished")
+        self.assertIsNone(data["recommended"])
+        self.assertEqual(
+            data["candidate_after_publish"]["scass_type"],
+            "c4_m15_1 * NVIDIA T4",
+        )
+        self.assertTrue(any(
+            "c8_m31_1" in item for item in data["unverified"]
+        ))
+        with self.assertRaisesRegex(RuntimeError, "not published"):
+            self.combo.recommend(
+                runtime_profile=self.combo.DPA4_RUNTIME_PROFILE
+            )
+
+        ok, errors = self.combo.check_combo(
+            "registry.example/dpa4:tag@sha256:" + "a" * 64,
+            "c4_m15_1 * NVIDIA T4",
+            runtime_profile=self.combo.DPA4_RUNTIME_PROFILE,
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("not published" in error for error in errors))
+
+        stdout = io.StringIO()
+        with patch("sys.stdout", stdout):
+            self.assertEqual(self.combo.main([
+                "list-combos",
+                "--runtime-profile", self.combo.DPA4_RUNTIME_PROFILE,
+            ]), 0)
+        text = stdout.getvalue()
+        self.assertIn("recommendation: LOCKED", text)
+        self.assertIn("Prohibited classes:", text)
+        self.assertIn("multi_gpu", text)
+
+    def test_dpa4_exact_combo_rejects_unverified_gpu_and_multi_rank(self):
+        profile = {
+            "published": True,
+            "image": {
+                "ref": "registry.example/dpa4:qualified",
+                "digest": "sha256:" + "d" * 64,
+            },
+            "machine_compatibility": {
+                "recommended": [{
+                    "scass_type": "c4_m15_1 * NVIDIA T4",
+                    "mpi_ranks": 1,
+                    "gpu_count": 1,
+                }],
+                "prohibited_exact": {},
+            },
+        }
+        exact = profile["image"]["ref"] + "@" + profile["image"]["digest"]
+        with patch.object(self.combo, "_dpa4_profile", return_value=profile):
+            ok, errors = self.combo.check_combo(
+                exact,
+                "c4_m15_1 * NVIDIA T4",
+                runtime_profile=self.combo.DPA4_RUNTIME_PROFILE,
+            )
+            self.assertTrue(ok)
+            self.assertEqual(errors, [])
+
+            ok, errors = self.combo.check_combo(
+                exact,
+                "c8_m31_1 * NVIDIA T4",
+                runtime_profile=self.combo.DPA4_RUNTIME_PROFILE,
+                mpi_ranks=2,
+            )
+        self.assertFalse(ok)
+        self.assertTrue(any("unverified" in error for error in errors))
+        self.assertTrue(any("one MPI rank" in error for error in errors))
 
 
 if __name__ == "__main__":

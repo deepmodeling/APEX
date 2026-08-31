@@ -6,7 +6,7 @@ APEX supports three calculator **backends**: LAMMPS, ABACUS, and VASP.
 Each requires specific configuration in `param.json` under the `"interaction"` key.
 
 > APEX **backend** = calculator (`lammps` / `abacus` / `vasp`).
-> DPA-3.2-5M is a DeePMD **model** under LAMMPS (`interaction.type: deepmd`).
+> DPA4 alloytongqi is a DeePMD **model** under LAMMPS (`interaction.type: deepmd`).
 > Ask calculator backend first; if LAMMPS+DeePMD, then ask which model file.
 
 ---
@@ -29,7 +29,7 @@ Each requires specific configuration in `param.json` under the `"interaction"` k
 
 | type | pair_style | Model File | Notes |
 |------|-----------|-----------|-------|
-| `deepmd` | `deepmd` | `.pb` or `.pth` | DeePMD-kit model |
+| `deepmd` | `deepmd` | `.pb`, `.pth`, or compatible single-task `.pt` | DeePMD-kit model |
 | `mace` | `mace no_domain_decomposition` | `.model` | MACE model |
 | `nep` | `nep` | `nep.txt` | NEP potential |
 | `gap` | `quip` | `.xml` + `.xml.sparseX.TERM` | GAP/QUIP potential |
@@ -46,7 +46,7 @@ Each requires specific configuration in `param.json` under the `"interaction"` k
 {
     "interaction": {
         "type": "deepmd",
-        "model": "frozen_model.pb",
+        "model": "model.pt",
         "type_map": "auto"
     }
 }
@@ -100,7 +100,7 @@ Each requires specific configuration in `param.json` under the `"interaction"` k
 }
 ```
 
-### ⚠️ LAMMPS Image Version
+### Default LAMMPS image and DPA4 compatibility
 
 GPU image (`deepmd`, `mace`, `nep`):
 `registry.dp.tech/dptech/dp/native/prod-16664/dpa4-phonolammps:0.0.2`
@@ -116,7 +116,14 @@ to sm120. The L20 and RTX 4090 sm89 paths are validated; L20 is the default
 because it has greater resource availability. Test sm120 on a real 5090 before
 relying on that path.
 
-> ⚠️ **Do NOT use `deepmd-kit:3.1.1` with GPU/T4** — known startup / triclinic issues. Prefer `3.1.3` or later.
+For provenance, an older phonoLAMMPS 3.1.3 tag was
+available from the Bohrium registry mirror at repo digest
+`sha256:43a27ca4a7bba7f774bbd56104d205a6a80cd9d65928f249f6109e9ef37b8402`.
+That image reports DeepMD-kit 3.1.3 and phonoLAMMPS 0.10.1. `dp show` failed
+with `RuntimeError: Unknown model type: dpa4`, and LAMMPS aborted while
+initializing `pair_style deepmd`. Therefore the tested old runtime cannot
+execute the bundled DPA4 model. Do not submit the bundled model with that old
+image or select another image without an explicit qualified profile.
 
 > **LAMMPS phonon and Grüneisen**: for GPU potentials, `apex submit` forces
 > the DPA4 image above. It is validated on NVIDIA L20 and RTX 4090 and includes
@@ -124,78 +131,54 @@ relying on that path.
 > CPU potentials keep the CPU image. Do not use the DPA4 image on a CPU
 > machine; sequential CPU jobs stalled during container preparation.
 
-### DPA-3.2-5M Multi-Head Model Preparation
+### Bundled DPA4 model (`models/`)
 
-The source DPA-3.2-5M `.pt` checkpoint is **multi-head** and cannot be used
-directly as `interaction.model` in APEX/LAMMPS. Freeze a specific task head
-first.
-
-**Freeze command:**
-```bash
-dp --pt freeze -c DPA-3.2-5M.pt -o DPA-3.2-5M-OMat24.pth --head OMat24
-```
-
-- `-c`: Input multi-head `.pt` checkpoint
-- `-o`: Output frozen model (`.pth` for PyTorch, `.pb` for TensorFlow)
-- `--head`: Which task head to extract
-
-The **frozen** `.pth` or `.pb` file is what goes into `interaction.model`:
-```json
-{
-    "interaction": {
-        "type": "deepmd",
-        "model": "DPA-3.2-5M-OMat24.pth",
-        "type_map": "auto"
-    }
-}
-```
-
-Useful heads include:
-- `OMat24` — broad materials coverage; bundled default, including oxygen
-- `Alloy_APEX` — APEX alloy/defect data; 53 metallic observed elements and no oxygen
-- `Domains_Alloy` — general alloy energetics; 53 metallic observed elements
-- `OC22` — oxide electrocatalyst structures
-
-Inspect the checkpoint before choosing:
-```bash
-dp --pt show DPA-3.2-5M.pt model-branch observed-type
-```
-
-> 💡 If you pass an unfrozen multi-head `.pt` file directly to LAMMPS, it will error with a message about missing head selection.
-
-### Bundled DPA model (`models/`)
-
-**Priority:** use the bundled **frozen** model first. The skill zip includes
-the ready-to-run OMat24 `.pth`, not the multi-head source `.pt`. Details:
-`models/README.md`.
+The skill ships one DeePMD model and no alternate checkpoint downloader:
 
 | Path | Format | Use |
 |------|--------|-----|
-| `models/DPA-3.2-5M/DPA-3.2-5M-OMat24.pth` | Frozen PyTorch (~23MB) | Default DPA-3.2 model for APEX |
+| `models/DPA4-alloytongqi/model.pt` | Single-task DPA4 PyTorch checkpoint (30,403,297 bytes) | Source identity/provenance only; never the image-profile LAMMPS input |
 
-Copy the bundled model into the task directory and set:
+Safe static inspection confirms a valid PyTorch ZIP checkpoint with
+`model_params.type=dpa4`, fitting type `dpa4_ener`, and an empty
+`model_branch_alias` list, consistent with a default/single task. The
+`alloytongqi` branch identity is user-provided provenance; no Git branch or
+commit string is embedded in the file. A type map does not by itself prove
+training-domain coverage.
+
+After publication, generate (do not hand-write) this image-resident contract:
 
 ```json
 {
     "interaction": {
         "type": "deepmd",
-        "model": "DPA-3.2-5M-OMat24.pth",
+        "deepmd_runtime": "dpa4_pt2",
+        "model_in_image": true,
+        "model": "/opt/dpa4-runtime/models/DPA4-alloytongqi/alloytongqi.t4-sm75.pt2",
+        "runtime_model_sha256": "2614db9463f5864d80a78fec037aeae26930df2004bb9f1148a69b83c25b3daf",
+        "source_checkpoint": "/opt/dpa4-runtime/models/DPA4-alloytongqi/model.pt",
+        "source_checkpoint_sha256": "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad",
         "type_map": "auto"
     }
 }
 ```
 
-The source checkpoint is optional and downloaded only when another task head
-is explicitly requested:
-
-```bash
-python scripts/fetch_models.py --source-checkpoint
-```
-
-> Use `"type_map": "auto"` by default. APEX infers the local contiguous type
-> mapping from the structure; do not copy atomic-number or model-internal indices.
-> Multi-head `.pt` files **must** be frozen (`dp --pt freeze ... --head <HEAD>`)
-> before use as `interaction.model`.
+> Use `generate_config.py create --runtime-profile dpa4-alloytongqi-t4`.
+> It is currently locked by placeholder image identity and
+> `pre_snapshot_only` qualification. Pre-snapshot checks completed 12 LAMMPS
+> runs, 6 CPU/GPU parity checks, and one phonoLAMMPS smoke on one rank/one GPU
+> `c4_m15_1 * NVIDIA T4`; this is not exact-image acceptance. After a digest
+> rerun, only that exact SKU is eligible; c8/c16 T4 and non-T4 GPUs remain
+> unverified. The generated global config uses
+> `/usr/local/bin/dpa4-lmp -in in.lammps` and
+> `/usr/local/bin/dpa4-phonolammps {input_file} -c {poscar} --dim {dim}
+> {primitive_axes}` exactly. V100/SM 7.0 and older devices and NVIDIA Linux
+> drivers below 580.65.06 are prohibited by the CUDA 13 contract. Use
+> `"type_map": "auto"` by default. APEX infers the local contiguous type
+> mapping from the structure; do not copy atomic-number or model-internal
+> indices. A `.pt` checkpoint is directly usable only when it is a compatible
+> single-task model supported by the selected runtime; do not generalize this
+> bundled model's handling to arbitrary multi-task training checkpoints.
 
 ### Relaxation cal_setting (LAMMPS)
 

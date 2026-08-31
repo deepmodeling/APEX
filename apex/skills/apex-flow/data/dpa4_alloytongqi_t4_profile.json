@@ -1,0 +1,52 @@
+{
+    "schema_version": 1,
+    "profile_id": "dpa4-alloytongqi-t4",
+    "description": "Candidate DPA4 alloytongqi runtime compiled for one NVIDIA T4 (SM 7.5); fail closed until an immutable image identity and post-snapshot evidence are recorded.",
+    "qualification_status": "pre_snapshot_only",
+    "image": {
+        "ref": "__DPA4_IMAGE_REF__",
+        "digest": "__DPA4_IMAGE_DIGEST__"
+    },
+    "calculator": {
+        "backend": "lammps",
+        "potential": "deepmd",
+        "run_command": "/usr/local/bin/dpa4-lmp -in in.lammps",
+        "phonolammps_command": "/usr/local/bin/dpa4-phonolammps {input_file} -c {poscar} --dim {dim} {primitive_axes}"
+    },
+    "runtime": {
+        "kind": "dpa4_pt2",
+        "model_in_image": true,
+        "model_path": "/opt/dpa4-runtime/models/DPA4-alloytongqi/alloytongqi.t4-sm75.pt2",
+        "model_sha256": "2614db9463f5864d80a78fec037aeae26930df2004bb9f1148a69b83c25b3daf",
+        "source_checkpoint_path": "/opt/dpa4-runtime/models/DPA4-alloytongqi/model.pt",
+        "source_checkpoint_sha256": "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad",
+        "type_map": "auto"
+    },
+    "machine_compatibility": {
+        "recommended": [
+            {
+                "scass_type": "c4_m15_1 * NVIDIA T4",
+                "mpi_ranks": 1,
+                "gpu_count": 1,
+                "status": "candidate_after_publish",
+                "evidence": "Pre-snapshot only: 12 LAMMPS runs, 6 CPU/GPU parity checks, and one phonoLAMMPS smoke completed on c4_m15_1 * NVIDIA T4. This is not exact-image or registry-digest acceptance."
+            }
+        ],
+        "prohibited_exact": {
+            "c4_m16_cpu": "CPU execution cannot load the production T4 PT2 artifact and this SKU is also unavailable on Bohrium.",
+            "c12_m46_1 * NVIDIA T4": "This Bohrium machine type does not exist."
+        },
+        "prohibited_classes": {
+            "cpu": "The qualified artifact is compiled for NVIDIA T4 SM 7.5, not CPU.",
+            "multi_gpu": "Only one rank on one T4 was tested; multi-GPU or multi-rank execution is prohibited for this frozen PT2 profile.",
+            "cross_arch_pt2": "The T4 SM 7.5 PT2 artifact must not be reused on another GPU architecture.",
+            "sm70_or_older": "V100 (SM 7.0) and older GPUs are unsupported by this CUDA 13 runtime contract.",
+            "driver_lt_580_65_06": "CUDA 13 requires an NVIDIA Linux driver at least 580.65.06 for this runtime contract."
+        },
+        "unverified": [
+            "Any other single-GPU T4 SKU, including c8_m31_1 and c16_m62_1",
+            "Any newer non-T4 GPU with its own architecture-specific PT2, including A10, A100/A800, L4, H100/H20, and RTX 4090"
+        ],
+        "unknown_policy": "fail_closed"
+    }
+}

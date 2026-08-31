@@ -11,6 +11,8 @@ Usage:
 import argparse
 import copy
 import glob
+import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -40,6 +42,287 @@ VALID_LAMMPS_TYPES = {
 
 # Valid backend types
 VALID_BACKENDS = {"vasp", "abacus"} | VALID_LAMMPS_TYPES
+
+BUNDLED_DPA4_SHA256 = (
+    "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad"
+)
+DPA4_RUNTIME_KIND = "dpa4_pt2"
+DPA4_RUNTIME_MODEL_PATH = (
+    "/opt/dpa4-runtime/models/DPA4-alloytongqi/"
+    "alloytongqi.t4-sm75.pt2"
+)
+DPA4_RUNTIME_MODEL_SHA256 = (
+    "2614db9463f5864d80a78fec037aeae26930df2004bb9f1148a69b83c25b3daf"
+)
+DPA4_SOURCE_CHECKPOINT_PATH = (
+    "/opt/dpa4-runtime/models/DPA4-alloytongqi/model.pt"
+)
+DPA4_SCASS_TYPE = "c4_m15_1 * NVIDIA T4"
+DPA4_LAMMPS_RUN_COMMAND = "/usr/local/bin/dpa4-lmp -in in.lammps"
+DPA4_PHONOLAMMPS_RUN_COMMAND = (
+    "/usr/local/bin/dpa4-phonolammps {input_file} -c {poscar} "
+    "--dim {dim} {primitive_axes}"
+)
+DPA4_GROUP_SIZE = 1
+DPA4_POOL_SIZE = 1
+DPA4_DISPATCHER_COMMAND = "python3"
+DPA4_JOB_TYPE = "container"
+DPA4_PLATFORM = "ali"
+_HEX_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _load_dpa4_profile(*, require_published: bool = True) -> dict:
+    """Load the canonical profile shared by generation and validation."""
+    profile_module_path = Path(__file__).resolve().parent / "dpa4_profile.py"
+    spec = importlib.util.spec_from_file_location(
+        "apex_skill_bundled_dpa4_profile",
+        profile_module_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(
+            f"Cannot load DPA4 runtime profile helper: {profile_module_path}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load_dpa4_profile(require_published=require_published)
+
+
+def _dpa4_image_name() -> str | None:
+    try:
+        profile = _load_dpa4_profile(require_published=True)
+    except RuntimeError:
+        return None
+    image = profile["image"]
+    return f"{image['ref']}@{str(image['digest']).lower()}"
+
+
+def _sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _iter_effective_interactions(param_config: dict):
+    base = param_config.get("interaction")
+    properties = param_config.get("properties") or []
+    if not properties:
+        if isinstance(base, dict):
+            yield "interaction", base
+        return
+    for index, prop in enumerate(properties):
+        if not isinstance(prop, dict):
+            continue
+        overwrite = (prop.get("cal_setting") or {}).get("overwrite_interaction")
+        if isinstance(overwrite, dict):
+            yield (
+                f"properties[{index}].cal_setting.overwrite_interaction",
+                overwrite,
+            )
+        elif isinstance(base, dict):
+            yield f"properties[{index}].interaction", base
+
+
+def _dpa4_intent(interaction: dict) -> bool:
+    return (
+        "deepmd_runtime" in interaction
+        or interaction.get("model_in_image") is True
+        or interaction.get("model") == DPA4_RUNTIME_MODEL_PATH
+        or "runtime_model_sha256" in interaction
+        or "source_checkpoint" in interaction
+        or "source_checkpoint_sha256" in interaction
+    )
+
+
+def _uses_dpa4_phonolammps(param_config: dict) -> bool:
+    return any(
+        isinstance(prop, dict)
+        and prop.get("type") in {"phonon", "gruneisen"}
+        for prop in param_config.get("properties", []) or []
+    )
+
+
+def _nested_scass(machine: dict | None) -> str | None:
+    if not isinstance(machine, dict):
+        return None
+    remote_profile = machine.get("remote_profile")
+    if not isinstance(remote_profile, dict):
+        return None
+    input_data = remote_profile.get("input_data")
+    if not isinstance(input_data, dict):
+        return None
+    return input_data.get("scass_type")
+
+
+def _nested_image_name(machine: dict | None) -> str | None:
+    if not isinstance(machine, dict):
+        return None
+    remote_profile = machine.get("remote_profile")
+    if not isinstance(remote_profile, dict):
+        return None
+    input_data = remote_profile.get("input_data")
+    if not isinstance(input_data, dict):
+        return None
+    return input_data.get("image_name")
+
+
+def _validate_dpa4_global_contract(
+    param_config: dict,
+    global_config: dict | None,
+    expected_image: str | None,
+) -> list[str]:
+    """Validate image, hardware, grouping, and audited entry points."""
+    if not isinstance(global_config, dict):
+        return [
+            "DPA4/PT2 requires global.json so the exact image, T4 SKU, and "
+            "single-rank wrappers can be verified"
+        ]
+
+    errors = []
+    if expected_image is not None and (
+        global_config.get("lammps_image_name") != expected_image
+    ):
+        errors.append(
+            "DPA4 lammps_image_name must equal the published immutable image "
+            f"{expected_image!r}"
+        )
+
+    context_type = str(global_config.get("context_type") or "").lower()
+    batch_type = str(global_config.get("batch_type") or "").lower()
+    if "bohrium" not in context_type or "bohrium" not in batch_type:
+        errors.append(
+            "DPA4/PT2 production validation requires Bohrium context_type "
+            "and batch_type"
+        )
+    if global_config.get("scass_type") != DPA4_SCASS_TYPE:
+        errors.append(
+            f"DPA4 scass_type must equal {DPA4_SCASS_TYPE!r}; other T4 SKUs, "
+            "CPU, and non-T4 GPUs are unverified"
+        )
+    if global_config.get("job_type", DPA4_JOB_TYPE) != DPA4_JOB_TYPE:
+        errors.append(
+            f"DPA4 job_type must equal {DPA4_JOB_TYPE!r} so the immutable "
+            "container image is used"
+        )
+    if global_config.get("platform", DPA4_PLATFORM) != DPA4_PLATFORM:
+        errors.append(
+            f"DPA4 platform must equal the qualified Bohrium value "
+            f"{DPA4_PLATFORM!r}"
+        )
+
+    for label in ("machine", "dispatcher_config", "resources", "task"):
+        value = global_config.get(label)
+        if value not in (None, {}):
+            errors.append(
+                f"DPA4 {label} overrides are prohibited; use the generated "
+                "top-level Bohrium profile without nested dispatcher/resource "
+                "configuration"
+            )
+
+    machine = global_config.get("machine")
+    if isinstance(machine, dict):
+        nested_scass = _nested_scass(machine)
+        if nested_scass is not None and nested_scass != DPA4_SCASS_TYPE:
+            errors.append(
+                "machine.remote_profile.input_data.scass_type may not "
+                "override the qualified DPA4 T4 SKU"
+            )
+        for key in ("context_type", "batch_type"):
+            value = machine.get(key)
+            if value is not None and "bohrium" not in str(value).lower():
+                errors.append(
+                    f"machine.{key} may not override the DPA4 Bohrium profile"
+                )
+        nested_image = _nested_image_name(machine)
+        if nested_image is not None and nested_image != expected_image:
+            errors.append(
+                "machine.remote_profile.input_data.image_name may be absent "
+                "or equal the published immutable DPA4 image; nested image "
+                "overrides are prohibited"
+            )
+
+    dispatcher = global_config.get("dispatcher_config")
+    if isinstance(dispatcher, dict) and dispatcher.get("json_file") not in (
+        None,
+        "",
+    ):
+        errors.append(
+            "DPA4 dispatcher_config.json_file is prohibited because it can "
+            "inject machine or resource overrides after validation"
+        )
+    if isinstance(dispatcher, dict) and "machine_dict" in dispatcher:
+        dispatcher_machine = dispatcher.get("machine_dict")
+        nested_scass = _nested_scass(dispatcher_machine)
+        if nested_scass != DPA4_SCASS_TYPE:
+            errors.append(
+                "dispatcher_config.machine_dict must explicitly retain "
+                f"scass_type={DPA4_SCASS_TYPE!r}"
+            )
+        for key in ("context_type", "batch_type"):
+            value = (
+                dispatcher_machine.get(key)
+                if isinstance(dispatcher_machine, dict)
+                else None
+            )
+            if not isinstance(value, str) or "bohrium" not in value.lower():
+                errors.append(
+                    "dispatcher_config.machine_dict must retain Bohrium "
+                    f"{key}"
+                )
+        nested_image = _nested_image_name(dispatcher_machine)
+        if nested_image is not None and nested_image != expected_image:
+            errors.append(
+                "dispatcher_config.machine_dict remote image_name may be "
+                "absent or equal the published immutable DPA4 image"
+            )
+
+    effective_dispatcher_command = global_config.get(
+        "dispatcher_command", DPA4_DISPATCHER_COMMAND
+    )
+    effective_remote_command = global_config.get("dispatcher_remote_command")
+    if isinstance(dispatcher, dict):
+        if "command" in dispatcher:
+            effective_dispatcher_command = dispatcher.get("command")
+        if "remote_command" in dispatcher:
+            effective_remote_command = dispatcher.get("remote_command")
+    if effective_dispatcher_command != DPA4_DISPATCHER_COMMAND:
+        errors.append(
+            "DPA4 effective dispatcher command must remain the single-process "
+            f"default {DPA4_DISPATCHER_COMMAND!r}"
+        )
+    if effective_remote_command not in (None, ""):
+        errors.append(
+            "DPA4 dispatcher remote_command is prohibited because it can "
+            "bypass the audited one-rank wrapper"
+        )
+
+    if global_config.get("lammps_run_command") != DPA4_LAMMPS_RUN_COMMAND:
+        errors.append(
+            "DPA4 lammps_run_command must equal the audited single-rank "
+            f"wrapper {DPA4_LAMMPS_RUN_COMMAND!r}"
+        )
+    if _uses_dpa4_phonolammps(param_config) and (
+        global_config.get("phonolammps_run_command")
+        != DPA4_PHONOLAMMPS_RUN_COMMAND
+    ):
+        errors.append(
+            "DPA4 phonon/Gruneisen requires phonolammps_run_command="
+            f"{DPA4_PHONOLAMMPS_RUN_COMMAND!r}"
+        )
+    if type(global_config.get("group_size")) is not int or (
+        global_config.get("group_size") != DPA4_GROUP_SIZE
+    ):
+        errors.append(
+            f"DPA4 group_size must equal {DPA4_GROUP_SIZE} for one task per T4"
+        )
+    if type(global_config.get("pool_size")) is not int or (
+        global_config.get("pool_size") != DPA4_POOL_SIZE
+    ):
+        errors.append(
+            f"DPA4 pool_size must equal {DPA4_POOL_SIZE}"
+        )
+    return errors
 
 # Bare PATH-based VASP executables are unreliable in Bohrium VASP images.
 _BARE_VASP_RUN_RE = re.compile(
@@ -315,7 +598,7 @@ def _property_supercell_size(prop: dict):
     prop_type = prop.get("type")
     if prop_type in {"vacancy", "interstitial"}:
         return prop.get("supercell", [1, 1, 1])
-    if prop_type in {"phonon", "gruneisen", "finite_t_latt", "annealing"}:
+    if prop_type in {"phonon", "gruneisen", "finite_t_latt", "annealing", "melting_point"}:
         return prop.get("supercell_size", [2, 2, 2])
     return prop.get("supercell_size")
 
@@ -536,6 +819,22 @@ def _vasp_command_details(global_config: dict) -> dict:
     }
 
 
+def _uses_bohrium_backend(global_config: dict) -> bool:
+    """Return whether the global configuration selects Bohrium execution."""
+    context_values = (
+        global_config.get("context_type"),
+        global_config.get("batch_type"),
+    )
+    return (
+        global_config.get("dflow_host") == "https://workflows.deepmodeling.com"
+        or isinstance(global_config.get("bohrium_config"), dict)
+        or any(
+            isinstance(value, str) and "bohrium" in value.lower()
+            for value in context_values
+        )
+    )
+
+
 def validate_vasp_parallel_settings(
     param_config: dict,
     global_config: dict,
@@ -563,7 +862,8 @@ def validate_vasp_parallel_settings(
 
     scass_cores = details["scass_cores"]
     if (
-        ranks is not None
+        _uses_bohrium_backend(global_config)
+        and ranks is not None
         and scass_cores is not None
         and ranks != scass_cores
     ):
@@ -686,18 +986,7 @@ def validate_global(global_config: dict) -> list:
 
     machine = global_config.get("machine")
     machine = machine if isinstance(machine, dict) else {}
-    top_context_values = [
-        global_config.get("context_type"),
-        global_config.get("batch_type"),
-    ]
-    is_bohrium = (
-        global_config.get("dflow_host") == "https://workflows.deepmodeling.com"
-        or isinstance(global_config.get("bohrium_config"), dict)
-        or any(
-            isinstance(value, str) and "bohrium" in value.lower()
-            for value in top_context_values
-        )
-    )
+    is_bohrium = _uses_bohrium_backend(global_config)
 
     if is_bohrium:
         for key in ("batch_type", "context_type"):
@@ -833,6 +1122,20 @@ def validate_interaction(interaction: dict) -> list:
             errors.append(f"LAMMPS potential '{int_type}' requires 'model' field")
         if "type_map" not in interaction:
             errors.append(f"LAMMPS potential '{int_type}' requires 'type_map' field")
+        if "model_in_image" in interaction and not isinstance(
+            interaction["model_in_image"], bool
+        ):
+            errors.append("interaction.model_in_image must be a boolean")
+        runtime = interaction.get("deepmd_runtime")
+        if runtime is not None and runtime != DPA4_RUNTIME_KIND:
+            errors.append(
+                f"interaction.deepmd_runtime must equal {DPA4_RUNTIME_KIND!r}"
+            )
+        if (
+            runtime == DPA4_RUNTIME_KIND
+            and int_type != "deepmd"
+        ):
+            errors.append("deepmd_runtime=dpa4_pt2 requires interaction.type=deepmd")
 
     # ABACUS-specific checks
     elif int_type == "abacus":
@@ -851,10 +1154,133 @@ def validate_interaction(interaction: dict) -> list:
     return errors, warnings
 
 
+def validate_bundled_dpa4_runtime(
+    param_config: dict,
+    global_config: dict | None,
+    base_dir: Path,
+) -> tuple[list[str], list[str]]:
+    """Require the exact image-resident, T4-only DPA4 production contract."""
+    interactions = list(_iter_effective_interactions(param_config))
+    if not interactions:
+        return [], []
+
+    errors = []
+    kinds = []
+    expected_fields = {
+        "type": "deepmd",
+        "deepmd_runtime": DPA4_RUNTIME_KIND,
+        "model_in_image": True,
+        "model": DPA4_RUNTIME_MODEL_PATH,
+        "runtime_model_sha256": DPA4_RUNTIME_MODEL_SHA256,
+        "source_checkpoint": DPA4_SOURCE_CHECKPOINT_PATH,
+        "source_checkpoint_sha256": BUNDLED_DPA4_SHA256,
+    }
+
+    for label, interaction in interactions:
+        local_checkpoint = False
+        model = interaction.get("model")
+        if isinstance(model, str) and interaction.get("model_in_image") is not True:
+            model_path = _resolve_under_base(model, base_dir)
+            try:
+                local_checkpoint = (
+                    model_path.is_file()
+                    and _sha256_path(model_path) == BUNDLED_DPA4_SHA256
+                )
+            except OSError:
+                local_checkpoint = False
+
+        if local_checkpoint:
+            kinds.append(DPA4_RUNTIME_KIND)
+            errors.append(
+                f"{label}.model is the bundled DPA4 source checkpoint; "
+                f"LAMMPS must use image-resident {DPA4_RUNTIME_MODEL_PATH!r}, "
+                "never model.pt"
+            )
+            continue
+
+        if not _dpa4_intent(interaction):
+            kinds.append("legacy")
+            continue
+
+        kinds.append(DPA4_RUNTIME_KIND)
+        for key in ("runtime_model_sha256", "source_checkpoint_sha256"):
+            declared = interaction.get(key)
+            if not isinstance(declared, str) or not _HEX_SHA256_RE.fullmatch(declared):
+                errors.append(
+                    f"{label}.{key} must be a lowercase SHA-256 hex digest"
+                )
+        for key, expected in expected_fields.items():
+            if interaction.get(key) != expected:
+                errors.append(
+                    f"{label}.{key} must equal {expected!r} for the bundled "
+                    "DPA4 T4/PT2 runtime"
+                )
+        type_map = interaction.get("type_map")
+        valid_type_map = type_map == "auto" or (
+            isinstance(type_map, dict)
+            and bool(type_map)
+            and all(
+                isinstance(symbol, str)
+                and bool(symbol.strip())
+                and type(index) is int
+                and index >= 0
+                for symbol, index in type_map.items()
+            )
+            and set(type_map.values()) == set(range(len(type_map)))
+        )
+        if not valid_type_map:
+            errors.append(
+                f"{label}.type_map must be 'auto' before CLI expansion or a "
+                "non-empty contiguous element-to-index mapping afterwards"
+            )
+
+    kind_set = set(kinds)
+    if DPA4_RUNTIME_KIND in kind_set and "legacy" in kind_set:
+        errors.append(
+            "A single APEX parameter set cannot mix legacy LAMMPS interactions "
+            "with bundled DPA4/PT2 (including overwrite_interaction)"
+        )
+
+    if DPA4_RUNTIME_KIND in kind_set:
+        base_interaction = param_config.get("interaction")
+        if (
+            not isinstance(base_interaction, dict)
+            or base_interaction.get("type") not in VALID_LAMMPS_TYPES
+        ):
+            errors.append(
+                "DPA4/PT2 overwrite_interaction requires a LAMMPS base "
+                "interaction; VASP/ABACUS base calculators cannot execute the "
+                "DPA4 runtime"
+            )
+        expected_image = _dpa4_image_name()
+        if expected_image is None:
+            errors.append(
+                "DPA4 image identity is not finalized: replace "
+                "__DPA4_IMAGE_REF__ and __DPA4_IMAGE_DIGEST__ before submission"
+            )
+        errors.extend(
+            _validate_dpa4_global_contract(
+                param_config,
+                global_config,
+                expected_image,
+            )
+        )
+
+    return errors, []
+
+
 def validate_gamma_settings(prop: dict, prefix: str) -> tuple:
     """Mirror the public validation rules in ``gamma_slab.py``."""
     errors = []
     warnings = []
+    parent_lattice = prop.get("parent_lattice")
+    if parent_lattice is not None and (
+        not isinstance(parent_lattice, str)
+        or parent_lattice.strip().lower() not in {"bcc", "fcc", "hcp"}
+    ):
+        errors.append(
+            f"{prefix}: parent_lattice must be one of bcc, fcc, or hcp"
+        )
     supercell = prop.get("supercell_size", [1, 1, 5])
     if not isinstance(supercell, (list, tuple)) or len(supercell) != 3:
         errors.append(f"{prefix}: gamma supercell_size must contain 3 values")
@@ -917,6 +1343,29 @@ def validate_gamma_settings(prop: dict, prefix: str) -> tuple:
     ):
         errors.append(f"{prefix}: min_distance must be non-negative and finite")
 
+    vacuum_size = prop.get("vacuum_size", 20)
+    if (
+        isinstance(vacuum_size, bool)
+        or not isinstance(vacuum_size, (int, float))
+        or not math.isfinite(float(vacuum_size))
+        or vacuum_size < 0
+    ):
+        errors.append(f"{prefix}: vacuum_size must be non-negative and finite")
+
+    require_orthogonal = prop.get(
+        "require_orthogonal_cell", prop.get("orthogonalize_cell", False)
+    )
+    if not isinstance(require_orthogonal, bool):
+        errors.append(f"{prefix}: require_orthogonal_cell must be a boolean")
+    if (
+        "require_orthogonal_cell" in prop
+        and "orthogonalize_cell" in prop
+        and prop["require_orthogonal_cell"] != prop["orthogonalize_cell"]
+    ):
+        errors.append(
+            f"{prefix}: require_orthogonal_cell and orthogonalize_cell disagree"
+        )
+
     if prop.get("type") == "gamma":
         n_steps = prop.get("n_steps", 10)
         if (
@@ -925,10 +1374,30 @@ def validate_gamma_settings(prop: dict, prefix: str) -> tuple:
             or n_steps <= 0
         ):
             errors.append(f"{prefix}: n_steps must be a positive integer")
+        displacement_points = prop.get("displacement_points")
+        if displacement_points is not None and (
+            not isinstance(displacement_points, list)
+            or not displacement_points
+            or any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or not 0.0 <= float(value) <= 1.0
+                for value in displacement_points
+            )
+            or len(set(displacement_points)) != len(displacement_points)
+            or 0.0 not in displacement_points
+        ):
+            errors.append(
+                f"{prefix}: displacement_points must include 0 and contain "
+                "unique finite values in [0, 1]"
+            )
     return errors, warnings
 
 
-def validate_properties(properties: list, interaction_type: str) -> list:
+def validate_properties(
+    properties: list, interaction_type: str, base_dir: Path = None
+) -> list:
     """Validate property configurations."""
     errors = []
     warnings = []
@@ -948,6 +1417,18 @@ def validate_properties(properties: list, interaction_type: str) -> list:
         if prop_type not in VALID_PROPERTIES:
             errors.append(f"{prefix}: unknown property type '{prop_type}'")
             continue
+
+        cal_setting = prop.get("cal_setting", {})
+        if (
+            prop_type != "melting_point"
+            and isinstance(cal_setting, dict)
+            and "restart_files" in cal_setting
+        ):
+            errors.append(
+                f"{prefix}: cal_setting.restart_files is supported only by "
+                "melting_point; finite_t_latt and other properties do not "
+                "forward restart.coexistence.start"
+            )
 
         # Check LAMMPS-only constraint
         if prop_type in LAMMPS_ONLY_PROPERTIES:
@@ -1016,11 +1497,15 @@ def validate_properties(properties: list, interaction_type: str) -> list:
                 )
 
         elif prop_type == "melting_point":
-            if prop.get("method", "two_phase") != "two_phase":
+            method = str(prop.get("method", "two_phase")).lower().replace("-", "_")
+            if method not in {
+                "two_phase", "coexistence", "two_phase_coexistence",
+                "direct_coexistence",
+            }:
                 errors.append(
                     f"{prefix}: melting_point only supports method='two_phase'"
                 )
-            supercell = prop.get("supercell_size")
+            supercell = prop.get("supercell_size", [1, 1, 1])
             if (
                 not isinstance(supercell, (list, tuple))
                 or len(supercell) != 3
@@ -1028,40 +1513,102 @@ def validate_properties(properties: list, interaction_type: str) -> list:
                     not isinstance(value, int)
                     or isinstance(value, bool)
                     or value <= 0
-                    for value in (supercell or [])
+                    for value in supercell
                 )
             ):
                 errors.append(
-                    f"{prefix}: melting_point supercell_size requires "
-                    "3 positive integers"
+                    f"{prefix}: supercell_size must contain 3 positive integers"
                 )
             cal = prop.get("cal_setting", {})
             temperatures = cal.get("temperature")
-            if (
-                not isinstance(temperatures, list)
-                or not temperatures
-                or any(
-                    not isinstance(value, (int, float))
-                    or isinstance(value, bool)
-                    or not math.isfinite(float(value))
-                    or value <= 0
-                    for value in (temperatures or [])
+            if not isinstance(temperatures, list) or not temperatures:
+                errors.append(
+                    f"{prefix}: cal_setting.temperature must be a non-empty list"
                 )
+            elif any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or value <= 0
+                for value in temperatures
+            ):
+                errors.append(f"{prefix}: all temperatures must be positive finite numbers")
+            axis = cal.get("interface_axis", "z")
+            if axis not in {"x", "y", "z"}:
+                errors.append(f"{prefix}: interface_axis must be x, y, or z")
+            liquid_fraction = cal.get("liquid_fraction", 0.5)
+            if (
+                isinstance(liquid_fraction, bool)
+                or not isinstance(liquid_fraction, (int, float))
+                or not 0.1 <= float(liquid_fraction) <= 0.9
             ):
                 errors.append(
-                    f"{prefix}: melting_point temperature requires positive values"
+                    f"{prefix}: liquid_fraction must be between 0.1 and 0.9"
                 )
-            for key in (
-                "premelt_steps", "conditioning_steps", "production_steps"
+            replicas = cal.get("replicas", 1)
+            if (
+                not isinstance(replicas, int)
+                or isinstance(replicas, bool)
+                or replicas < 1
             ):
-                value = cal.get(key)
+                errors.append(f"{prefix}: replicas must be a positive integer")
+            restart_files = cal.get("restart_files")
+            if restart_files is not None:
+                if not isinstance(restart_files, list):
+                    errors.append(
+                        f"{prefix}: restart_files must be a list with one "
+                        "entry per temperature"
+                    )
+                elif isinstance(temperatures, list) and len(restart_files) != len(
+                    temperatures
+                ):
+                    errors.append(
+                        f"{prefix}: restart_files must contain exactly one "
+                        "entry per temperature"
+                    )
+                else:
+                    invalid_paths = [
+                        path for path in restart_files
+                        if not isinstance(path, str) or not path.strip()
+                    ]
+                    if invalid_paths:
+                        errors.append(
+                            f"{prefix}: restart_files entries must be "
+                            "non-empty paths"
+                        )
+                    elif base_dir is not None:
+                        missing = [
+                            path for path in restart_files
+                            if not (
+                                Path(path)
+                                if Path(path).is_absolute()
+                                else base_dir / path
+                            ).is_file()
+                        ]
+                        if missing:
+                            errors.append(
+                                f"{prefix}: melting restart file(s) not found: "
+                                + ", ".join(missing)
+                            )
+            for key in (
+                "premelt_steps", "conditioning_steps", "production_steps",
+                "dump_step", "thermo_step", "restart_interval",
+            ):
+                value = cal.get(key, {
+                    "premelt_steps": 5000,
+                    "conditioning_steps": 5000,
+                    "production_steps": 100000,
+                    "dump_step": 100,
+                    "thermo_step": 100,
+                    "restart_interval": 10000,
+                }[key])
                 if (
                     not isinstance(value, int)
                     or isinstance(value, bool)
                     or value <= 0
                 ):
                     errors.append(
-                        f"{prefix}: melting_point {key} must be positive"
+                        f"{prefix}: melting_point {key} must be a positive integer"
                     )
 
         if prop_type in {"gamma", "gamma_surface"}:
@@ -1137,6 +1684,8 @@ def validate_properties(properties: list, interaction_type: str) -> list:
 
 def _gamma_task_count(prop: dict) -> int:
     if prop.get("type") == "gamma":
+        if prop.get("displacement_points") is not None:
+            return len(prop["displacement_points"])
         return int(prop.get("n_steps", 10)) + 1
     n_steps_x = int(prop.get("n_steps_x", prop.get("n_steps", 10)))
     n_steps_y = int(prop.get("n_steps_y", n_steps_x))
@@ -1214,6 +1763,8 @@ def preflight_gamma_structures(
                 prop.pop(key, None)
             if prop_type == "gamma":
                 prop["n_steps"] = 1
+                if prop.get("displacement_points") is not None:
+                    prop["displacement_points"] = [0.0]
             else:
                 prop["n_steps_x"] = 1
                 prop["n_steps_y"] = 1
@@ -1402,7 +1953,28 @@ def main():
     # Validate properties
     properties = param_config.get("properties", [])
     interaction_type = interaction.get("type", "unknown")
-    errors, warnings = validate_properties(properties, interaction_type)
+    # Relaxation-only parameter files intentionally omit ``properties`` (or
+    # may leave it empty).  Keep rejecting an empty property-only input, but
+    # do not turn a valid relaxation flow into a validation failure.
+    if properties or not isinstance(param_config.get("relaxation"), dict):
+        errors, warnings = validate_properties(
+            properties, interaction_type, base_dir=base_dir
+        )
+    else:
+        errors, warnings = [], []
+    all_errors.extend(errors)
+    all_warnings.extend(warnings)
+
+    for label, overwrite in _iter_effective_interactions(param_config):
+        if label == "interaction" or label.endswith(".interaction"):
+            continue
+        errors, warnings = validate_interaction(overwrite)
+        all_errors.extend(f"{label}: {error}" for error in errors)
+        all_warnings.extend(f"{label}: {warning}" for warning in warnings)
+
+    errors, warnings = validate_bundled_dpa4_runtime(
+        param_config, global_config, base_dir
+    )
     all_errors.extend(errors)
     all_warnings.extend(warnings)
 

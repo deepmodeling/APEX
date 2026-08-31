@@ -24,7 +24,7 @@ Usage:
     python generate_config.py create \
         --structure pristine.vasp Ti_hcp.vasp V_bcc.vasp \
         --structure-dir ./defects/ \
-        --backend lammps --potential deepmd --model DPA.pth \
+        --backend lammps --potential deepmd --model model.pt \
         --properties elastic --flow-type relax \
         --output-dir ./job
 
@@ -65,6 +65,7 @@ LAMMPS_CPU_IMAGE = APEX_IMAGE
 # must select LAMMPS_GPU_IMAGE or LAMMPS_CPU_IMAGE from the potential type.
 LAMMPS_IMAGE = LAMMPS_GPU_IMAGE
 ABACUS_IMAGE = "registry.dp.tech/dptech/abacus:3.8.2"
+DPA4_RUNTIME_PROFILE = "dpa4-alloytongqi-t4"
 # Recommended Bohrium VASP run command pieces (Intel oneAPI + absolute vasp_std).
 # Do NOT auto-set vasp_image_name — VASP is commercial; only set an image after
 # the user confirms they have a license and provides/approves the image.
@@ -118,6 +119,7 @@ PROPERTY_DEFAULTS = {
         "plane_miller": [1, 1, 1],
         "slip_direction": [-1, 1, 0],
         "supercell_size": [1, 1, 5],
+        "vacuum_size": 20,
         "n_steps": 10,
     },
     "gamma_surface": {
@@ -125,7 +127,8 @@ PROPERTY_DEFAULTS = {
         "plane_miller": [1, 1, 1],
         "slip_direction": [-1, 1, 0],
         "supercell_size": [1, 1, 5],
-        "closed_loop": False,
+        "vacuum_size": 20,
+        "closed_loop": True,
         "n_steps_x": 10,
         "n_steps_y": 10,
     },
@@ -149,6 +152,27 @@ PROPERTY_DEFAULTS = {
         "cal_setting": {
             "temperature": [300],
             "strain": 0.001,
+        },
+    },
+    "melting_point": {
+        "type": "melting_point",
+        "method": "two_phase",
+        "supercell_size": [1, 1, 2],
+        "cal_setting": {
+            "temperature": [1500, 1600, 1700],
+            "premelt_temperature": 4500,
+            "premelt_steps": 5000,
+            "conditioning_steps": 5000,
+            "production_steps": 100000,
+            "restart_interval": 10000,
+            "timestep": 0.001,
+            "tdamp": 0.1,
+            "pdamp": 1.0,
+            "pressure": 0.0,
+            "barostat": "iso",
+            "interface_axis": "z",
+            "liquid_fraction": 0.5,
+            "replicas": 1,
         },
     },
     "gruneisen": {
@@ -512,14 +536,46 @@ def resolve_project_id(project_id: int = None) -> int:
         ) from exc
 
 
-def _validate_image_scass(image: str, scass: str) -> None:
+def _load_dpa4_runtime_profile(runtime_profile):
+    """Resolve the one immutable DPA4 profile without duplicating its contract."""
+    if runtime_profile is None:
+        return None
+    if isinstance(runtime_profile, dict):
+        script_dir = Path(__file__).resolve().parent
+        if str(script_dir) not in sys.path:
+            sys.path.insert(0, str(script_dir))
+        from dpa4_profile import validate_dpa4_profile  # noqa: WPS433
+
+        return validate_dpa4_profile(
+            runtime_profile,
+            require_published=True,
+        )
+    if runtime_profile != DPA4_RUNTIME_PROFILE:
+        raise ValueError(f"Unknown runtime profile: {runtime_profile!r}")
+    script_dir = Path(__file__).resolve().parent
+    if str(script_dir) not in sys.path:
+        sys.path.insert(0, str(script_dir))
+    from dpa4_profile import load_dpa4_profile  # noqa: WPS433
+
+    return load_dpa4_profile(require_published=True)
+
+
+def _validate_image_scass(
+    image: str,
+    scass: str,
+    runtime_profile: str = None,
+) -> None:
     """Reject known-bad image × scass_type combinations before write-out."""
     script_dir = Path(__file__).resolve().parent
     if str(script_dir) not in sys.path:
         sys.path.insert(0, str(script_dir))
     from validate_apex_combo import check_combo  # noqa: WPS433
 
-    ok, errors = check_combo(image, scass)
+    ok, errors = check_combo(
+        image,
+        scass,
+        runtime_profile=runtime_profile,
+    )
     if not ok:
         raise RuntimeError(
             "Blocked image × scass_type combination:\n  - "
@@ -533,7 +589,8 @@ def build_global_json(backend: str, potential: str = None,
                       scass_type: str = None,
                       run_command: str = None,
                       vasp_image: str = None,
-                      lammps_image: str = None) -> dict:
+                      lammps_image: str = None,
+                      runtime_profile=None) -> dict:
     """
     Build global.json for APEX dflow submission.
 
@@ -543,6 +600,32 @@ def build_global_json(backend: str, potential: str = None,
     ``program_id`` / ``bohrium_config.project_id`` always come from
     ``--project-id`` or ``BOHRIUM_PROJECT_ID`` (required).
     """
+    dpa4_profile = _load_dpa4_runtime_profile(runtime_profile)
+    if dpa4_profile is not None:
+        if backend != "lammps" or potential != "deepmd":
+            raise ValueError(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} requires "
+                "--backend lammps --potential deepmd"
+            )
+        script_dir = Path(__file__).resolve().parent
+        if str(script_dir) not in sys.path:
+            sys.path.insert(0, str(script_dir))
+        from dpa4_profile import (  # noqa: WPS433
+            dpa4_image_name,
+            dpa4_recommended_combo,
+        )
+
+        dpa4_combo = dpa4_recommended_combo(dpa4_profile)
+        expected_scass = dpa4_combo["scass_type"]
+        expected_command = dpa4_profile["calculator"]["run_command"]
+        if scass_type is not None and scass_type != expected_scass:
+            raise ValueError(
+                f"DPA4 runtime profile requires scass_type={expected_scass!r}"
+            )
+        if run_command is not None and run_command != expected_command:
+            raise ValueError(
+                f"DPA4 runtime profile requires run_command={expected_command!r}"
+            )
     pid = resolve_project_id(project_id)
 
     # Resolve access key and convert to ticket
@@ -555,7 +638,9 @@ def build_global_json(backend: str, potential: str = None,
     ticket = get_bohrium_ticket(key)
 
     # Determine scass_type for inner containers
-    if scass_type:
+    if dpa4_profile is not None:
+        inner_scass = dpa4_combo["scass_type"]
+    elif scass_type:
         inner_scass = scass_type
     elif backend == "lammps" and potential in GPU_POTENTIALS:
         inner_scass = SCASS_TYPES["lammps_gpu"]
@@ -569,7 +654,9 @@ def build_global_json(backend: str, potential: str = None,
         inner_scass = SCASS_TYPES["lammps_cpu"]
 
     # Determine run command for calculator
-    if run_command:
+    if dpa4_profile is not None:
+        calc_run_command = dpa4_profile["calculator"]["run_command"]
+    elif run_command:
         calc_run_command = run_command
     elif backend == "lammps":
         calc_run_command = "lmp -in in.lammps"
@@ -583,7 +670,9 @@ def build_global_json(backend: str, potential: str = None,
         calc_run_command = "lmp -in in.lammps"
 
     # Determine calculator image
-    if backend == "lammps":
+    if dpa4_profile is not None:
+        selected_lammps_image = dpa4_image_name(dpa4_profile)
+    elif backend == "lammps":
         selected_lammps_image = (
             (lammps_image or "").strip()
             or select_lammps_image(potential)
@@ -591,13 +680,21 @@ def build_global_json(backend: str, potential: str = None,
     else:
         selected_lammps_image = LAMMPS_CPU_IMAGE  # Fallback in global.json
 
-    _validate_image_scass(selected_lammps_image, inner_scass)
+    _validate_image_scass(
+        selected_lammps_image,
+        inner_scass,
+        runtime_profile=(
+            DPA4_RUNTIME_PROFILE if dpa4_profile is not None else None
+        ),
+    )
 
     config = {
         "dflow_host": DFLOW_HOST,
         "k8s_api_server": DFLOW_HOST,
         "batch_type": "Bohrium",
         "context_type": "Bohrium",
+        "job_type": "container",
+        "platform": "ali",
         "program_id": pid,
         "bohrium_config": {
             "ticket": ticket,
@@ -610,6 +707,10 @@ def build_global_json(backend: str, potential: str = None,
         "group_size": 1,
         "pool_size": 1,
     }
+    if dpa4_profile is not None:
+        config["phonolammps_run_command"] = dpa4_profile["calculator"][
+            "phonolammps_command"
+        ]
 
     # Add backend-specific image fields
     if backend == "abacus":
@@ -848,8 +949,27 @@ def refresh_global_json(global_path, access_key: str = None,
 def build_interaction(backend: str, potential: str = None,
                       model: str = None,
                       incar: str = None, potcar_prefix: str = None,
-                      potcars: dict = None, orb_files: dict = None) -> dict:
+                      potcars: dict = None, orb_files: dict = None,
+                      runtime_profile=None) -> dict:
     """Build interaction configuration."""
+    dpa4_profile = _load_dpa4_runtime_profile(runtime_profile)
+    if dpa4_profile is not None:
+        if backend != "lammps" or potential != "deepmd":
+            raise ValueError(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} requires "
+                "--backend lammps --potential deepmd"
+            )
+        if model:
+            raise ValueError(
+                "DPA4 runtime profile uses an image-resident PT2 artifact; "
+                "do not pass --model or stage model.pt as the LAMMPS runtime"
+            )
+        script_dir = Path(__file__).resolve().parent
+        if str(script_dir) not in sys.path:
+            sys.path.insert(0, str(script_dir))
+        from dpa4_profile import dpa4_interaction  # noqa: WPS433
+
+        return dpa4_interaction(dpa4_profile)
     if backend == "lammps":
         if not potential:
             raise ValueError("--potential required for LAMMPS backend")
@@ -1209,7 +1329,8 @@ def build_param_json(structure_paths, interaction: dict,
                      properties: list, flow_type: str = "joint",
                      relaxation_settings: dict = None,
                      gamma_overrides: dict = None,
-                     property_configs: list = None) -> dict:
+                     property_configs: list = None,
+                     melting_overrides: dict = None) -> dict:
     """Build param.json configuration.
 
     structure_paths: one path string or a list of path strings for `structures`.
@@ -1266,6 +1387,9 @@ def build_param_json(structure_paths, interaction: dict,
                             prop_name, gamma_overrides or {}
                         )
                     )
+                if prop_name == "melting_point" and melting_overrides:
+                    cal_setting = prop_config.setdefault("cal_setting", {})
+                    cal_setting.update(copy.deepcopy(melting_overrides))
                 prop_configs.append(prop_config)
             else:
                 print(f"Warning: Unknown property '{prop_name}', skipping",
@@ -1317,12 +1441,16 @@ def _normalized_numeric_sequence(values):
 def gamma_overrides_from_args(args) -> dict:
     """Collect only explicitly supplied ``--gamma-*`` options."""
     option_map = {
+        "parent_lattice": "gamma_parent_lattice",
         "plane_miller": "gamma_plane_miller",
         "slip_direction": "gamma_slip_direction",
         "supercell_size": "gamma_supercell_size",
+        "vacuum_size": "gamma_vacuum_size",
+        "require_orthogonal_cell": "gamma_require_orthogonal_cell",
         "min_slab_height": "gamma_min_slab_height",
         "max_atoms": "gamma_max_atoms",
         "min_distance": "gamma_min_distance",
+        "displacement_points": "gamma_displacement_points",
         "n_steps": "gamma_n_steps",
         "n_steps_x": "gamma_n_steps_x",
         "n_steps_y": "gamma_n_steps_y",
@@ -1335,6 +1463,8 @@ def gamma_overrides_from_args(args) -> dict:
             continue
         if key in {"plane_miller", "slip_direction", "supercell_size"}:
             value = _normalized_numeric_sequence(value)
+        elif key == "displacement_points":
+            value = sorted(float(item) for item in value)
         overrides[key] = value
     return overrides
 
@@ -1342,15 +1472,18 @@ def gamma_overrides_from_args(args) -> dict:
 def gamma_overrides_for_property(prop_name: str, overrides: dict) -> dict:
     """Return the subset of Gamma CLI overrides valid for one property type."""
     common = {
+        "parent_lattice",
         "plane_miller",
         "slip_direction",
         "supercell_size",
+        "vacuum_size",
         "min_slab_height",
         "max_atoms",
         "min_distance",
+        "require_orthogonal_cell",
     }
     allowed = common | (
-        {"n_steps"} if prop_name == "gamma"
+        {"n_steps", "displacement_points"} if prop_name == "gamma"
         else {"n_steps_x", "n_steps_y", "closed_loop"}
     )
     return {key: copy.deepcopy(value) for key, value in overrides.items()
@@ -1370,6 +1503,15 @@ def validate_gamma_cli_options(properties: list, overrides: dict) -> list:
         ]
     if "n_steps" in overrides and "gamma" not in gamma_types:
         errors.append("--gamma-n-steps requires --properties gamma")
+    if "displacement_points" in overrides and "gamma" not in gamma_types:
+        errors.append(
+            "--gamma-displacement-points requires --properties gamma"
+        )
+    parent_lattice = overrides.get("parent_lattice")
+    if parent_lattice is not None and parent_lattice not in {"bcc", "fcc", "hcp"}:
+        errors.append(
+            "--gamma-parent-lattice must be one of bcc, fcc, or hcp"
+        )
     surface_only = {"n_steps_x", "n_steps_y", "closed_loop"}
     if surface_only & overrides.keys() and "gamma_surface" not in gamma_types:
         errors.append(
@@ -1421,7 +1563,8 @@ def validate_gamma_cli_options(properties: list, overrides: dict) -> list:
         ):
             errors.append(
                 f"{prop_name}: --gamma-slip-direction must lie on "
-                "--gamma-plane-miller in the input-cell basis"
+                "--gamma-plane-miller in the selected crystallographic "
+                "basis (the parent basis when --gamma-parent-lattice is set)"
             )
     supercell = overrides.get("supercell_size")
     if supercell is not None:
@@ -1452,6 +1595,16 @@ def validate_gamma_cli_options(properties: list, overrides: dict) -> list:
             if not math.isfinite(value) or not minimum_ok:
                 qualifier = "positive" if key == "min_slab_height" else "non-negative"
                 errors.append(f"{option} must be {qualifier} and finite")
+    if "vacuum_size" in overrides:
+        value = float(overrides["vacuum_size"])
+        if not math.isfinite(value) or value < 0:
+            errors.append(
+                "--gamma-vacuum-size must be non-negative and finite"
+            )
+    if "require_orthogonal_cell" in overrides and not isinstance(
+        overrides["require_orthogonal_cell"], bool
+    ):
+        errors.append("--gamma-require-orthogonal-cell must be a boolean flag")
     if "max_atoms" in overrides and (
         not isinstance(overrides["max_atoms"], int)
         or isinstance(overrides["max_atoms"], bool)
@@ -1473,6 +1626,85 @@ def validate_gamma_cli_options(properties: list, overrides: dict) -> list:
         overrides["closed_loop"], bool
     ):
         errors.append("--gamma-closed-loop must be a boolean flag")
+    if "displacement_points" in overrides:
+        points = overrides["displacement_points"]
+        if (
+            not points
+            or any(
+                not math.isfinite(float(value))
+                or not 0.0 <= float(value) <= 1.0
+                for value in points
+            )
+            or len(set(points)) != len(points)
+            or 0.0 not in points
+        ):
+            errors.append(
+                "--gamma-displacement-points must include 0 and contain "
+                "unique finite values in [0, 1]"
+            )
+    return errors
+
+
+def melting_overrides_from_args(args) -> dict:
+    """Collect explicitly supplied melting-point settings."""
+    overrides = {}
+    temperatures = getattr(args, "melting_temperatures", None)
+    if temperatures is not None:
+        overrides["temperature"] = _normalized_numeric_sequence(temperatures)
+    replicas = getattr(args, "melting_replicas", None)
+    if replicas is not None:
+        overrides["replicas"] = replicas
+    restart_files = getattr(args, "melting_restart_files", None)
+    if restart_files is not None:
+        overrides["restart_files"] = list(restart_files)
+    return overrides
+
+
+def validate_melting_cli_options(properties: list, overrides: dict) -> list:
+    """Validate scoped melting-point CLI options before ticket conversion."""
+    if not overrides:
+        return []
+    if "melting_point" not in set(properties):
+        return [
+            "--melting-* options require --properties melting_point"
+        ]
+    errors = []
+    temperatures = overrides.get(
+        "temperature",
+        PROPERTY_DEFAULTS["melting_point"]["cal_setting"]["temperature"],
+    )
+    if (
+        not temperatures
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) <= 0
+            for value in temperatures
+        )
+    ):
+        errors.append(
+            "--melting-temperatures must contain positive finite values"
+        )
+    replicas = overrides.get("replicas", 1)
+    if (
+        not isinstance(replicas, int)
+        or isinstance(replicas, bool)
+        or replicas < 1
+    ):
+        errors.append("--melting-replicas must be a positive integer")
+    restart_files = overrides.get("restart_files")
+    if restart_files is not None:
+        if len(restart_files) != len(temperatures):
+            errors.append(
+                "--melting-restart-files requires exactly one file per "
+                "melting temperature"
+            )
+        missing = [path for path in restart_files if not Path(path).is_file()]
+        if missing:
+            errors.append(
+                "--melting-restart-files not found: " + ", ".join(missing)
+            )
     return errors
 
 
@@ -1550,6 +1782,15 @@ def main():
                         help="LAMMPS potential type (deepmd/mace/nep/eam_alloy/...)")
     create.add_argument("--model", "-m",
                         help="Model/potential file path")
+    create.add_argument(
+        "--runtime-profile",
+        choices=[DPA4_RUNTIME_PROFILE],
+        help=(
+            "Use an immutable image-resident runtime contract. The DPA4 "
+            "profile remains unavailable until its exact image digest passes "
+            "post-snapshot qualification."
+        ),
+    )
     create.add_argument("--properties", nargs="+", required=True,
                         help="Property types to calculate")
     create.add_argument(
@@ -1560,17 +1801,43 @@ def main():
         ),
     )
     create.add_argument(
+        "--gamma-parent-lattice", choices=("bcc", "fcc", "hcp"),
+        help=(
+            "Explicit parent lattice for RSS/disordered Gamma inputs; Miller "
+            "indices are interpreted in this parent basis"
+        ),
+    )
+    create.add_argument(
         "--gamma-plane-miller", nargs="+", type=float,
-        help="Gamma slip-plane indices in the actual input-cell basis",
+        help=(
+            "Gamma slip-plane indices in the selected crystallographic basis "
+            "(parent basis when --gamma-parent-lattice is set)"
+        ),
     )
     create.add_argument(
         "--gamma-slip-direction", nargs="+", type=float,
-        help="Gamma slip-direction components in the actual input-cell basis",
+        help=(
+            "Gamma slip-direction components in the selected crystallographic "
+            "basis (parent basis when --gamma-parent-lattice is set)"
+        ),
     )
     create.add_argument(
         "--gamma-supercell-size", nargs=3, type=float,
         metavar=("X", "Y", "PLANES"),
         help="Gamma in-plane repeats and target Miller-plane spacings",
+    )
+    create.add_argument(
+        "--gamma-vacuum-size", type=float, metavar="ANGSTROM",
+        help="Gamma/GammaSurface vacuum thickness (core default: 20 A)",
+    )
+    create.add_argument(
+        "--gamma-require-orthogonal-cell",
+        action="store_true",
+        default=None,
+        help=(
+            "Fail unless Gamma/GammaSurface generates an orthogonal "
+            "Cartesian-z zero-tilt slab; never changes periodic boundaries"
+        ),
     )
     create.add_argument(
         "--gamma-min-slab-height", type=float, metavar="ANGSTROM",
@@ -1589,6 +1856,14 @@ def main():
         help="Gamma-line increments (the generated point count is COUNT + 1)",
     )
     create.add_argument(
+        "--gamma-displacement-points", nargs="+", type=float,
+        metavar="FRACTION",
+        help=(
+            "Explicit Gamma-line fractions in [0,1]; must be unique and "
+            "include 0, and overrides the n_steps grid"
+        ),
+    )
+    create.add_argument(
         "--gamma-n-steps-x", type=int, metavar="COUNT",
         help="Gamma-surface increments along the x slip vector",
     )
@@ -1599,6 +1874,21 @@ def main():
     create.add_argument(
         "--gamma-closed-loop", action="store_true", default=None,
         help="Derive periodic in-plane vectors for gamma_surface",
+    )
+    create.add_argument(
+        "--melting-temperatures", nargs="+", type=float, metavar="K",
+        help="Target temperatures for melting_point",
+    )
+    create.add_argument(
+        "--melting-replicas", type=int, metavar="COUNT",
+        help="Independent velocity-seed replicas per melting temperature",
+    )
+    create.add_argument(
+        "--melting-restart-files", nargs="+", metavar="PATH",
+        help=(
+            "One existing coexistence restart per melting temperature; each "
+            "is staged and forwarded as restart.coexistence.start"
+        ),
     )
     create.add_argument("--flow-type", default="joint",
                         choices=["joint", "relax", "props"],
@@ -1718,11 +2008,53 @@ def main():
     # Validate
     # -------------------------------------------------------------------------
     gamma_overrides = gamma_overrides_from_args(args)
-    errors = validate_config(args.backend, args.potential, args.properties)
+    melting_overrides = melting_overrides_from_args(args)
+    errors = validate_config(
+        args.backend,
+        "deepmd" if args.runtime_profile else args.potential,
+        args.properties,
+    )
     if args.lammps_image and args.backend != "lammps":
         errors.append("--lammps-image is only valid with --backend lammps")
+    runtime_profile = None
+    if args.runtime_profile:
+        try:
+            runtime_profile = _load_dpa4_runtime_profile(args.runtime_profile)
+        except (OSError, ValueError, RuntimeError) as exc:
+            errors.append(str(exc))
+        if args.backend != "lammps":
+            errors.append(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} requires "
+                "--backend lammps"
+            )
+        if args.potential not in (None, "deepmd"):
+            errors.append(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} requires "
+                "--potential deepmd"
+            )
+        if args.model:
+            errors.append(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} uses the "
+                "image-resident PT2 artifact; do not pass --model"
+            )
+        if args.lammps_image:
+            errors.append(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} fixes the image; "
+                "do not pass --lammps-image"
+            )
+        if getattr(args, "sandbox", False) or os.environ.get(
+            "BOHRIUM_USE_SANDBOX"
+        ) == "1":
+            errors.append(
+                f"--runtime-profile {DPA4_RUNTIME_PROFILE} is not qualified "
+                "for the OpenAPI Sandbox backend"
+            )
+        args.potential = "deepmd"
     errors.extend(
         validate_gamma_cli_options(args.properties, gamma_overrides)
+    )
+    errors.extend(
+        validate_melting_cli_options(args.properties, melting_overrides)
     )
     if errors:
         for err in errors:
@@ -1794,6 +2126,7 @@ def main():
             run_command=args.run_command,
             vasp_image=args.vasp_image,
             lammps_image=args.lammps_image,
+            runtime_profile=runtime_profile,
         )
         validate_project_id_types(global_config)
         print(f"Ticket obtained: {global_config['bohrium_config']['ticket'][:8]}...")
@@ -1812,12 +2145,27 @@ def main():
         print(f"Copied structure to {dest_file}")
 
     staged_model = args.model
-    if args.backend == "lammps":
+    if args.backend == "lammps" and runtime_profile is None:
         try:
             staged_model = stage_lammps_model(args.model, output_dir)
         except (OSError, ValueError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             sys.exit(1)
+
+    # Melting restart inputs are a temperature-indexed transport mechanism.
+    # Stage them in the job root and let MeltingPoint copy the matching input
+    # to each replica as restart.coexistence.start. FiniteTlatt never receives
+    # these files.
+    if "restart_files" in melting_overrides:
+        staged_restarts = []
+        for index, source_text in enumerate(melting_overrides["restart_files"]):
+            source = Path(source_text)
+            dest_name = f"melting_restart_{index:06d}{source.suffix}"
+            destination = output_dir / dest_name
+            shutil.copy2(source, destination)
+            staged_restarts.append(dest_name)
+            print(f"Copied melting restart to {destination}")
+        melting_overrides["restart_files"] = staged_restarts
 
     # Stage VASP POTCAR (+ INCAR) into the job. Absolute host libraries such as
     # /share/PAW_PBE are invisible inside Bohrium/dflow containers.
@@ -1912,6 +2260,7 @@ mixing_beta         0.7
         potcar_prefix=staged_prefix,
         potcars=staged_potcars,
         orb_files=orb_files,
+        runtime_profile=runtime_profile,
     )
     param_config = build_param_json(
         structure_paths,
@@ -1920,6 +2269,7 @@ mixing_beta         0.7
         args.flow_type,
         gamma_overrides=gamma_overrides,
         property_configs=confirmed_property_configs,
+        melting_overrides=melting_overrides,
     )
 
     # -------------------------------------------------------------------------
@@ -2013,10 +2363,14 @@ mixing_beta         0.7
     print(f"Properties:     {', '.join(args.properties)}")
     for prop in param_config.get("properties", []):
         if prop.get("type") in {"gamma", "gamma_surface"}:
-            task_count = (
-                int(prop.get("n_steps", 10)) + 1
-                if prop["type"] == "gamma"
-                else (
+            if prop["type"] == "gamma":
+                task_count = (
+                    len(prop["displacement_points"])
+                    if prop.get("displacement_points") is not None
+                    else int(prop.get("n_steps", 10)) + 1
+                )
+            else:
+                task_count = (
                     int(prop.get("n_steps_x", prop.get("n_steps", 10))) + 1
                 ) * (
                     int(
@@ -2026,12 +2380,21 @@ mixing_beta         0.7
                         )
                     ) + 1
                 )
-            )
             print(
                 "Gamma config:   "
                 + json.dumps(prop, sort_keys=True)
             )
             print(f"Gamma tasks:    {task_count}")
+        elif prop.get("type") == "melting_point":
+            cal = prop.get("cal_setting", {})
+            task_count = len(cal.get("temperature", [])) * int(
+                cal.get("replicas", 1)
+            )
+            print(
+                "Melting config: "
+                + json.dumps(prop, sort_keys=True)
+            )
+            print(f"Melting tasks:  {task_count}")
     print(f"Flow type:      {args.flow_type}")
     print(f"Workflow name:  {workflow_name}")
     if use_sandbox:

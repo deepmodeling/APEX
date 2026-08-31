@@ -54,6 +54,9 @@ class RunLAMMPS(OP):
             logging.warning(f"Failed to load inter.json for symlink cleanup: {exc}")
             return
 
+        if inter_param.get("model_in_image") is True:
+            return
+
         model_spec = inter_param.get("model", [])
         if isinstance(model_spec, str):
             model_list = [model_spec]

@@ -664,3 +664,30 @@ class TestPhonon(unittest.TestCase):
             self.assertIn("--logshow", (task_dir / "run_command").read_text())
         finally:
             shutil.rmtree(task_dir.parent, ignore_errors=True)
+
+    def test_post_process_uses_runtime_autoload_for_dpa4_pt2(self):
+        dpa4_phonon = Phonon(
+            {"type": "phonon", "supercell_size": [2, 2, 2]},
+            inter_param={
+                "type": "deepmd",
+                "deepmd_runtime": "dpa4_pt2",
+            },
+        )
+        task_dir = Path("output/phonon_dpa4_pt2_post/task.000000")
+        shutil.rmtree(task_dir.parent, ignore_errors=True)
+        task_dir.mkdir(parents=True, exist_ok=True)
+        (task_dir / "in.lammps").write_text(
+            "clear\npair_style deepmd /opt/dpa4-runtime/model.pt2\n"
+            "pair_coeff * * Cu O\nrun 0\n"
+        )
+
+        try:
+            dpa4_phonon.post_process([str(task_dir)])
+            rewritten = (task_dir / "in.lammps").read_text()
+            self.assertNotIn("plugin load", rewritten)
+            self.assertIn(
+                "pair_style deepmd /opt/dpa4-runtime/model.pt2", rewritten
+            )
+            self.assertNotIn("run 0", rewritten)
+        finally:
+            shutil.rmtree(task_dir.parent, ignore_errors=True)

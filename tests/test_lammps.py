@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 import warnings
+from pathlib import Path
 
 import dpdata
 import numpy as np
@@ -86,6 +87,119 @@ class TestLammps(unittest.TestCase):
             "deepmd_version": "1.1.0",
         }
         self.assertEqual(model_param, self.Lammps.model_param)
+
+    def test_local_dpa4_pt2_model_is_linked_and_forwarded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            model = root / "alloytongqi.pt2"
+            model.write_bytes(b"pt2-test-model")
+            output_dir = root / "case" / "relaxation" / "relax_task"
+            output_dir.mkdir(parents=True)
+            calculator = Lammps(
+                {
+                    "type": "deepmd",
+                    "model": str(model),
+                    "type_map": {"Al": 0},
+                    "deepmd_runtime": "dpa4_pt2",
+                    "deepmd_version": "3.2.0b0",
+                },
+                os.path.join(self.source_path, "Al-fcc.vasp"),
+            )
+
+            calculator.set_model_param()
+            calculator.make_potential_files(str(output_dir))
+
+            linked_model = output_dir / model.name
+            self.assertTrue(linked_model.is_symlink())
+            self.assertEqual(linked_model.read_bytes(), b"pt2-test-model")
+            self.assertEqual(calculator.model_param["model_name"], [model.name])
+            self.assertEqual(
+                calculator.forward_files(), ["conf.lmp", "in.lammps", model.name]
+            )
+            self.assertEqual(
+                calculator.forward_common_files(), ["in.lammps", model.name]
+            )
+
+    def test_image_resident_dpa4_pt2_model_keeps_absolute_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp).resolve() / "case" / "relaxation" / "relax_task"
+            output_dir.mkdir(parents=True)
+            model = "/opt/dpa4-runtime/models/DPA4-alloytongqi/alloytongqi.t4-sm75.pt2"
+            interaction = {
+                "type": "deepmd",
+                "model": model,
+                "model_in_image": True,
+                "type_map": {"Al": 0},
+                "deepmd_runtime": "dpa4_pt2",
+                "deepmd_version": "3.2.0b0",
+            }
+            calculator = Lammps(
+                interaction,
+                os.path.join(self.source_path, "Al-fcc.vasp"),
+            )
+
+            calculator.set_model_param()
+            calculator.make_potential_files(str(output_dir))
+
+            self.assertEqual(calculator.model_param["model_name"], [model])
+            self.assertIn(model, inter_deepmd(calculator.model_param))
+            self.assertFalse((output_dir / Path(model).name).exists())
+            self.assertEqual(loadfn(output_dir / "inter.json"), interaction)
+            self.assertEqual(calculator.forward_files(), ["conf.lmp", "in.lammps"])
+            self.assertEqual(calculator.forward_common_files(), ["in.lammps"])
+
+    def test_image_resident_model_validation_fails_closed(self):
+        base = {
+            "type": "deepmd",
+            "model": "/opt/dpa4-runtime/model.pt2",
+            "model_in_image": True,
+            "type_map": {"Al": 0},
+            "deepmd_runtime": "dpa4_pt2",
+        }
+        invalid_cases = [
+            ({**base, "deepmd_runtime": "legacy"}, "only supported"),
+            ({**base, "model": "relative/model.pt2"}, "absolute .pt2"),
+            ({**base, "model": "/opt/dpa4-runtime/model.pb"}, "absolute .pt2"),
+            ({**base, "model_in_image": "true"}, "must be a boolean"),
+        ]
+
+        for interaction, message in invalid_cases:
+            with self.subTest(interaction=interaction), self.assertRaisesRegex(
+                ValueError, message
+            ):
+                Lammps(interaction, os.path.join(self.source_path, "Al-fcc.vasp"))
+
+    def test_custom_dpa4_pt2_input_rejects_legacy_plugin_load(self):
+        with tempfile.TemporaryDirectory(dir=".") as tmp:
+            root = Path(tmp).resolve()
+            output_dir = root / "relaxation" / "relax_task"
+            output_dir.mkdir(parents=True)
+            shutil.copy(
+                os.path.join(self.source_path, "Al-fcc.vasp"),
+                output_dir / "POSCAR",
+            )
+            custom_input = root / "custom.in.lammps"
+            custom_input.write_text(
+                "clear\natom_style atomic\natom_modify map yes\n"
+                "read_data conf.lmp\nplugin load libdeepmd_lmp.so\n"
+                "pair_style deepmd local.pt2\npair_coeff * * Al\n"
+            )
+            calculator = Lammps(
+                {
+                    "type": "deepmd",
+                    "model": str(root / "local.pt2"),
+                    "in_lammps": str(custom_input),
+                    "type_map": {"Al": 0},
+                    "deepmd_runtime": "dpa4_pt2",
+                    "deepmd_version": "3.2.0b0",
+                },
+                os.path.join(self.source_path, "Al-fcc.vasp"),
+            )
+
+            with self.assertRaisesRegex(ValueError, "LAMMPS_PLUGIN_PATH auto-loading"):
+                calculator.make_input_file(
+                    str(output_dir), "relaxation", self.relax_param
+                )
 
     def test_make_potential_files(self):
         cwd = os.getcwd()

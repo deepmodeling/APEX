@@ -1,0 +1,381 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apex-flow.local/schemas/dpa4-alloytongqi-benchmark-v2.json",
+  "title": "DPA4 alloytongqi small-cell GPU compatibility manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "benchmark_id",
+    "created_at",
+    "status",
+    "reason_codes",
+    "provenance",
+    "identity",
+    "environment",
+    "thresholds",
+    "cases",
+    "runs",
+    "parity",
+    "phonolammps",
+    "artifact_hashes",
+    "notes"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"const": "2.0.0"},
+    "benchmark_id": {"const": "dpa4-alloytongqi-small-cell-gpu-compat-v2"},
+    "created_at": {"type": ["string", "null"]},
+    "status": {"$ref": "#/$defs/status"},
+    "reason_codes": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["apex_git_commit", "apex_git_dirty"],
+      "properties": {
+        "apex_git_commit": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "apex_git_dirty": {"type": ["boolean", "null"]}
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_pt", "runtime_models_pt2", "image"],
+      "properties": {
+        "checkpoint_pt": {"$ref": "#/$defs/file"},
+        "runtime_models_pt2": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/runtimeModel"}
+        },
+        "image": {"$ref": "#/$defs/image"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observations"],
+      "properties": {
+        "observations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/environmentObservation"}
+        }
+      }
+    },
+    "thresholds": {"$ref": "#/$defs/thresholds"},
+    "cases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/case"}
+    },
+    "runs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/runSummary"}
+    },
+    "parity": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/paritySummary"}
+    },
+    "phonolammps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/phononSummary"}
+    },
+    "artifact_hashes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "notes": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "passed"}}},
+      "then": {
+        "properties": {
+          "reason_codes": {"maxItems": 0},
+          "identity": {
+            "properties": {
+              "checkpoint_pt": {
+                "properties": {
+                  "sha256": {
+                    "const": "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad"
+                  }
+                }
+              },
+              "runtime_models_pt2": {"minItems": 2, "maxItems": 2},
+              "image": {
+                "properties": {
+                  "reference": {"type": "string", "minLength": 1},
+                  "digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            }
+          },
+          "environment": {
+            "properties": {"observations": {"minItems": 1}}
+          },
+          "runs": {"minItems": 12, "maxItems": 12},
+          "parity": {"minItems": 6, "maxItems": 6},
+          "phonolammps": {"minItems": 1},
+          "artifact_hashes": {"minItems": 1}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "status": {
+      "enum": ["untested", "inconclusive", "failed", "passed"]
+    },
+    "hexSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "bytes"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/hexSha256"},
+        "bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "runtimeModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["device", "sha256", "bytes", "sources"],
+      "properties": {
+        "device": {"enum": ["cpu", "gpu"]},
+        "sha256": {"$ref": "#/$defs/hexSha256"},
+        "bytes": {"type": "integer", "minimum": 1},
+        "sources": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference", "digest"],
+      "properties": {
+        "reference": {"type": ["string", "null"]},
+        "digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "energy_per_atom_abs_eV",
+        "force_rms_eV_per_A",
+        "force_max_abs_eV_per_A",
+        "stress_max_abs_GPa"
+      ],
+      "properties": {
+        "energy_per_atom_abs_eV": {"type": "number", "minimum": 0},
+        "force_rms_eV_per_A": {"type": "number", "minimum": 0},
+        "force_max_abs_eV_per_A": {"type": "number", "minimum": 0},
+        "stress_max_abs_GPa": {"type": "number", "minimum": 0}
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "formula", "elements", "atoms", "crystal", "status", "artifacts"],
+      "properties": {
+        "name": {"enum": ["Ti_hcp", "V_bcc", "TiV_B2"]},
+        "formula": {"type": "string"},
+        "elements": {
+          "type": "array",
+          "items": {"type": "string"},
+          "minItems": 1
+        },
+        "atoms": {"type": "integer", "minimum": 1},
+        "crystal": {"type": "string"},
+        "status": {"$ref": "#/$defs/status"},
+        "artifacts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/file"}
+        }
+      }
+    },
+    "environmentObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fingerprint_sha256",
+        "source",
+        "gpu_inventory",
+        "driver_version",
+        "cuda_version",
+        "cuda_versions",
+        "packages",
+        "executables",
+        "selected_environment",
+        "lammps_plugins"
+      ],
+      "properties": {
+        "fingerprint_sha256": {"$ref": "#/$defs/hexSha256"},
+        "source": {"type": "string"},
+        "gpu_inventory": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/gpu"}
+        },
+        "driver_version": {"type": ["string", "null"]},
+        "cuda_version": {"type": ["string", "null"]},
+        "cuda_versions": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "null"]}
+        },
+        "packages": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "null"]}
+        },
+        "executables": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "null"]}
+        },
+        "selected_environment": {
+          "type": "object",
+          "additionalProperties": {"type": ["string", "null"]}
+        },
+        "lammps_plugins": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/file"}
+        }
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "uuid",
+        "driver_version",
+        "memory_mib",
+        "compute_capability"
+      ],
+      "properties": {
+        "index": {"type": "string"},
+        "name": {"type": "string", "minLength": 1},
+        "uuid": {"type": "string", "minLength": 1},
+        "driver_version": {"type": "string", "minLength": 1},
+        "memory_mib": {"type": ["integer", "null"], "minimum": 1},
+        "compute_capability": {"type": "string", "minLength": 1}
+      }
+    },
+    "runSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case",
+        "device",
+        "mode",
+        "status",
+        "exit_code",
+        "timed_out",
+        "result",
+        "stdout",
+        "stderr",
+        "reason_codes"
+      ],
+      "properties": {
+        "case": {"type": "string"},
+        "device": {"enum": ["cpu", "gpu"]},
+        "mode": {"enum": ["run0", "md"]},
+        "status": {"$ref": "#/$defs/status"},
+        "exit_code": {"type": ["integer", "null"]},
+        "timed_out": {"type": "boolean"},
+        "result": {"$ref": "#/$defs/file"},
+        "stdout": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]},
+        "stderr": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "paritySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case", "mode", "status", "metrics", "thresholds", "result", "reason_codes"],
+      "properties": {
+        "case": {"type": ["string", "null"]},
+        "mode": {"type": ["string", "null"]},
+        "status": {"$ref": "#/$defs/status"},
+        "metrics": {"anyOf": [{"$ref": "#/$defs/thresholds"}, {"type": "null"}]},
+        "thresholds": {"$ref": "#/$defs/thresholds"},
+        "result": {"$ref": "#/$defs/file"},
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "phononSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case",
+        "device",
+        "status",
+        "exit_code",
+        "timed_out",
+        "result",
+        "stdout",
+        "stderr",
+        "force_constants_validation",
+        "reason_codes"
+      ],
+      "properties": {
+        "case": {"type": "string"},
+        "device": {"enum": ["cpu", "gpu"]},
+        "status": {"$ref": "#/$defs/status"},
+        "exit_code": {"type": ["integer", "null"]},
+        "timed_out": {"type": "boolean"},
+        "result": {"$ref": "#/$defs/file"},
+        "stdout": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]},
+        "stderr": {"anyOf": [{"$ref": "#/$defs/file"}, {"type": "null"}]},
+        "force_constants_validation": {
+          "$ref": "#/$defs/forceConstantsValidation"
+        },
+        "reason_codes": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "forceConstantsValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "expected_atom_count",
+        "atom_count",
+        "matrix_blocks",
+        "finite_values",
+        "error"
+      ],
+      "properties": {
+        "status": {"enum": ["failed", "passed"]},
+        "expected_atom_count": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "atom_count": {"type": ["integer", "null"], "minimum": 1},
+        "matrix_blocks": {"type": "integer", "minimum": 0},
+        "finite_values": {"type": "integer", "minimum": 0},
+        "error": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

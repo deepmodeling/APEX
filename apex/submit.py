@@ -6,6 +6,9 @@ import tempfile
 import logging
 import copy
 import json
+import hashlib
+import importlib.util
+import re
 from pathlib import Path
 from typing import List
 from multiprocessing import Pool
@@ -38,6 +41,408 @@ LAMMPS_PHONON_IMAGE = (
 )
 GPU_LAMMPS_INTERACTIONS = {"deepmd", "mace", "nep"}
 
+DPA4_RUNTIME_KIND = "dpa4_pt2"
+DPA4_RUNTIME_MODEL_PATH = (
+    "/opt/dpa4-runtime/models/DPA4-alloytongqi/"
+    "alloytongqi.t4-sm75.pt2"
+)
+DPA4_RUNTIME_MODEL_SHA256 = (
+    "2614db9463f5864d80a78fec037aeae26930df2004bb9f1148a69b83c25b3daf"
+)
+DPA4_SOURCE_CHECKPOINT_PATH = (
+    "/opt/dpa4-runtime/models/DPA4-alloytongqi/model.pt"
+)
+DPA4_SOURCE_CHECKPOINT_SHA256 = (
+    "c84b268cc6191afc72bd2d5c001cbe526a0d2e04ebf6dbd7df021306e9abe9ad"
+)
+DPA4_SCASS_TYPE = "c4_m15_1 * NVIDIA T4"
+DPA4_LAMMPS_RUN_COMMAND = "/usr/local/bin/dpa4-lmp -in in.lammps"
+DPA4_PHONOLAMMPS_RUN_COMMAND = (
+    "/usr/local/bin/dpa4-phonolammps {input_file} -c {poscar} "
+    "--dim {dim} {primitive_axes}"
+)
+DPA4_GROUP_SIZE = 1
+DPA4_POOL_SIZE = 1
+DPA4_DISPATCHER_COMMAND = "python3"
+DPA4_JOB_TYPE = "container"
+DPA4_PLATFORM = "ali"
+_HEX_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def _load_dpa4_profile(*, require_published: bool = True) -> dict:
+    """Load the canonical bundled DPA4 profile without importing a hyphenated package."""
+    profile_module_path = (
+        Path(__file__).resolve().parent
+        / "skills"
+        / "apex-flow"
+        / "scripts"
+        / "dpa4_profile.py"
+    )
+    spec = importlib.util.spec_from_file_location(
+        "apex_bundled_dpa4_profile",
+        profile_module_path,
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError(
+            f"Cannot load DPA4 runtime profile helper: {profile_module_path}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load_dpa4_profile(require_published=require_published)
+
+
+def _dpa4_image_name() -> str:
+    """Return the immutable image identity from the canonical DPA4 profile."""
+    profile = _load_dpa4_profile(require_published=True)
+    image = profile["image"]
+    return f"{image['ref']}@{str(image['digest']).lower()}"
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _iter_effective_lammps_interactions(
+    relax_param: dict | None,
+    props_param: dict | None,
+    flow_type: str,
+):
+    """Yield every interaction that can reach the single LAMMPS run image."""
+    if flow_type in {"relax", "joint"} and relax_param:
+        interaction = relax_param.get("interaction")
+        if isinstance(interaction, dict):
+            yield "relax.interaction", interaction
+
+    if flow_type not in {"props", "joint"} or not props_param:
+        return
+
+    base_interaction = props_param.get("interaction")
+    properties = props_param.get("properties") or []
+    if not properties:
+        if isinstance(base_interaction, dict):
+            yield "props.interaction", base_interaction
+        return
+
+    for index, prop in enumerate(properties):
+        if not isinstance(prop, dict):
+            continue
+        overwrite = (prop.get("cal_setting") or {}).get("overwrite_interaction")
+        if isinstance(overwrite, dict):
+            yield (
+                f"props.properties[{index}].cal_setting.overwrite_interaction",
+                overwrite,
+            )
+        elif isinstance(base_interaction, dict):
+            yield f"props.properties[{index}].interaction", base_interaction
+
+
+def _has_dpa4_runtime_intent(interaction: dict) -> bool:
+    return (
+        "deepmd_runtime" in interaction
+        or interaction.get("model_in_image") is True
+        or interaction.get("model") == DPA4_RUNTIME_MODEL_PATH
+        or "runtime_model_sha256" in interaction
+        or "source_checkpoint" in interaction
+        or "source_checkpoint_sha256" in interaction
+    )
+
+
+def _validate_exact_dpa4_interaction(label: str, interaction: dict) -> list[str]:
+    expected = {
+        "type": "deepmd",
+        "deepmd_runtime": DPA4_RUNTIME_KIND,
+        "model_in_image": True,
+        "model": DPA4_RUNTIME_MODEL_PATH,
+        "runtime_model_sha256": DPA4_RUNTIME_MODEL_SHA256,
+        "source_checkpoint": DPA4_SOURCE_CHECKPOINT_PATH,
+        "source_checkpoint_sha256": DPA4_SOURCE_CHECKPOINT_SHA256,
+    }
+    errors = []
+    for key in ("runtime_model_sha256", "source_checkpoint_sha256"):
+        declared = interaction.get(key)
+        if not isinstance(declared, str) or not _HEX_SHA256_RE.fullmatch(declared):
+            errors.append(f"{label}.{key} must be a lowercase SHA-256 hex digest")
+    for key, value in expected.items():
+        if interaction.get(key) != value:
+            errors.append(
+                f"{label}.{key} must equal {value!r} for the bundled DPA4 "
+                "T4/PT2 production runtime"
+            )
+    type_map = interaction.get("type_map")
+    if type_map != "auto":
+        valid_mapping = (
+            isinstance(type_map, dict)
+            and bool(type_map)
+            and all(
+                isinstance(symbol, str)
+                and bool(symbol.strip())
+                and type(index) is int
+                and index >= 0
+                for symbol, index in type_map.items()
+            )
+            and set(type_map.values()) == set(range(len(type_map)))
+        )
+        if not valid_mapping:
+            errors.append(
+                f"{label}.type_map must be 'auto' before CLI expansion or a "
+                "non-empty contiguous element-to-index mapping afterwards"
+            )
+    return errors
+
+
+def _model_locations_with_sha256(
+    interaction: dict,
+    work_dir_list: List[os.PathLike],
+    expected_sha256: str,
+) -> list[str]:
+    """Resolve a staged model across workdirs and return exact hash matches."""
+    model = interaction.get("model")
+    if not isinstance(model, str) or interaction.get("model_in_image") is True:
+        return []
+    model_path = Path(model).expanduser()
+    candidates = (
+        [model_path]
+        if model_path.is_absolute()
+        else [Path(work_dir) / model_path for work_dir in work_dir_list]
+    )
+    matches = []
+    for candidate in candidates:
+        try:
+            if (
+                candidate.is_file()
+                and _sha256_file(candidate) == expected_sha256
+            ):
+                matches.append(str(candidate.resolve()))
+        except OSError:
+            continue
+    return matches
+
+
+def _validate_lammps_runtime_contract(
+    relax_param: dict | None,
+    props_param: dict | None,
+    flow_type: str,
+    work_dir_list: List[os.PathLike],
+) -> str:
+    """Validate one image-compatible runtime class for the whole workflow.
+
+    FlowGenerator currently owns a single run image, so mixing the bundled
+    DPA4/PT2 runtime with legacy interactions is never safe, including through
+    property overwrite_interaction or different submitted work directories.
+    """
+    classifications = []
+    errors = []
+    for label, interaction in _iter_effective_lammps_interactions(
+        relax_param, props_param, flow_type
+    ):
+        checkpoint_locations = _model_locations_with_sha256(
+            interaction, work_dir_list, DPA4_SOURCE_CHECKPOINT_SHA256
+        )
+        if checkpoint_locations:
+            errors.append(
+                f"{label}.model is the bundled DPA4 source checkpoint in "
+                f"{checkpoint_locations}; LAMMPS must receive the image-resident "
+                f"T4 .pt2 runtime at {DPA4_RUNTIME_MODEL_PATH!r}, never model.pt"
+            )
+            classifications.append(DPA4_RUNTIME_KIND)
+            continue
+
+        staged_runtime_locations = _model_locations_with_sha256(
+            interaction, work_dir_list, DPA4_RUNTIME_MODEL_SHA256
+        )
+        if staged_runtime_locations:
+            errors.append(
+                f"{label}.model resolves to the bundled DPA4 T4 .pt2 in "
+                f"{staged_runtime_locations}, but the production contract "
+                f"requires the image-resident path {DPA4_RUNTIME_MODEL_PATH!r} "
+                "with model_in_image=true"
+            )
+            classifications.append(DPA4_RUNTIME_KIND)
+            continue
+
+        if _has_dpa4_runtime_intent(interaction):
+            classifications.append(DPA4_RUNTIME_KIND)
+            errors.extend(_validate_exact_dpa4_interaction(label, interaction))
+        else:
+            classifications.append("legacy")
+
+    runtime_kinds = set(classifications)
+    if DPA4_RUNTIME_KIND in runtime_kinds and "legacy" in runtime_kinds:
+        errors.append(
+            "A single APEX workflow cannot mix legacy LAMMPS interactions with "
+            "the bundled DPA4/PT2 runtime (including relax/property overrides "
+            "or submitted work directories), because it has only one run image"
+        )
+
+    if DPA4_RUNTIME_KIND in runtime_kinds:
+        try:
+            _dpa4_image_name()
+        except RuntimeError as exc:
+            errors.append(str(exc))
+
+    if errors:
+        raise RuntimeError("Invalid LAMMPS runtime contract:\n- " + "\n- ".join(errors))
+    return DPA4_RUNTIME_KIND if runtime_kinds == {DPA4_RUNTIME_KIND} else "legacy"
+
+
+def _uses_phonolammps(props_param: dict | None) -> bool:
+    return bool(
+        props_param
+        and any(
+            isinstance(prop, dict)
+            and prop.get("type") in {"phonon", "gruneisen"}
+            for prop in props_param.get("properties", [])
+        )
+    )
+
+
+def _effective_dispatcher_machine(wf_config: Config) -> dict | None:
+    """Read machine_dict after Config and dispatcher_config overrides."""
+    machine = wf_config.dispatcher_config_dict.get("machine_dict")
+    return machine if isinstance(machine, dict) else None
+
+
+def _effective_bohrium_scass(wf_config: Config) -> str | None:
+    """Read the effective dispatcher SKU after nested machine overrides."""
+    machine = _effective_dispatcher_machine(wf_config)
+    if not isinstance(machine, dict):
+        return None
+    remote_profile = machine.get("remote_profile")
+    if not isinstance(remote_profile, dict):
+        return None
+    input_data = remote_profile.get("input_data")
+    if not isinstance(input_data, dict):
+        return None
+    return input_data.get("scass_type")
+
+
+def _effective_bohrium_image(wf_config: Config) -> str | None:
+    """Read an optional nested Bohrium image override after all merges."""
+    machine = _effective_dispatcher_machine(wf_config)
+    if not isinstance(machine, dict):
+        return None
+    remote_profile = machine.get("remote_profile")
+    if not isinstance(remote_profile, dict):
+        return None
+    input_data = remote_profile.get("input_data")
+    if not isinstance(input_data, dict):
+        return None
+    return input_data.get("image_name")
+
+
+def _validate_dpa4_execution_config(
+    wf_config: Config,
+    props_param: dict | None,
+) -> None:
+    """Require the one hardware/command profile covered by DPA4 evidence."""
+    errors = []
+    context_type = str(wf_config.context_type or "").lower()
+    batch_type = str(wf_config.batch_type or "").lower()
+    if "bohrium" not in context_type or "bohrium" not in batch_type:
+        errors.append(
+            "DPA4/PT2 production runs require Bohrium context_type and "
+            "batch_type"
+        )
+    for label, value in (
+        ("machine", wf_config.machine),
+        ("dispatcher_config", wf_config.dispatcher_config),
+        ("resources", wf_config.resources),
+        ("task", wf_config.task),
+    ):
+        if value not in (None, {}):
+            errors.append(
+                f"{label} overrides are prohibited for the immutable DPA4 "
+                "profile; use the generated top-level Bohrium configuration"
+            )
+    effective_machine = _effective_dispatcher_machine(wf_config) or {}
+    effective_context = str(effective_machine.get("context_type") or "").lower()
+    effective_batch = str(effective_machine.get("batch_type") or "").lower()
+    if "bohrium" not in effective_context or "bohrium" not in effective_batch:
+        errors.append(
+            "effective dispatcher machine_dict must retain Bohrium "
+            "context_type and batch_type"
+        )
+    if wf_config.scass_type != DPA4_SCASS_TYPE:
+        errors.append(
+            f"scass_type must equal {DPA4_SCASS_TYPE!r}; all other GPU/CPU "
+            "SKUs are unverified"
+        )
+    if wf_config.job_type != DPA4_JOB_TYPE:
+        errors.append(
+            f"job_type must equal {DPA4_JOB_TYPE!r} so the immutable DPA4 "
+            "container image is actually used"
+        )
+    if wf_config.platform != DPA4_PLATFORM:
+        errors.append(
+            f"platform must equal the qualified Bohrium value "
+            f"{DPA4_PLATFORM!r}"
+        )
+    effective_scass = _effective_bohrium_scass(wf_config)
+    if effective_scass != DPA4_SCASS_TYPE:
+        errors.append(
+            "effective machine.remote_profile.input_data.scass_type must "
+            f"equal {DPA4_SCASS_TYPE!r}; nested machine overrides may not "
+            "change the qualified GPU"
+        )
+    effective_image = _effective_bohrium_image(wf_config)
+    if effective_image is not None:
+        expected_image = _dpa4_image_name()
+        if effective_image != expected_image:
+            errors.append(
+                "effective machine.remote_profile.input_data.image_name may "
+                "be absent or equal the immutable DPA4 image "
+                f"{expected_image!r}; nested image overrides are prohibited"
+            )
+
+    dispatcher = wf_config.dispatcher_config_dict
+    if dispatcher.get("json_file") not in (None, ""):
+        errors.append(
+            "dispatcher_config.json_file is prohibited for DPA4 because it "
+            "can inject machine or resource overrides after validation"
+        )
+    if dispatcher.get("command") != DPA4_DISPATCHER_COMMAND:
+        errors.append(
+            "effective dispatcher command must remain the single-process "
+            f"default {DPA4_DISPATCHER_COMMAND!r}"
+        )
+    if dispatcher.get("remote_command") not in (None, ""):
+        errors.append(
+            "dispatcher remote_command is prohibited for DPA4 because it can "
+            "bypass the audited one-rank wrapper"
+        )
+
+    basic = wf_config.basic_config_dict
+    if basic.get("lammps_run_command") != DPA4_LAMMPS_RUN_COMMAND:
+        errors.append(
+            "lammps_run_command must equal the audited single-rank wrapper "
+            f"{DPA4_LAMMPS_RUN_COMMAND!r}"
+        )
+    if _uses_phonolammps(props_param) and (
+        basic.get("phonolammps_run_command")
+        != DPA4_PHONOLAMMPS_RUN_COMMAND
+    ):
+        errors.append(
+            "phonon/Gruneisen with DPA4 requires phonolammps_run_command="
+            f"{DPA4_PHONOLAMMPS_RUN_COMMAND!r}"
+        )
+    if basic.get("group_size") != DPA4_GROUP_SIZE:
+        errors.append(
+            f"group_size must equal {DPA4_GROUP_SIZE} for one task per T4"
+        )
+    if basic.get("pool_size") != DPA4_POOL_SIZE:
+        errors.append(
+            f"pool_size must equal {DPA4_POOL_SIZE} for the qualified profile"
+        )
+
+    if errors:
+        raise RuntimeError(
+            "Invalid DPA4 execution profile:\n- " + "\n- ".join(errors)
+        )
+
 
 def validate_submit_paths(parameter_dicts: List[dict]) -> None:
     """
@@ -67,7 +472,20 @@ def _select_run_image(
     props_param: dict,
     run_image: str,
     machine_type: str = None,
+    runtime_contract: str = "legacy",
 ) -> str:
+    if runtime_contract == DPA4_RUNTIME_KIND:
+        if calculator != "lammps":
+            raise RuntimeError("DPA4/PT2 runtime contract requires calculator=lammps")
+        expected_image = _dpa4_image_name()
+        if run_image != expected_image:
+            logging.warning(
+                "Exact bundled DPA4/PT2 contract overrides LAMMPS run image "
+                "%r with immutable candidate %r.",
+                run_image,
+                expected_image,
+            )
+        return expected_image
     interaction = (props_param or {}).get("interaction", {})
     interaction_type = (
         interaction.get("type") if isinstance(interaction, dict) else None
@@ -132,8 +550,18 @@ def _infer_type_map_from_structure_file(structure_file: str) -> dict:
     return {symbol: idx for idx, symbol in enumerate(symbols)}
 
 
-def _resolve_first_structure_file(param_path: str, structures: List[str]) -> str:
+def _resolve_structure_files(param_path: str, structures: List[str]) -> List[str]:
+    """Resolve every structure file used to build a complete LAMMPS type map."""
     base_dir = os.path.dirname(os.path.abspath(param_path))
+    structure_files = []
+    seen_files = set()
+
+    def add_file(path: str) -> None:
+        absolute_path = os.path.abspath(path)
+        if absolute_path not in seen_files:
+            seen_files.add(absolute_path)
+            structure_files.append(absolute_path)
+
     for pattern in structures:
         if os.path.isabs(pattern):
             search_patterns = [pattern]
@@ -141,37 +569,84 @@ def _resolve_first_structure_file(param_path: str, structures: List[str]) -> str
             search_patterns = [os.path.join(base_dir, pattern), pattern]
 
         matches = []
+        seen_matches = set()
         for search_pattern in search_patterns:
-            matches.extend(glob.glob(search_pattern))
-        matches = sorted(set(matches))
+            for match in sorted(glob.glob(search_pattern)):
+                absolute_match = os.path.abspath(match)
+                if absolute_match not in seen_matches:
+                    seen_matches.add(absolute_match)
+                    matches.append(absolute_match)
         for match in matches:
             if os.path.isdir(match):
                 for candidate in ("POSCAR", "CONTCAR", "STRU"):
                     candidate_path = os.path.join(match, candidate)
                     if os.path.isfile(candidate_path):
-                        return candidate_path
-                nested_poscars = sorted(glob.glob(os.path.join(match, "conf_*", "POSCAR")))
-                if nested_poscars:
-                    return nested_poscars[0]
+                        add_file(candidate_path)
+                        break
+                else:
+                    nested_poscars = sorted(
+                        glob.glob(os.path.join(match, "conf_*", "POSCAR"))
+                    )
+                    for nested_poscar in nested_poscars:
+                        add_file(nested_poscar)
             elif os.path.isfile(match):
-                return match
+                add_file(match)
+
+    if structure_files:
+        return structure_files
     raise RuntimeError(
         "Cannot infer interaction.type_map automatically: no structure file found "
         f"for patterns {structures} from {param_path}"
     )
 
 
-def auto_fill_type_map_from_poscar(parameter_dict: dict, param_path: str) -> bool:
-    interaction = parameter_dict.get("interaction")
-    if not isinstance(interaction, dict):
-        return False
-    if interaction.get("type") in {"vasp", "abacus"}:
-        return False
+def _infer_type_map_from_structure_files(structure_files: List[str]) -> dict:
+    symbols = []
+    seen = set()
+    for structure_file in structure_files:
+        for symbol in _infer_type_map_from_structure_file(structure_file):
+            if symbol not in seen:
+                seen.add(symbol)
+                symbols.append(symbol)
+    if not symbols:
+        raise RuntimeError("Cannot infer interaction.type_map from empty structures")
+    return {symbol: idx for idx, symbol in enumerate(symbols)}
 
-    current_type_map = interaction.get("type_map")
-    if isinstance(current_type_map, dict) and current_type_map:
-        return False
-    if current_type_map not in (None, "", "auto"):
+
+def _iter_lammps_interactions_for_type_map(parameter_dict: dict):
+    """Yield each distinct LAMMPS interaction that may need CLI expansion."""
+    seen = set()
+    interactions = [parameter_dict.get("interaction")]
+    for prop in parameter_dict.get("properties") or []:
+        if not isinstance(prop, dict):
+            continue
+        cal_setting = prop.get("cal_setting") or {}
+        if isinstance(cal_setting, dict):
+            interactions.append(cal_setting.get("overwrite_interaction"))
+
+    for interaction in interactions:
+        if not isinstance(interaction, dict):
+            continue
+        if interaction.get("type") in {"vasp", "abacus"}:
+            continue
+        identity = id(interaction)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        yield interaction
+
+
+def auto_fill_type_map_from_poscar(parameter_dict: dict, param_path: str) -> bool:
+    interactions = []
+    for interaction in _iter_lammps_interactions_for_type_map(parameter_dict):
+        current_type_map = interaction.get("type_map")
+        if (
+            current_type_map is None
+            or current_type_map == ""
+            or current_type_map == "auto"
+        ):
+            interactions.append(interaction)
+    if not interactions:
         return False
 
     structures = parameter_dict.get("structures", [])
@@ -180,8 +655,10 @@ def auto_fill_type_map_from_poscar(parameter_dict: dict, param_path: str) -> boo
             "Cannot infer interaction.type_map automatically because `structures` is empty"
         )
 
-    structure_file = _resolve_first_structure_file(param_path, structures)
-    interaction["type_map"] = _infer_type_map_from_structure_file(structure_file)
+    structure_files = _resolve_structure_files(param_path, structures)
+    type_map = _infer_type_map_from_structure_files(structure_files)
+    for interaction in interactions:
+        interaction["type_map"] = dict(type_map)
 
     with open(param_path, "w", encoding="utf-8") as fp:
         json.dump(parameter_dict, fp, indent=4)
@@ -612,6 +1089,34 @@ def submit_workflow(
      relax_param, props_param) = judge_flow(parameter_dicts, indicated_flow_type)
     print(f'Running APEX calculation via {calculator}')
     print(f'Submitting {flow_type} workflow...')
+
+    # Resolve work directories before choosing the one run image shared by all
+    # generated LAMMPS steps.  Runtime identity must be uniform across them.
+    work_dir_list = []
+    for item in work_dirs:
+        work_dir_list.extend(glob.glob(os.path.abspath(item)))
+    work_dir_list = sorted(set(work_dir_list))
+    if not work_dir_list:
+        raise NotADirectoryError('Empty work directory indicated, please check your argument')
+
+    # Scan every effective interaction, even when the base calculator is VASP
+    # or ABACUS.  A DPA4 overwrite must never bypass the one-image calculator
+    # contract by hiding under a non-LAMMPS base interaction.
+    runtime_contract = _validate_lammps_runtime_contract(
+        relax_param,
+        props_param,
+        flow_type,
+        work_dir_list,
+    )
+    if runtime_contract == DPA4_RUNTIME_KIND:
+        if calculator != "lammps":
+            raise RuntimeError(
+                "DPA4/PT2 overwrite_interaction cannot run in a workflow whose "
+                f"base calculator is {calculator!r}; use one uniform LAMMPS "
+                "interaction"
+            )
+        _validate_dpa4_execution_config(wf_config, props_param)
+
     make_image = wf_config.basic_config_dict["apex_image_name"]
     run_image = wf_config.basic_config_dict[f"{calculator}_image_name"]
     if not run_image:
@@ -624,15 +1129,23 @@ def submit_workflow(
         calculator,
         props_param,
         run_image,
-        machine_type,
+        machine_type=machine_type,
+        runtime_contract=runtime_contract,
     )
     run_command = wf_config.basic_config_dict[f"{calculator}_run_command"]
     if not run_command:
         run_command = wf_config.basic_config_dict["run_command"]
-    if calculator == "lammps":
-        run_command = _with_lammps_retry_env(run_command, wf_config)
     lammps_run_command = wf_config.basic_config_dict["lammps_run_command"]
     phonolammps_run_command = wf_config.basic_config_dict["phonolammps_run_command"]
+    if runtime_contract == DPA4_RUNTIME_KIND:
+        # Validation above makes this assignment an assertion of the audited
+        # entry points, rather than a silent repair of an unsafe global.json.
+        run_command = DPA4_LAMMPS_RUN_COMMAND
+        lammps_run_command = DPA4_LAMMPS_RUN_COMMAND
+        if _uses_phonolammps(props_param):
+            phonolammps_run_command = DPA4_PHONOLAMMPS_RUN_COMMAND
+    if calculator == "lammps":
+        run_command = _with_lammps_retry_env(run_command, wf_config)
     post_image = make_image
     group_size = wf_config.basic_config_dict["group_size"]
     pool_size = wf_config.basic_config_dict["pool_size"]
@@ -669,11 +1182,6 @@ def submit_workflow(
                 prop["lammps_run_command"] = lammps_run_command
 
     # submit the workflows
-    work_dir_list = []
-    for ii in work_dirs:
-        glob_list = glob.glob(os.path.abspath(ii))
-        work_dir_list.extend(glob_list)
-        work_dir_list.sort()
     if len(work_dir_list) > 1:
         n_processes = len(work_dir_list)
         print(f'Submitting via {n_processes} processes...')
@@ -704,8 +1212,6 @@ def submit_workflow(
             wf_config,
             labels=labels,
         )
-    else:
-        raise NotADirectoryError('Empty work directory indicated, please check your argument')
 
 
 def submit_from_args(
@@ -724,7 +1230,8 @@ def submit_from_args(
         param_dict = loadfn(param_path)
         if auto_fill_type_map_from_poscar(param_dict, param_path):
             print(
-                f"Auto-filled interaction.type_map from structure file and updated: {param_path}"
+                "Auto-filled LAMMPS type_map field(s) from all resolved "
+                f"structure files and updated: {param_path}"
             )
         parameter_dicts.append(param_dict)
 

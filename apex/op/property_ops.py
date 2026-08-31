@@ -12,7 +12,7 @@ from dflow.python import (
 from monty.serialization import dumpfn
 from apex.utils import recursive_search, apex_task_succeeded
 from apex.core.lib.utils import create_path
-from apex.core.calculator import LAMMPS_INTER_TYPE
+from apex.core.calculator import LAMMPS_INTER_TYPE, lammps_model_files_for_cleanup
 from apex.task_failure import (
     REMOTE_LAMMPS_STARTUP_FAILURE,
     classify_apex_task_status,
@@ -377,11 +377,7 @@ class PropsPost(OP):
         # remove potential files in each task
         if inter_type in LAMMPS_INTER_TYPE:
             os.chdir(abs_path_to_prop)
-            inter_files_name = []
-            if type(inter_param["model"]) is str:
-                inter_files_name = [inter_param["model"]]
-            elif type(inter_param["model"]) is list:
-                inter_files_name.extend(inter_param["model"])
+            inter_files_name = lammps_model_files_for_cleanup(inter_param)
             for file in inter_files_name:
                 cmd = f"rm -f ../{file}"
                 subprocess.call(cmd, shell=True)
